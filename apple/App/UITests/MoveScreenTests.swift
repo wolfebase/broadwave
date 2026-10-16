@@ -23,8 +23,12 @@ final class MoveScreenTests: XCTestCase {
             ]
             app.launch()
 
+            // Move to another screen is under the player's More menu.
+            let more = app.buttons["player-more"]
+            XCTAssertTrue(more.waitForExistence(timeout: 30), app.debugDescription)
+            more.tap()
             let move = app.buttons["portrait-move"]
-            XCTAssertTrue(move.waitForExistence(timeout: 30), app.debugDescription)
+            XCTAssertTrue(move.waitForExistence(timeout: 5), app.debugDescription)
             move.tap()
             let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", target)).firstMatch
             XCTAssertTrue(row.waitForExistence(timeout: 15), "no \(target) in the list\n\(app.debugDescription)")
@@ -41,7 +45,7 @@ final class MoveScreenTests: XCTestCase {
                 print("i5 status \(starting.label)")
             }
             let gone = NSPredicate(format: "exists == false")
-            expectation(for: gone, evaluatedWith: app.buttons["portrait-move"])
+            expectation(for: gone, evaluatedWith: app.buttons["player-more"])
             waitForExpectations(timeout: 25)
             shot(app, "moved")
             print("i5 moved to \(target)")

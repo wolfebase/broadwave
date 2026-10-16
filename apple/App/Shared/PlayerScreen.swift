@@ -69,6 +69,10 @@ final class LivePlayer {
     private(set) var picture = PictureStats()
     /// Earliest time the current item can seek to. Nil until it has a program date.
     private(set) var seekableFrom: Date?
+    /// The oldest frame, the one on screen, and the live edge, for the timeline. Nil until dated.
+    private(set) var window: LiveWindow?
+    /// The picture is stopped, by the viewer or the system. The play button shows Play.
+    private(set) var paused = false
     /// The small window has the picture.
     private(set) var pictureInPicture = false
     /// The display line last asked for, such as "1280x720 59.94". Empty until a picture has a rate.
@@ -335,6 +339,7 @@ final class LivePlayer {
     /// would be undone.
     func jump(to date: Date) {
         player.pause()
+        paused = true
         let token = watchToken
         Task { @MainActor in
             for _ in 0 ..< 30 {
@@ -348,10 +353,49 @@ final class LivePlayer {
                 Task { @MainActor in
                     guard finished, let self, token == self.watchToken else { return }
                     self.player.play()
-                    self.playLogNote("start over")
+                    self.paused = false
+                    if let item = self.player.currentItem {
+                        self.window = Self.window(item)
+                    }
+                    self.playLogNote("seek \(Int(Date().timeIntervalSince(date)))s behind")
                 }
             }
         }
+    }
+
+    /// The viewer's pause and play. A pause leaves sync; LIVE brings it back.
+    func togglePause() {
+        if player.timeControlStatus == .paused {
+            player.play()
+            paused = false
+        } else {
+            player.pause()
+            paused = true
+        }
+        playLogNote(paused ? "viewer pause" : "viewer play")
+    }
+
+    /// Back to the room's frame, or to the live edge when this screen is not in one.
+    func goLive() {
+        paused = false
+        if let sync {
+            sync.rejoin()
+            player.play()
+        } else {
+            player.seek(to: .positiveInfinity) { [weak self] _ in
+                Task { @MainActor in self?.player.play() }
+            }
+        }
+        playLogNote("go live")
+    }
+
+    private static func window(_ item: AVPlayerItem) -> LiveWindow? {
+        let ranges = item.seekableTimeRanges.compactMap { value -> ClosedRange<Double>? in
+            let range = value.timeRangeValue
+            let start = CMTimeGetSeconds(range.start), end = CMTimeGetSeconds(CMTimeRangeGetEnd(range))
+            return start.isFinite && end.isFinite && end >= start ? start ... end : nil
+        }
+        return LiveWindow.make(currentDate: item.currentDate(), currentSeconds: CMTimeGetSeconds(item.currentTime()), seekable: ranges)
     }
 
     /// A restarted server has lost this watch. Start it again now instead of
@@ -441,6 +485,8 @@ final class LivePlayer {
         statsTask = nil
         picture = PictureStats()
         seekableFrom = nil
+        window = nil
+        paused = false
         sounds = nil
         soundGroup = nil
         soundRole = "main"
@@ -581,6 +627,11 @@ final class LivePlayer {
         next.fps = refreshRate
         picture = next
         seekableFrom = seekableStart(item)
+        window = Self.window(item)
+        // A sync hold pauses for a moment; only the viewer's pause shows Play.
+        if paused, player.timeControlStatus != .paused {
+            paused = false
+        }
         noteClock()
     }
 
@@ -942,10 +993,6 @@ struct PlayerScreen: View {
     @State private var showStream = false
     /// Fill crops the picture. Fit shows the whole frame. Pinch on iPhone switches them.
     @State private var fillPicture = false
-    #if os(iOS)
-        /// Last scale from the pinch, in case `onEnded` reports a smaller move.
-        @State private var pinchScale: CGFloat = 1
-    #endif
     /// True while the Apple TV transport bar is on screen. Swipes change channel only when it is not.
     @State private var transportShown = true
     /// A recording that holds this showing's start, played from Start over.
@@ -954,21 +1001,10 @@ struct PlayerScreen: View {
     /// Apple TV: the channel strip Down opens.
     @State private var stripOpen = false
     #if os(iOS)
-        @State private var showGuide = false
+        /// The channel list or the stream details. One at a time.
+        @State private var panel = PlayerPanel.none
         @State private var showMove = false
-        /// The player's glass pills morph into each other as their state changes.
-        @Namespace private var glass
     #endif
-
-    /// Portrait keeps the channel, the program, and labeled controls on screen.
-    /// A short landscape phone keeps the icon bar so the picture stays clear.
-    private var portraitChrome: Bool {
-        #if os(iOS)
-            verticalSize != .compact
-        #else
-            false
-        #endif
-    }
 
     private var tuning: Bool {
         #if DEBUG
@@ -1044,8 +1080,8 @@ struct PlayerScreen: View {
                 TuningCard(
                     channel: channel,
                     show: airing?.title,
-                    still: tuned ? store.api?.frameURL(channelID: channel.id, width: 1280) : airing.flatMap { store.artURL($0, width: 1280) },
-                    tuned: tuned
+                    frame: tuned ? store.api?.frameURL(channelID: channel.id, width: 1280) : nil,
+                    art: airing.flatMap { store.artURL($0, width: 1280) }
                 )
                 .id(channel.id)
                 // The picture fades in under the card instead of cutting from black.
@@ -1143,11 +1179,13 @@ struct PlayerScreen: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             #endif
-            if showStream, !portraitChrome {
-                StreamPanel(stream: live.session?.stream, stats: live.picture, sync: live.sync)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .padding(24)
-            }
+            #if os(tvOS)
+                if showStream {
+                    StreamPanel(stream: live.session?.stream, stats: live.picture, sync: live.sync)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(24)
+                }
+            #endif
             if let error = live.error {
                 VStack(spacing: 12) {
                     Text(error)
@@ -1236,11 +1274,15 @@ struct PlayerScreen: View {
         .onAppear {
             // Simulator checks: -BroadwaveStream YES opens the panel without a remote.
             if UserDefaults.standard.bool(forKey: "BroadwaveStream") {
-                showStream = true
+                #if os(iOS)
+                    panel = .stream
+                #else
+                    showStream = true
+                #endif
             }
             #if os(iOS)
                 if UserDefaults.standard.bool(forKey: "BroadwaveChannels") {
-                    showGuide = true
+                    panel = .channels
                 }
             #endif
         }
@@ -1340,11 +1382,11 @@ struct PlayerScreen: View {
         private var keys: PlayerKeys {
             let channel = nowPlaying.channel
             return PlayerKeys(
-                channels: { showGuide.toggle() },
+                channels: { panel = panel == .channels ? .none : .channels },
                 multiview: channel.map { channel in { nowPlaying.watchTogether([channel]) } },
                 record: channel.map { channel in { Task { await store.toggleRecord(channel) } } },
                 recording: channel.flatMap { store.activeRecording(on: $0) } != nil,
-                info: { showStream.toggle() },
+                info: { panel = panel == .stream ? .none : .stream },
                 leave: leaveKey
             )
         }
@@ -1362,10 +1404,8 @@ struct PlayerScreen: View {
     /// Escape on a keyboard: an open panel first, then the player docks.
     private func leaveKey() {
         #if os(iOS)
-            if showGuide {
-                showGuide = false
-            } else if showStream {
-                showStream = false
+            if panel != .none {
+                panel = .none
             } else {
                 nowPlaying.expanded = false
             }
@@ -1529,404 +1569,25 @@ struct PlayerScreen: View {
     }
 
     #if os(iOS)
-        @ViewBuilder private var delaySection: some View {
-            if !delayMenu.isEmpty {
-                Section("Live delay") {
-                    ForEach(delayMenu) { entry in
-                        Button(action: entry.action) {
-                            if entry.current {
-                                Label(entry.title, systemImage: "checkmark")
-                            } else {
-                                Text(entry.title)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         private var overlay: some View {
-            ZStack {
-                // AVKit's transport is for recordings. The live chrome has its own controls,
-                // so a tap anywhere on the live picture stays here.
-                Color.clear
-                    .contentShape(Rectangle())
-                    .ignoresSafeArea()
-                    .accessibilityHidden(true)
-                gesturePad
-                if portraitChrome {
-                    portraitOverlay
-                } else {
-                    landscapeBar
-                }
+            LiveChrome(
+                panel: $panel,
+                fill: $fillPicture,
+                showMove: $showMove,
+                actions: chromeActions,
+                tuning: tuning
+            )
+        }
+
+        private var chromeActions: LiveChromeActions {
+            var startOver: (() -> Void)?
+            if startOverChoice != nil {
+                startOver = { beginStartOver() }
             }
-        }
-
-        /// Swipe up for the previous channel, down for the next. Pinch out fills the screen.
-        /// The pad sits in the open picture. A pinch starts at the pad's edges, and the chrome covers those.
-        private var gesturePad: some View {
-            let compact = verticalSize == .compact
-            return Color.clear
-                .contentShape(Rectangle())
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .gesture(channelDrag)
-                .simultaneousGesture(fillPinch)
-                .accessibilityElement()
-                .accessibilityLabel("Picture")
-                .accessibilityValue(fillPicture ? "Fill" : "Fit")
-                .accessibilityIdentifier("player-gesture")
-                .padding(.top, compact ? 40 : 156)
-                .padding(.bottom, compact ? 72 : 200)
-                .padding(.leading, 16)
-                .padding(.trailing, compact ? 16 : 108)
-        }
-
-        private var channelDrag: some Gesture {
-            DragGesture(minimumDistance: 24)
-                .onEnded { value in
-                    let dx = value.translation.width
-                    let dy = value.translation.height
-                    guard abs(dy) > abs(dx), abs(dy) > 80 else { return }
-                    step(dy < 0 ? ChannelStep.offset(up: true) : ChannelStep.offset(up: false))
-                }
-        }
-
-        private var fillPinch: some Gesture {
-            MagnificationGesture()
-                .onChanged { pinchScale = $0 }
-                .onEnded { scale in
-                    let amount = abs(pinchScale - 1) > abs(scale - 1) ? pinchScale : scale
-                    pinchScale = 1
-                    guard abs(amount - 1) > 0.08 else { return }
-                    let fill = amount > 1
-                    guard fill != fillPicture else { return }
-                    fillPicture = fill
-                    live.playLogNote(fill ? "fill" : "fit")
-                }
-        }
-
-        private var portraitOverlay: some View {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    Button("Minimize", systemImage: "chevron.down") { nowPlaying.expanded = false }
-                        .labelStyle(.titleAndIcon)
-                        .buttonStyle(.glass)
-                        .accessibilityLabel("Minimize")
-                    Spacer()
-                    syncPill
-                }
-                HStack(alignment: .top, spacing: 12) {
-                    programBlock
-                    VStack(spacing: 8) {
-                        controlButton("Previous", systemImage: "chevron.up", id: "portrait-previous") { step(-1) }
-                            .accessibilityLabel("Previous channel")
-                        controlButton("Next", systemImage: "chevron.down", id: "portrait-next") { step(1) }
-                            .accessibilityLabel("Next channel")
-                    }
-                    .frame(width: 88)
-                }
-                Spacer(minLength: 0)
-                if showStream {
-                    StreamPanel(stream: live.session?.stream, stats: live.picture, sync: live.sync)
-                }
-                if showGuide {
-                    miniGuide
-                }
-                controlGrid
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        }
-
-        private var programBlock: some View {
-            VStack(alignment: .leading, spacing: 2) {
-                if let channel = nowPlaying.channel {
-                    let airing = store.index.on(channel.id, at: store.now)
-                    Text(String(localized: "guide.channelName", defaultValue: "\(channel.displayNumber)  \(channel.displayName)"))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.86))
-                    Text(airing?.title ?? String(localized: "No listing"))
-                        .font(.title2.weight(.bold))
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let airing {
-                        let left = airing.minutesLeft(at: store.now)
-                        Text(left)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .contentTransition(.numericText(countsDown: true))
-                            .animation(.snappy, value: left)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("portrait-program")
-        }
-
-        private var miniGuide: some View {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(store.channels) { channel in
-                        let airing = store.index.on(channel.id, at: store.now)
-                        let title = airing?.title ?? String(localized: "No listing")
-                        Button {
-                            nowPlaying.channel = channel
-                            showGuide = false
-                        } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                Text(channel.displayNumber)
-                                    .font(.headline.monospacedDigit())
-                                    .frame(width: 52, alignment: .leading)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(channel.displayName).font(.subheadline.weight(.semibold)).lineLimit(1)
-                                    Text(title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                }
-                                Spacer(minLength: 0)
-                                if channel.id == nowPlaying.channel?.id {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(Tokens.ColorToken.tally)
-                                        .accessibilityHidden(true)
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), \(title)")
-                    }
-                }
-            }
-            .frame(maxHeight: 280)
-            .glassEffect(in: .rect(cornerRadius: Tokens.Radius.lg))
-            .clipShape(.rect(cornerRadius: Tokens.Radius.lg))
-            .accessibilityLabel("Channels")
-            .accessibilityIdentifier("portrait-guide")
-        }
-
-        private var controlGrid: some View {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                controlButton(showGuide ? "Close guide" : "Channels", systemImage: "list.bullet", id: "portrait-channels") {
-                    showGuide.toggle()
-                }
-                .accessibilityAddTraits(showGuide ? .isSelected : [])
-                controlButton("Side by side", systemImage: "rectangle.split.2x1", id: "portrait-together") {
-                    if let channel = nowPlaying.channel {
-                        nowPlaying.watchTogether([channel])
-                    }
-                }
-                recordControl
-                audioControl
-                controlButton(showStream ? "Hide stream" : "Stream", systemImage: "info.circle", id: "portrait-stream") {
-                    showStream.toggle()
-                }
-                airPlayControl
-                controlButton("Move to another screen", systemImage: "rectangle.portrait.and.arrow.forward", id: "portrait-move") {
-                    showMove = true
-                }
-            }
-        }
-
-        private var airPlayControl: some View {
-            AirPlayRoute {
-                live.playLogNote("airplay open")
-            }
-        }
-
-        private var recordControl: some View {
-            let recording = nowPlaying.channel.flatMap { store.activeRecording(on: $0) } != nil
-            return controlButton(recording ? "Recording" : "Record", systemImage: recording ? "record.circle.fill" : "record.circle", id: "portrait-record") {
-                if let channel = nowPlaying.channel {
-                    Task { await store.toggleRecord(channel) }
-                }
-            }
-            .foregroundStyle(Tokens.ColorToken.tally)
-            .contentTransition(.symbolEffect(.replace))
-            .symbolEffect(.pulse, options: .repeat(.continuous), isActive: recording)
-            .accessibilityLabel(recording ? "Stop recording" : "Record")
-        }
-
-        private var audioControl: some View {
-            Menu {
-                ForEach(audioMenu) { entry in
-                    Button(action: entry.action) {
-                        if entry.current {
-                            Label(entry.title, systemImage: "checkmark")
-                        } else {
-                            Text(entry.title)
-                        }
-                    }
-                }
-                delaySection
-            } label: {
-                Label("Audio", systemImage: "speaker.wave.2")
-                    .labelStyle(StackedControlLabel())
-            }
-            .buttonStyle(.glass)
-            .accessibilityLabel("Audio")
-            .accessibilityIdentifier("portrait-audio")
-        }
-
-        private func controlButton(_ title: String, systemImage: String, id: String, action: @escaping () -> Void) -> some View {
-            Button(action: action) {
-                Label(title, systemImage: systemImage)
-                    .labelStyle(StackedControlLabel())
-            }
-            .buttonStyle(.glass)
-            .accessibilityLabel(title)
-            .accessibilityIdentifier(id)
-        }
-
-        private var landscapeBar: some View {
-            HStack(spacing: 10) {
-                Button("Minimize", systemImage: "chevron.down") { nowPlaying.expanded = false }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glass)
-                    .accessibilityLabel("Minimize")
-                Spacer()
-                syncPill
-                Button(showStream ? "Hide stream" : "Stream", systemImage: "info.circle") { showStream.toggle() }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glass)
-                    .accessibilityLabel(showStream ? "Hide stream" : "Stream")
-                Button("Side by side", systemImage: "rectangle.split.2x1") {
-                    if let channel = nowPlaying.channel {
-                        nowPlaying.watchTogether([channel])
-                    }
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
-                .accessibilityLabel("Side by side")
-                Menu("Audio", systemImage: "speaker.wave.2") {
-                    ForEach(audioMenu) { entry in
-                        Button(action: entry.action) {
-                            if entry.current {
-                                Label(entry.title, systemImage: "checkmark")
-                            } else {
-                                Text(entry.title)
-                            }
-                        }
-                    }
-                    delaySection
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
-                .accessibilityLabel("Audio")
-                AirPlayRoute(compact: true) {
-                    live.playLogNote("airplay open")
-                }
-                .frame(width: 44, height: 44)
-                Button("Move to another screen", systemImage: "rectangle.portrait.and.arrow.forward") { showMove = true }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glass)
-                    .accessibilityLabel("Move to another screen")
-                    .accessibilityIdentifier("landscape-move")
-                GlassEffectContainer {
-                    HStack(spacing: 6) {
-                        Button("Previous channel", systemImage: "chevron.up") { step(-1) }
-                        Button("Next channel", systemImage: "chevron.down") { step(1) }
-                    }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glass)
-                }
-                if let channel = nowPlaying.channel {
-                    let recording = store.activeRecording(on: channel) != nil
-                    // Recording grows the round button into a "REC" pill; the glass morphs between them.
-                    GlassEffectContainer {
-                        Button {
-                            Task { await store.toggleRecord(channel) }
-                        } label: {
-                            if recording {
-                                Label("REC", systemImage: "record.circle.fill")
-                                    .labelStyle(.titleAndIcon)
-                                    .font(.footnote.weight(.heavy))
-                            } else {
-                                Label("Record", systemImage: "record.circle")
-                                    .labelStyle(.iconOnly)
-                            }
-                        }
-                        .buttonStyle(.glass)
-                        .foregroundStyle(Tokens.ColorToken.tally)
-                        .contentTransition(.symbolEffect(.replace))
-                        .symbolEffect(.pulse, options: .repeat(.continuous), isActive: recording)
-                        .glassEffectID("record", in: glass)
-                    }
-                    .animation(.bouncy, value: recording)
-                    .accessibilityLabel(recording ? "Stop recording" : "Record")
-                }
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        }
-
-        /// One glass shape that morphs between Sync screens, Back in sync, and the synced badge.
-        private var syncPill: some View {
-            GlassEffectContainer {
-                syncPillShape
-                    .glassEffectID("sync", in: glass)
-            }
-            .animation(.bouncy, value: syncPhase)
-        }
-
-        private var syncPhase: String {
-            guard let sync = live.sync else { return "none" }
-            return "\(sync.offByChoice) \(sync.detached) \(sync.state) \(sync.members)"
-        }
-
-        @ViewBuilder private var syncPillShape: some View {
-            if let sync = live.sync, sync.offByChoice {
-                // Playing on its own; offer to line up only when someone else is on this channel.
-                if sync.members > 1 {
-                    Button("Sync screens", systemImage: "arrow.triangle.2.circlepath") { sync.syncScreens() }
-                        .labelStyle(.titleAndIcon)
-                        .buttonStyle(.glass)
-                        .accessibilityLabel("Sync \(sync.members) screens")
-                }
-            } else if let sync = live.sync, sync.detached {
-                Button("Back in sync", systemImage: "arrow.triangle.2.circlepath") { sync.rejoin() }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glass)
-                    .accessibilityLabel("Back in sync")
-            } else if let sync = live.sync, sync.state != .off {
-                HStack(spacing: 5) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    if sync.members > 1 {
-                        Text("\(sync.members)").monospacedDigit()
-                    }
-                }
-                .font(.footnote.weight(.bold))
-                .fixedSize()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .glassEffect(.regular.tint(sync.state == .locked ? Tokens.ColorToken.success.opacity(0.4) : nil))
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(sync.members > 1 ? "Synced with \(sync.members) screens" : "Synced")
-            }
+            return LiveChromeActions(step: { step($0) }, startOver: startOver, audio: audioMenu, delay: delayMenu)
         }
     #endif
 }
-
-#if os(iOS)
-    /// Icon over a short name. Portrait controls have to be readable without VoiceOver.
-    private struct StackedControlLabel: LabelStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            VStack(spacing: 4) {
-                // The symbol's own name ("Volume High") would be read beside the control's name.
-                configuration.icon.accessibilityHidden(true)
-                configuration.title
-                    .font(.caption2.weight(.semibold))
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-        }
-    }
-#endif
 
 struct ChannelMenuEntry: Identifiable {
     let id: Int64
@@ -3141,15 +2802,29 @@ struct RecordingPlayerScreen: View {
 private struct TuningCard: View {
     let channel: Channel
     let show: String?
-    var still: URL?
-    /// The frequency is already open, so there is no antenna to tune.
-    var tuned = false
+    /// The channel's last frame. Set when the frequency is already open: then there is no antenna to tune.
+    var frame: URL?
+    var art: URL?
     @State private var started = Date()
 
     var body: some View {
         ZStack {
+            backdrop
+            TimelineView(.periodic(from: started, by: 0.5)) { context in
+                words(after: context.date.timeIntervalSince(started) + (frame != nil ? 3 : 0))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("tuning")
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// iPhone and iPad fit the last frame as the picture will be, or blur the art; never a
+    /// stretched poster. Apple TV keeps its full-screen still.
+    @ViewBuilder private var backdrop: some View {
+        #if os(tvOS)
             Color.black.ignoresSafeArea()
-            if let still {
+            if let still = frame ?? art {
                 AsyncImage(url: still) { phase in
                     if let image = phase.image {
                         image.resizable().scaledToFill()
@@ -3159,27 +2834,50 @@ private struct TuningCard: View {
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
             }
-            TimelineView(.periodic(from: started, by: 0.5)) { context in
-                VStack(spacing: 10) {
-                    Text("\(channel.displayNumber) \(channel.displayName)")
-                        .font(.headline)
-                    if let show, show != channel.displayName {
-                        Text(show)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+        #else
+            TuneBackdrop(frame: frame, art: frame == nil ? art : nil)
+                .ignoresSafeArea()
+        #endif
+    }
+
+    private func words(after seconds: TimeInterval) -> some View {
+        #if os(tvOS)
+            VStack(spacing: 10) {
+                Text("\(channel.displayNumber) \(channel.displayName)")
+                    .font(.headline)
+                if let show, show != channel.displayName {
+                    Text(show)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                ProgressView()
+                Text("\(TuningSteps.text(after: seconds))\u{2026}")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .padding()
+        #else
+            VStack(spacing: 8) {
+                Text("\(channel.displayNumber) \(channel.displayName)")
+                    .font(.headline)
+                if let show, show != channel.displayName {
+                    Text(show)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 8) {
                     ProgressView()
-                    Text("\(TuningSteps.text(after: context.date.timeIntervalSince(started) + (tuned ? 3 : 0)))…")
+                    Text("\(TuningSteps.text(after: seconds))\u{2026}")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                .multilineTextAlignment(.center)
-                .padding()
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("tuning")
             }
-        }
-        .allowsHitTesting(false)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 16)
+            .glassEffect(in: .rect(cornerRadius: 22))
+        #endif
     }
 }
 

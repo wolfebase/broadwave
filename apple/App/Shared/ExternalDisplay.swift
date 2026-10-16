@@ -119,6 +119,7 @@
         func makeUIView(context: Context) -> UIButton {
             var config = UIButton.Configuration.glass()
             config.image = UIImage(systemName: "captions.bubble")
+            config.baseForegroundColor = .white
             let button = UIButton(configuration: config)
             button.showsMenuAsPrimaryAction = true
             button.accessibilityLabel = String(localized: "Subtitles")
