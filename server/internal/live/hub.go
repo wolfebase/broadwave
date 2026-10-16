@@ -756,7 +756,13 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	// A channel that has already been tuned knows its frequency and program.
 	// Opening the mux is the lock. A vchannel probe would lock again, then
 	// wait for streaminfo, before this same request.
-	if ch.FrequencyHz > 0 && ch.ProgramNum > 0 {
+	// A channel that found no signal lately is probed for a short lock
+	// instead: a dark frequency holds an open for about 10 s.
+	wait := darkProbe
+	if h.darkWithinLocked(ch.ID, ch.FrequencyHz, noSignalFor) {
+		wait = quickProbe
+	}
+	if ch.FrequencyHz > 0 && ch.ProgramNum > 0 && wait == darkProbe {
 		if body, err := openMux(root, tuner, ch.FrequencyHz); err == nil {
 			locked := time.Now()
 			feed := h.beginMuxLocked(ch, host, base, tuner, ch.FrequencyHz, nil, body)
@@ -774,7 +780,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	if need.ATSC3 {
 		return h.openAutoLocked(ch, root, host, last, false, began, status)
 	}
-	freq, programs, err := probe(host, tuner, ch.GuideNumber)
+	freq, programs, err := probe(host, tuner, ch.GuideNumber, wait)
 	if errors.Is(err, errDark) {
 		return nil, fmt.Errorf("%w (%v)", ErrNoSignal, err)
 	}
@@ -4250,7 +4256,8 @@ func openStream(u, userAgent, referrer string) (*http.Response, error) {
 	return res, nil
 }
 
-func probe(host string, tuner int, guide string) (int, []hdhr.Program, error) {
+// probe tunes the channel and waits up to wait for a lock.
+func probe(host string, tuner int, guide string, wait time.Duration) (int, []hdhr.Program, error) {
 	c := hdhr.Control{Addr: controlAddr(host)}
 	name := fmt.Sprintf("/tuner%d/vchannel", tuner)
 	if _, err := c.Set(name, guide); err != nil {
@@ -4268,7 +4275,7 @@ func probe(host string, tuner int, guide string) (int, []hdhr.Program, error) {
 		// frequency reads lock=none the whole time and answers its /auto
 		// stream with 807 only after about 10 s more.
 		unlocked := err == nil && hdhr.FrequencyHz(status) > 0 && strings.Contains(status, "lock=none")
-		if waited := time.Since(began); waited >= darkProbe || (!unlocked && waited >= 4*time.Second) {
+		if waited := time.Since(began); waited >= darkProbe || (unlocked && waited >= wait) || (!unlocked && waited >= 4*time.Second) {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
