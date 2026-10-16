@@ -232,6 +232,9 @@ type Hub struct {
 	grabbers sync.WaitGroup
 	// failures are recent renditions given up on, by channel and key.
 	failures map[string]startFailure
+	// mutes are channels whose main sound sent no frame, until when their
+	// encodes start without it.
+	mutes map[int64]time.Time
 	// releasing counts tuners being set to none outside h.mu.
 	releasing sync.WaitGroup
 }
@@ -350,6 +353,9 @@ type rendition struct {
 	fallback  bool
 	aac       bool
 	restarted bool
+	// mute is a main sound that sent no frame at all: the encode starts
+	// again without sound rather than wait for it.
+	mute bool
 	// restarts are when this encode was started again, for restartBudget.
 	restarts []time.Time
 	// startAt is this process's start and startFed its first input; stalled
@@ -1006,7 +1012,11 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 		// Tracks measured after the start are left out: a new sound track is
 		// not worth a restart. A changed main still is, and so is a stored
 		// track the PMT no longer lists the same way.
-		_, next := h.pictureArgs(f, r.spec, keptExtras(f, r))
+		spec := r.spec
+		if r.mute {
+			spec.Audio = "none"
+		}
+		_, next := h.pictureArgs(f, spec, keptExtras(f, r))
 		if slices.Equal(r.args, next) {
 			continue
 		}
@@ -1124,7 +1134,12 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 		return nil, err
 	}
 	extras := h.extrasLocked(f, want)
-	input, args := h.pictureArgs(f, want, extras)
+	spec := want
+	mute := want.Audio != "none" && time.Now().Before(h.mutes[f.channel.ID])
+	if mute {
+		spec.Audio, extras = "none", nil
+	}
+	input, args := h.pictureArgs(f, spec, extras)
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = dir
 	var stdin io.WriteCloser
@@ -1157,7 +1172,7 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 	packIn := startPack(dir, stdout, gate, done, captionLine(f), true)
 	NotePID(h.Dir, cmd.Process.Pid)
 	now := time.Now()
-	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, startAt: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn, log: plog, encoder: encoderOf(h.Encoder, want)}
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, startAt: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn, log: plog, encoder: encoderOf(h.Encoder, want), mute: mute}
 	if stdin != nil {
 		r.sub = h.attachRenditionLocked(f, r, h.renditionPipe(f, r, stdin), frame, now)
 	}
@@ -1351,22 +1366,25 @@ const (
 	planPlain    // without the other sound tracks
 	planAAC      // the sound converted to AAC instead of copied
 	planSoftware // the picture on the processor, as H.264
+	planSilent   // without sound: the main track sent no frame
 )
 
 func (p restartPlan) String() string {
-	return [...]string{"release", "same", "without the other sound tracks", "with AAC sound", "on the processor"}[p]
+	return [...]string{"release", "same", "without the other sound tracks", "with AAC sound", "on the processor", "without sound (the station sends none)"}[p]
 }
 
 // planRestart picks what follows an encode's exit. early is a death within
 // the fallback window of its start; stalled is a start the watchdog ended
-// for writing nothing.
+// for writing nothing; silent is a main sound that sent no frame while the
+// picture played (29.4 lists an AC-3 track that carries nothing: a copy
+// cannot write its header, and AAC waits for it forever).
 //
 // Sound the muxer could not describe (a copied AC-3 track whose rate the
 // probe did not see) is not the GPU's fault: the encode starts again with
 // the sound converted, which needs no rate up front. A GPU that fails at
 // its start moves to the processor as H.264, never libx265, which runs a
 // 1080 picture far slower than real time and never writes a fragment.
-func planRestart(r *rendition, err error, cause exitCause, early, stalled bool, encoder string, now time.Time) restartPlan {
+func planRestart(r *rendition, err error, cause exitCause, early, stalled, silent bool, encoder string, now time.Time) restartPlan {
 	if err == nil && !stalled {
 		return planRelease
 	}
@@ -1375,6 +1393,8 @@ func planRestart(r *rendition, err error, cause exitCause, early, stalled bool, 
 	}
 	canFall := !r.fallback && gpuEncoder(encoder)
 	switch {
+	case silent && !r.mute && r.spec.Audio != "none" && (stalled || (early && cause == causeParams)):
+		return planSilent
 	case early && len(r.extras) > 0 && cause != causeGPU:
 		// A listed track that sends nothing, or something ffmpeg cannot
 		// open, stops the whole encode. The picture and main sound come first.
@@ -1441,7 +1461,11 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 	cause := causeOf(r.log.Tail())
 	words := r.log.lastWords()
 	early := err != nil && !respawn && now.Sub(started) <= h.fallbackWindow()
-	plan := planRestart(r, err, cause, early, stalled, encoder, now)
+	silent := false
+	if r.filter != nil {
+		silent = r.filter.count.silent()
+	}
+	plan := planRestart(r, err, cause, early, stalled, silent, encoder, now)
 	ran := now.Sub(started).Round(time.Millisecond)
 	what := fmt.Sprintf("rendition %s on %s", r.spec.Key(), f.channel.GuideNumber)
 	if err != nil {
@@ -1449,7 +1473,12 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 		if stalled {
 			reason = "wrote nothing"
 		}
-		slog.Warn(fmt.Sprintf("%s ended after %s: %s; cause %s: %s", what, ran, reason, cause, words))
+		heard := ""
+		if r.filter != nil && r.filter.count != nil {
+			c := r.filter.count
+			heard = fmt.Sprintf(" (%d pictures, %d sound frames on PID %d)", c.video.Load(), c.heard.Load(), c.sound.Load())
+		}
+		slog.Warn(fmt.Sprintf("%s ended after %s%s: %s; cause %s: %s", what, ran, heard, reason, cause, words))
 	}
 	switch plan {
 	case planSame:
@@ -1464,6 +1493,13 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 		r.aac = true
 	case planSoftware:
 		r.fallback = true
+	case planSilent:
+		r.mute = true
+		r.extras = nil
+		if h.mutes == nil {
+			h.mutes = map[int64]time.Time{}
+		}
+		h.mutes[f.channel.ID] = now.Add(muteFor)
 	}
 	if plan != planRelease && h.restartRenditionLocked(f, r) {
 		slog.Warn(fmt.Sprintf("%s started again %s", what, plan))
@@ -1480,6 +1516,10 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 	h.dropIfUnusedLocked(f)
 }
 
+// muteFor is how long a channel whose sound sent nothing starts its encodes
+// without it, rather than fail once more before each one.
+const muteFor = 30 * time.Minute
+
 func (h *Hub) fallbackWindow() time.Duration {
 	if h.FallbackWindow > 0 {
 		return h.FallbackWindow
@@ -1492,6 +1532,9 @@ func (h *Hub) fallbackWindow() time.Duration {
 // the processor as H.264 after a GPU one.
 func (h *Hub) restartArgsLocked(f *feed, r *rendition) (args []string, encoder string) {
 	spec := r.spec
+	if r.mute {
+		spec.Audio = "none"
+	}
 	if r.aac && spec.Audio == "copy" {
 		spec.Audio = "aac2"
 		if f.source.AudioChannels >= 6 {
@@ -1677,6 +1720,7 @@ func (h *Hub) renditionPipe(f *feed, r *rendition, stdin io.WriteCloser) io.Writ
 	w := newProgramPipe(markWriter{stdin, &r.fed, &r.startFed}, program)
 	if p, ok := w.(*programPipe); ok {
 		p.sw = &pipeSwitch{}
+		p.count = newPESCount(f.soundPID(r.spec))
 		p.onBreak = func() {
 			if r.spec.ABR {
 				go h.followLadderBreak(f, r, p)

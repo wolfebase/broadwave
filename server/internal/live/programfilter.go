@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -56,6 +57,28 @@ type programPipe struct {
 	pending  []byte
 	tail     []byte
 	breaks   []time.Time
+	// count, when set, counts the picture's and the main sound's PES starts
+	// that pass, so an encode that died can tell a track that never sent a
+	// frame from one ffmpeg could not describe.
+	count *pesCount
+}
+
+// pesCount's sound is the main sound's PID; zero takes the program's first
+// sound stream once the map arrives.
+type pesCount struct {
+	sound        atomic.Int64
+	video, heard atomic.Int64
+}
+
+func newPESCount(sound int) *pesCount {
+	c := &pesCount{}
+	c.sound.Store(int64(sound))
+	return c
+}
+
+// silent is a main sound that sent no frame while the picture sent a second.
+func (c *pesCount) silent() bool {
+	return c != nil && c.sound.Load() > 0 && c.video.Load() >= 20 && c.heard.Load() == 0
 }
 
 // pipeSwitch passes the next encode's input to the goroutine writing the pipe.
@@ -136,7 +159,7 @@ func (p *programPipe) Write(chunk []byte) (int, error) {
 			return n, nil
 		}
 		old, tail := p.w, p.tail
-		*p = programPipe{w: next, program: p.program, pmtVer: -1, onBreak: p.onBreak, sw: p.sw, breaks: p.breaks}
+		*p = programPipe{w: next, program: p.program, pmtVer: -1, onBreak: p.onBreak, sw: p.sw, breaks: p.breaks, count: p.count}
 		_ = old.Close()
 		_, err := p.Write(tail)
 		return n, err
@@ -384,7 +407,28 @@ func (p *programPipe) useMap(sec []byte) bool {
 	p.keep = keep
 	p.pmtVer = int(sec[5]>>1) & 0x1f
 	p.video, p.kind = pmtVideo(sec)
+	if p.count != nil && p.count.sound.Load() == 0 {
+		p.count.sound.Store(int64(pmtSound(sec)))
+	}
 	return true
+}
+
+// pmtSound is the first sound stream a program map lists: MPEG, AAC, AC-3,
+// or E-AC-3 by stream type.
+func pmtSound(sec []byte) int {
+	info := int(sec[10]&0x0f)<<8 | int(sec[11])
+	off := 12 + info
+	end := sectionEnd(sec)
+	for off+5 <= end {
+		kind := sec[off]
+		pid := int(sec[off+1]&0x1f)<<8 | int(sec[off+2])
+		off += 5 + (int(sec[off+3]&0x0f)<<8 | int(sec[off+4]))
+		switch kind {
+		case 0x03, 0x04, 0x0f, 0x11, 0x81, 0x87:
+			return pid
+		}
+	}
+	return 0
 }
 
 func (p *programPipe) filter(data []byte) []byte {
@@ -435,6 +479,16 @@ func (p *programPipe) filter(data []byte) []byte {
 				return out
 			}
 			continue
+		}
+		if c := p.count; c != nil && pkt[1]&0x40 != 0 {
+			switch pid {
+			case p.video:
+				c.video.Add(1)
+			case int(c.sound.Load()):
+				if _, ok := pesTime(tsPayload(pkt)); ok {
+					c.heard.Add(1)
+				}
+			}
 		}
 		at := len(out)
 		out = append(out, pkt...)
