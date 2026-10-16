@@ -67,6 +67,36 @@
             shot("ios-multiview-subtitles")
         }
 
+        /// iOS 27: the live channel in Control Center's Now Playing, and its next button as channel up.
+        func testNowPlayingInControlCenter() throws {
+            let app = try launch(["-BroadwaveWatch", "28", "-BroadwaveSyncLog", "1"])
+            XCTAssertTrue(app.buttons["Minimize"].waitForExistence(timeout: 30), app.debugDescription)
+            pause(15)
+            let board = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let corner = board.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.005))
+            corner.press(forDuration: 0.1, thenDragTo: board.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.6)))
+            pause(3)
+            shot("ios-nowplaying-cc")
+            let player = board.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "Now Playing")).firstMatch
+            if player.exists {
+                player.press(forDuration: 1)
+                pause(3)
+                shot("ios-nowplaying-cc-open")
+            }
+            let next = board.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "next")).firstMatch
+            if next.exists {
+                next.tap()
+                pause(6)
+                shot("ios-nowplaying-cc-next")
+            }
+            note("ios-nowplaying-tree", board.debugDescription)
+        }
+
+        private func note(_ name: String, _ text: String) {
+            guard let dir = ProcessInfo.processInfo.environment["BROADWAVE_SHOT_DIR"], !dir.isEmpty else { return }
+            try? text.write(toFile: dir + "/\(name).txt", atomically: true, encoding: .utf8)
+        }
+
         private func launch(_ extra: [String]) throws -> XCUIApplication {
             guard let server = ProcessInfo.processInfo.environment["BROADWAVE_SERVER"], !server.isEmpty else {
                 throw XCTSkip("Set TEST_RUNNER_BROADWAVE_SERVER")
