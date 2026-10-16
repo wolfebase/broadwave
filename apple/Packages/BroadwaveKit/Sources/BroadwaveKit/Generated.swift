@@ -274,6 +274,30 @@ public struct DeviceHealth: Codable, Sendable, Hashable {
     }
 }
 
+public struct DirectStatus: Codable, Sendable, Hashable {
+    public var enabled: Bool
+    public var state: String
+    public var name: String?
+    public var url: String?
+    public var expires: Date?
+    public var trusted: Bool
+    public var addresses: [String]
+    public var lastError: String?
+    public var errorAt: Date?
+
+    public init(enabled: Bool, state: String, name: String? = nil, url: String? = nil, expires: Date? = nil, trusted: Bool, addresses: [String], lastError: String? = nil, errorAt: Date? = nil) {
+        self.enabled = enabled
+        self.state = state
+        self.name = name
+        self.url = url
+        self.expires = expires
+        self.trusted = trusted
+        self.addresses = addresses
+        self.lastError = lastError
+        self.errorAt = errorAt
+    }
+}
+
 public struct Event: Codable, Sendable, Hashable, Identifiable {
     public var id: Int64
     public var at: Date
@@ -886,8 +910,9 @@ public struct ServerInfo: Codable, Sendable, Hashable, Identifiable {
     public var discoveryKey: String?
     public var update: ServerUpdate?
     public var castAppId: String?
+    public var secureUrl: String?
 
-    public init(id: String, name: String, version: String, apiVersion: Int, encoder: String? = nil, tunerCount: Int? = nil, features: [String], minAppVersion: String? = nil, discoveryKey: String? = nil, update: ServerUpdate? = nil, castAppId: String? = nil) {
+    public init(id: String, name: String, version: String, apiVersion: Int, encoder: String? = nil, tunerCount: Int? = nil, features: [String], minAppVersion: String? = nil, discoveryKey: String? = nil, update: ServerUpdate? = nil, castAppId: String? = nil, secureUrl: String? = nil) {
         self.id = id
         self.name = name
         self.version = version
@@ -899,6 +924,7 @@ public struct ServerInfo: Codable, Sendable, Hashable, Identifiable {
         self.discoveryKey = discoveryKey
         self.update = update
         self.castAppId = castAppId
+        self.secureUrl = secureUrl
     }
 }
 

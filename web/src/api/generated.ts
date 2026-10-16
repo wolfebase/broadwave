@@ -136,6 +136,18 @@ export type DeviceHealth = {
   error?: string;
 };
 
+export type DirectStatus = {
+  enabled: boolean;
+  state: string;
+  name?: string;
+  url?: string;
+  expires?: string;
+  trusted: boolean;
+  addresses: string[];
+  lastError?: string;
+  errorAt?: string;
+};
+
 export type Event = {
   id: number;
   at: string;
@@ -479,6 +491,7 @@ export type ServerInfo = {
   discoveryKey?: string;
   update?: ServerUpdate;
   castAppId?: string;
+  secureUrl?: string;
 };
 
 export type ServerUpdate = {
