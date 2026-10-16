@@ -711,7 +711,7 @@ func (h *Hub) restartLadderLocked(f *feed, primary *rendition, software bool) bo
 		}
 		r.stamper.reset()
 		r.clock = nil
-		r.ringFrom = time.Time{}
+		r.ringFrom, r.roomStart = time.Time{}, false
 		r.dated = false
 	}
 	waitLadderPacks(rungs)
