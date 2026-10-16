@@ -138,7 +138,7 @@ test("channel changes, go to live, sports, and search", async ({ page }) => {
 
   await player.press("Escape");
   await expect(page).toHaveURL(/\/guide/);
-  await page.getByRole("tab", { name: "Sports" }).click();
+  await page.getByRole("link", { name: "Sports", exact: true }).click();
   await expect(page).toHaveURL(/\/sports/);
   const game = page.getByRole("article").filter({ hasText: "NFL" }).filter({ hasText: "Chicago" });
   await expect(game).toBeVisible();
@@ -149,7 +149,7 @@ test("channel changes, go to live, sports, and search", async ({ page }) => {
   await page.screenshot({ path: path.join(evidence, "sports-watch.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
 
   await player.press("Escape");
-  await page.getByRole("tab", { name: "Search" }).click();
+  await page.getByRole("link", { name: "Search", exact: true }).click();
   await page.getByLabel("Search shows, people, and recordings").fill("Bears");
   await page.getByLabel("Search shows, people, and recordings").press("Enter");
   await expect(page).toHaveURL(/\/search\?q=Bears/);

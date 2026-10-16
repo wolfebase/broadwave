@@ -54,7 +54,7 @@ test("a TV remote reaches home, guide, search, recordings, and settings", async 
       await expect.poll(() => box.evaluate((el) => el === document.activeElement && el.matches(":focus-visible") && getComputedStyle(el).boxShadow !== "none")).toBe(true);
     }
     // Start on a known control. A bare Tab from the last field leaves the page.
-    const start = path === "/settings" ? page.getByRole("button", { name: "Settings", exact: true }) : page.getByRole("navigation", { name: "Primary" }).getByRole("tab", { selected: true });
+    const start = path === "/settings" ? page.getByRole("link", { name: "Settings", exact: true }) : page.getByRole("navigation", { name: "Primary" }).locator("[aria-current=page]");
     await start.evaluate((el) => (el as HTMLElement).focus({ focusVisible: true }));
     await expect.poll(() => focused(page)).toMatchObject({ ring: true });
     await page.keyboard.press("Tab");

@@ -83,7 +83,7 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   });
   expect(stayed).toBe(true);
 
-  await page.locator(".topbar").getByRole("tab", { name: "Guide" }).click();
+  await page.locator(".topbar").getByRole("link", { name: "Guide", exact: true }).click();
   await expect(page).toHaveURL(/\/guide$/);
   await settle(page);
   const grid = page.getByRole("grid", { name: "TV guide" });
@@ -99,7 +99,7 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   await pressCode(page, 461);
   await expect(page).toHaveURL(/\/$/);
 
-  await page.locator(".topbar").getByRole("tab", { name: "Search" }).click();
+  await page.locator(".topbar").getByRole("link", { name: "Search", exact: true }).click();
   await expect(page).toHaveURL(/\/search/);
   await settle(page);
   const field = page.getByRole("searchbox", { name: "Search shows, people, and recordings" });
@@ -123,7 +123,7 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   const below = await focused(page);
   expect(below!.y).toBeGreaterThan(record!.y);
 
-  await page.locator(".topbar").getByRole("tab", { name: "Sports" }).click();
+  await page.locator(".topbar").getByRole("link", { name: "Sports", exact: true }).click();
   await expect(page).toHaveURL(/\/sports$/);
   await settle(page);
   const live = page.getByRole("button", { name: "Live now" });
@@ -142,7 +142,7 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
     expect(next!.label).not.toBe(watchBox!.label);
   }
 
-  await page.locator(".topbar").getByRole("tab", { name: "Recordings" }).click();
+  await page.locator(".topbar").getByRole("link", { name: "Recordings", exact: true }).click();
   await expect(page).toHaveURL(/\/recordings$/);
   await settle(page);
   // Unwatched is the end of its group. Show sits on the same row, outside it.
@@ -155,7 +155,7 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   await pressCode(page, 10009);
   await expect(page).toHaveURL(/\/sports$/);
 
-  await page.locator(".topbar").getByRole("tab", { name: "Schedule" }).click();
+  await page.locator(".topbar").getByRole("link", { name: "Schedule", exact: true }).click();
   await expect(page).toHaveURL(/\/schedule$/);
   await settle(page);
   const made = page.getByRole("button", { name: "New pass" });
@@ -183,7 +183,7 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/sports$/);
 
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await settle(page);
   const name = page.getByRole("textbox", { name: "Name this screen" });
@@ -202,7 +202,7 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/sports$/);
 
-  await page.locator(".topbar").getByRole("tab", { name: "Home" }).click();
+  await page.locator(".topbar").getByRole("link", { name: "Home", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await settle(page);
   await page.getByRole("button", { name: "Watch", exact: true }).click();

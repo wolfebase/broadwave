@@ -91,7 +91,7 @@ test("a phone walks home, the guide, and the player by touch", async ({ page }) 
   await expect(page.locator("html")).toHaveAttribute("data-layout", "phone");
   await fits(page);
 
-  await tap(page.getByRole("tab", { name: "Guide" }));
+  await tap(page.getByRole("link", { name: "Guide", exact: true }));
   await expect(page).toHaveURL(/\/guide$/);
   const list = page.locator(".onnow-list");
   await expect(list).toBeVisible();
@@ -182,12 +182,13 @@ test("a phone walks home, the guide, and the player by touch", async ({ page }) 
   await fits(page);
   await page.screenshot({ path: path.join(evidence, "mini.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
 
-  await tap(page.getByRole("tab", { name: "Recordings" }));
+  await tap(page.getByRole("link", { name: "Recordings", exact: true }));
   await expect(page).toHaveURL(/\/recordings$/);
   await expect(page.getByRole("heading", { name: "Recordings" })).toBeVisible();
   await fits(page);
 
-  await tap(page.getByRole("button", { name: "Settings" }));
+  await tap(page.getByRole("button", { name: "More" }));
+  await tap(page.getByRole("link", { name: "Settings", exact: true }));
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
   await fits(page);
