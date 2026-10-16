@@ -406,3 +406,46 @@ final class GuideLivePaneTests: WatchingCase {
         XCTAssertFalse(player.exists, "one Back did not leave the resumed player")
     }
 }
+
+/// The guide opens on whole programs, keeps a row of lookahead, and shows where focus is.
+final class GuideLookTests: WatchingCase {
+    func testTheGridOpensCleanAndLooksAhead() throws {
+        try launch()
+        XCTAssertTrue(until(30) { self.focused().exists && self.focused().frame.minX < 120 && self.focused().frame.maxX <= 420 }, "no guide focus")
+        wait(2)
+        shot("look-0-guide")
+        let edge = focused().frame.maxX
+        // No program shows only its last few minutes at the left edge of the grid.
+        let cells = try buttons().filter { $0.frame.minX < edge - 2 && $0.frame.maxX > edge && $0.frame.minY > 150 }
+        let slivers = cells.filter { $0.frame.maxX - edge < 90 }.map(\.label)
+        XCTAssertTrue(slivers.isEmpty, "slivers at the left edge: \(slivers)")
+
+        // Walking down the column keeps the next channel on screen.
+        for step in 1 ... 7 {
+            press(.down, wait: 0.6)
+            let row = focused().frame
+            let below = try buttons().first { abs($0.frame.minX - row.minX) < 4 && abs($0.frame.minY - row.maxY) < 30 }
+            XCTAssertNotNil(below, "step \(step): no row under \(focusedLabel())")
+            if let below {
+                XCTAssertLessThanOrEqual(below.frame.maxY, 1080 + 1, "step \(step): the next row is off screen")
+            }
+        }
+        shot("look-1-down7")
+        press(.right, wait: 0.8)
+        shot("look-2-cell")
+        XCTAssertGreaterThan(focused().frame.minX, edge - 40, "Right did not go into the grid: \(focusedLabel())")
+    }
+
+    /// Every button's frame and label in one pass; element queries one by one take minutes.
+    private func buttons() throws -> [(frame: CGRect, label: String)] {
+        var out: [(frame: CGRect, label: String)] = []
+        var stack = try [app.snapshot()]
+        while let next = stack.popLast() {
+            if next.elementType == .button {
+                out.append((next.frame, next.label))
+            }
+            stack.append(contentsOf: next.children)
+        }
+        return out
+    }
+}
