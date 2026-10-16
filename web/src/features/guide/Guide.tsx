@@ -570,7 +570,7 @@ export function Guide() {
             {slots.map((t) => {
               const x = ((t - origin) / MIN) * pxPerMin;
               return (
-                <div key={t} className={slotUnderNow(x, nowX, tv ? 70 : 44) ? "guide-slot under-now" : "guide-slot"} style={{ left: channelW + x, width: 30 * pxPerMin }}>
+                <div key={t} className={slotUnderNow(x, nowX, tv ? 60 : 40, tv ? 110 : 64) ? "guide-slot under-now" : "guide-slot"} style={{ left: channelW + x, width: 30 * pxPerMin }}>
                   <span className="guide-slot-label">{timeLabel(t)}</span>
                 </div>
               );

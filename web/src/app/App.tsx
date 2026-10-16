@@ -96,7 +96,9 @@ function Shell() {
 
   useEffect(() => {
     if (layout !== "tv" || booting) return;
-    const frame = window.requestAnimationFrame(() => {
+    let frame = 0;
+    let tries = 0;
+    const place = () => {
       // Leaving the player leaves focus on the docked mini player, which no key reaches and no ring shows.
       const active = document.activeElement;
       const lost = !(active instanceof HTMLElement) || active === document.body || active === document.documentElement || active.matches(".stage.mini") || Boolean(active.closest("[inert]"));
@@ -113,13 +115,19 @@ function Shell() {
         pick(".stage:not(.mini) .transport-play") ||
         pick(".stage:not(.mini) button:not([disabled])") ||
         pick(".stage:not(.mini)") ||
-        pick(".has-mini .guide-canvas") ||
+        // The page's content first: the bar is one press up.
+        pick("main .guide-canvas") ||
         pick("main .hero-actions .btn") ||
-        pick(".tabs [aria-current='page']") ||
-        pick("main button:not([disabled]), main a[href], main [tabindex='0']");
-      focusRing(target);
-    });
-    return () => window.cancelAnimationFrame(frame);
+        pick("main button:not([disabled]):not(.skip-link), main a[href]:not(.skip-link), main input, main [tabindex='0']");
+      // A page still loading has no content yet. Wait a moment for it before settling for the bar.
+      if (!target && tries++ < 12) {
+        frame = window.setTimeout(place, 100);
+        return;
+      }
+      focusRing(target ?? pick(".tabs [aria-current='page']"));
+    };
+    frame = window.setTimeout(place, 16);
+    return () => window.clearTimeout(frame);
   }, [path, layout, booting, fullPlayer]);
 
   useEffect(() => {

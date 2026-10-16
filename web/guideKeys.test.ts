@@ -15,7 +15,11 @@ test("page keys move a screenful of rows and stop at the ends", () => {
 test("the half-hour label under the now pill steps aside", () => {
   assert.equal(slotUnderNow(500, 510, 40), true);
   assert.equal(slotUnderNow(560, 510, 40), false);
-  assert.equal(slotUnderNow(440, 510, 40), false);
+  // A label that ends where the pill begins is covered too.
+  assert.equal(slotUnderNow(400, 510, 40), true);
+  assert.equal(slotUnderNow(330, 510, 40), false);
+  // On a TV the label is wider.
+  assert.equal(slotUnderNow(330, 510, 60, 110), true);
 });
 
 test("OK on a TV tunes the show on now; holding it or Info opens the details", () => {

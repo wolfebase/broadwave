@@ -4,9 +4,13 @@ export function guidePageRow(row: number, dir: 1 | -1, viewHeight: number, rowH:
   return Math.max(0, Math.min(count - 1, row + dir * visible));
 }
 
-/** A half-hour label the "now" pill would sit on. The pill already says the time. */
-export function slotUnderNow(slotX: number, nowX: number, pillHalf: number): boolean {
-  return slotX > nowX - pillHalf - 6 && slotX < nowX + pillHalf + 4;
+/**
+ * A half-hour label the "now" pill would sit on. The pill already says the time.
+ * The label starts 10 px into its slot and is labelWidth wide.
+ */
+export function slotUnderNow(slotX: number, nowX: number, pillHalf: number, labelWidth = 64): boolean {
+  const left = slotX + 10;
+  return left < nowX + pillHalf + 6 && left + labelWidth > nowX - pillHalf - 6;
 }
 
 /**
