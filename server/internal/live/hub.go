@@ -411,6 +411,9 @@ type rendition struct {
 	// once it fell back to dating by that arrival.
 	ringFrom time.Time
 	dated    bool
+	// roomStart is a start in the buffer for a room well behind live; the
+	// watch waits for the room's frame. A quick start (startBack) is not.
+	roomStart bool
 	// late is when the playlist last grew before a late gap, in Unix ns,
 	// until the gap ends and is logged.
 	late int64
@@ -1674,7 +1677,7 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition) bool {
 	r.stdin = nil
 	r.stamper.reset()
 	r.clock = nil
-	r.ringFrom = time.Time{}
+	r.ringFrom, r.roomStart = time.Time{}, false
 	r.dated = false
 	if err := discardDir(r.dir); err != nil {
 		return false
@@ -1996,14 +1999,38 @@ func (h *Hub) attachRenditionLocked(f *feed, r *rendition, w io.WriteCloser, fra
 	if m != nil && m.ring != nil && m.input == "" && !frame.IsZero() && back >= roomBackMin && back <= roomBackMax && datedSiblingLocked(f, r) {
 		from := frame.Add(-ringLead)
 		if pos, ok := m.ring.At(from); ok {
-			r.ringFrom = from
+			r.ringFrom, r.roomStart = from, true
 			sub := newPipeSub(w)
 			go m.joinLive(sub, packetStart(pos))
 			slog.Info(fmt.Sprintf("channel %s: %s starts %.1f s back in the buffer, at its room", f.channel.GuideNumber, r.spec.Key(), now.Sub(from).Seconds()))
 			return sub
 		}
 	}
+	// On a frequency tuned a while ago, the opening the tune kept is gone and
+	// the live edge is mid-group: the encode would wait for the next keyframe
+	// and probe its streams at broadcast speed. A start startBack into the
+	// buffer has both at once.
+	if m != nil && m.ring != nil && m.input == "" && m.leadSpent() {
+		from := now.Add(-startBack)
+		if pos, ok := m.ring.At(from); ok {
+			r.ringFrom = from
+			sub := newPipeSub(w)
+			go m.joinLive(sub, packetStart(pos))
+			return sub
+		}
+	}
 	return h.attachPipe(m, w, true)
+}
+
+// startBack is how far into the buffer a new encode on a tune that is no
+// longer fresh starts: a broadcast group of pictures and a probe's worth.
+const startBack = 2 * time.Second
+
+// leadSpent reports whether the tune's opening bytes are no longer kept.
+func (m *mux) leadSpent() bool {
+	m.pipeMu.Lock()
+	defer m.pipeMu.Unlock()
+	return m.leadDone || (!m.leadSince.IsZero() && time.Since(m.leadSince) > leadFor)
 }
 
 // FromBuffer reports whether a rendition started in the buffer, so its
@@ -2015,7 +2042,7 @@ func (h *Hub) FromBuffer(channelID int64, key string) bool {
 	if f == nil || f.renditions[key] == nil {
 		return false
 	}
-	return !f.renditions[key].ringFrom.IsZero()
+	return f.renditions[key].roomStart
 }
 
 // datedSiblingLocked reports whether another encode of the channel has
@@ -2062,7 +2089,9 @@ func seedClockLocked(f *feed, r *rendition) {
 	if !r.ringFrom.IsZero() && !r.dated && r.input.started() {
 		r.dated = true
 		r.clock.Start(r.ringFrom.Add(-ringDelay))
-		slog.Warn(fmt.Sprintf("channel %s: %s started in the buffer with no encode to date it by; its dates may be a second or two off", f.channel.GuideNumber, r.spec.Key()))
+		if r.roomStart {
+			slog.Warn(fmt.Sprintf("channel %s: %s started in the buffer with no encode to date it by; its dates may be a second or two off", f.channel.GuideNumber, r.spec.Key()))
+		}
 	}
 }
 
