@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // AiringHit is a guide listing that matched a search, with the channel it is on.
@@ -230,18 +231,22 @@ func teamMatch(names []string) string {
 	return strings.Join(parts, " OR ")
 }
 
+// ftsMatch keeps letters and digits in any script. It kept only ASCII, so
+// "Pokémon" searched for "Pokmon" and "Café" for "Caf". The index folds
+// accents (unicode61 removes diacritics), and the quoted word is folded the
+// same way, so "pokemon" and "Pokémon" find each other.
 func ftsMatch(query string) string {
 	fields := strings.Fields(query)
 	var parts []string
 	for _, field := range fields {
 		var b strings.Builder
 		for _, r := range field {
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.Is(unicode.Mn, r) || r == '-' {
 				b.WriteRune(r)
 			}
 		}
 		word := b.String()
-		if len(word) < 2 {
+		if utf8.RuneCountInString(word) < 2 {
 			continue
 		}
 		parts = append(parts, `"`+word+`"*`)
