@@ -1043,3 +1043,29 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
   color: #fff;
   font-weight: 700;
 }
+
+/* Captions as the viewer set them in Options. The page carries the choice. */
+html[data-cc-size="small"] video::cue {
+  font-size: 80%;
+}
+
+html[data-cc-size="large"] video::cue {
+  font-size: 140%;
+}
+
+html[data-cc-back="none"] video::cue {
+  background: transparent;
+  text-shadow: 0 0 3px #000, 0 0 6px #000, 0 1px 2px #000;
+}
+
+html[data-cc-back="box"] video::cue {
+  background: rgba(0, 0, 0, 0.62);
+}
+
+html[data-cc-back="solid"] video::cue {
+  background: #000;
+}
+
+html[data-cc-color="yellow"] video::cue {
+  color: #ffd60a;
+}
