@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -186,5 +189,40 @@ func TestConcurrentReadThenWriteTransactionsWait(t *testing.T) {
 	}
 	if err := errors.Join(all...); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A copy is written under a temporary name and renamed into place. An older
+// copy under the name stays whole until the new one is complete, and no
+// half-written file is left behind.
+func TestBackupToReplacesAtomically(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "copy.db")
+	if err := os.WriteFile(path, []byte("older copy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.BackupTo(ctx, path); err != nil {
+		t.Fatal(err)
+	}
+	head := make([]byte, 16)
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.Read(head)
+	f.Close()
+	if string(head) != "SQLite format 3\x00" {
+		t.Fatalf("copy is not a catalog: %q", head)
+	}
+	if err := st.BackupTo(ctx, filepath.Join(dir, "missing", "copy.db")); err == nil {
+		t.Fatal("a copy into a missing folder succeeded")
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".partial") {
+			t.Fatalf("left %s behind", e.Name())
+		}
 	}
 }
