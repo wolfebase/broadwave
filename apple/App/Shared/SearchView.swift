@@ -30,7 +30,7 @@
             .scrollContentBackground(.hidden)
             .background(Tokens.ColorToken.canvas.ignoresSafeArea())
             .navigationTitle("Search")
-            .searchable(text: $query, prompt: Text("Shows, movies, teams, channels"))
+            .searchable(text: $query, placement: fieldPlacement, prompt: Text("Shows, movies, teams, channels"))
             .onSubmit(of: .search) { keep(query) }
             .task(id: query) { await liveSearch() }
             .task { await loadLineup() }
@@ -52,6 +52,12 @@
                     query = seeded
                 }
             #endif
+        }
+
+        /// iPhone keeps the field at the bottom, by the thumb. iPad shows it under the title:
+        /// the default there was a button in the corner.
+        private var fieldPlacement: SearchFieldPlacement {
+            UIDevice.current.userInterfaceIdiom == .pad ? .navigationBarDrawer(displayMode: .always) : .automatic
         }
 
         private var typed: String {

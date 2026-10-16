@@ -105,6 +105,21 @@
             XCUIDevice.shared.orientation = .portrait
         }
 
+        /// iPad: the grid with the preview, chips marked, pictures in view at the right edge.
+        func testPadGuide() throws {
+            try requirePad()
+            let app = try launch(["-BroadwaveTab", "guide"])
+            XCTAssertTrue(app.buttons["guide-now"].waitForExistence(timeout: 30), app.debugDescription)
+            pause(4)
+            shot("guide")
+            XCTAssertTrue(app.buttons["guide-now"].isSelected, "Now is not marked")
+            if app.buttons["guide-tonight"].exists {
+                app.buttons["guide-tonight"].tap()
+                pause(2)
+                shot("guide-tonight")
+            }
+        }
+
         // MARK: Search
 
         /// Results come in while typing, one card per show; a show's page asks before recording.
