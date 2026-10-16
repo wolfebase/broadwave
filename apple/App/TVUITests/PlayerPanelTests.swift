@@ -65,8 +65,9 @@ final class PlayerPanelTests: XCTestCase {
         let before = try waitChannel(app)
         let probe = app.staticTexts["transportProbe"]
         XCTAssertTrue(until(20) { probe.label == "hidden" }, "transport stayed \(probe.label)\n\(focused(app))\n\(app.debugDescription)")
-        // tvOS XCTest has no swipe. A down press while the bar is hidden takes the same step.
-        XCUIRemote.shared.press(.down)
+        // tvOS XCTest has no swipe. An up press while the bar is hidden takes the same step;
+        // Down opens the channel strip (WatchingTests).
+        XCUIRemote.shared.press(.up)
         let moved = until(8) {
             let now = app.staticTexts["channel-now"].label
             return !now.isEmpty && now != before
@@ -75,7 +76,7 @@ final class PlayerPanelTests: XCTestCase {
         XCTAssertTrue(moved, "stayed on \(app.staticTexts["channel-now"].label)")
     }
 
-    func testDownChangesChannelAfterAPanelWasOpen() throws {
+    func testUpChangesChannelAfterAPanelWasOpen() throws {
         try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
         let app = try launch()
         let before = try waitChannel(app)
@@ -91,7 +92,7 @@ final class PlayerPanelTests: XCTestCase {
         shot(app, "after-panel")
         // A press during the bar's closing animation goes to AVKit.
         RunLoop.current.run(until: Date().addingTimeInterval(1.5))
-        XCUIRemote.shared.press(.down)
+        XCUIRemote.shared.press(.up)
         let moved = until(8) {
             let now = app.staticTexts["channel-now"].label
             return !now.isEmpty && now != before

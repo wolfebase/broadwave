@@ -951,6 +951,8 @@ struct PlayerScreen: View {
     /// A recording that holds this showing's start, played from Start over.
     @State private var startOverRecording: Recording?
     @State private var lastChannelStep = Date.distantPast
+    /// Apple TV: the channel strip Down opens.
+    @State private var stripOpen = false
     #if os(iOS)
         @State private var showGuide = false
         @State private var showMove = false
@@ -1023,6 +1025,8 @@ struct PlayerScreen: View {
                 onStartOver: beginStartOver,
                 onStep: { step($0) },
                 onEscape: leaveKey,
+                onDown: { openStrip() },
+                overlayOpen: stripOpen,
                 keysOn: startOverRecording == nil && !keysCovered,
                 onTransport: { transportShown = $0 },
                 onDisplay: { live.displayLine = $0 },
@@ -1032,8 +1036,18 @@ struct PlayerScreen: View {
             )
             .ignoresSafeArea()
             if tuning, let channel = nowPlaying.channel {
-                TuningCard(channel: channel, show: store.index.on(channel.id, at: Date())?.title)
-                    .id(channel.id)
+                let airing = store.index.on(channel.id, at: Date())
+                // A fresh frame means the server already has the channel's frequency open.
+                let tuned = store.frameIDs.contains(channel.id)
+                TuningCard(
+                    channel: channel,
+                    show: airing?.title,
+                    still: tuned ? store.api?.frameURL(channelID: channel.id, width: 1280) : airing.flatMap { store.artURL($0, width: 1280) },
+                    tuned: tuned
+                )
+                .id(channel.id)
+                // The picture fades in under the card instead of cutting from black.
+                .transition(.opacity.animation(.easeOut(duration: 0.4)))
             }
             #if os(iOS)
                 overlay
@@ -1104,6 +1118,29 @@ struct PlayerScreen: View {
                     SyncProbe(sync: live.sync)
                 }
             #endif
+            #if os(tvOS)
+                // A recording of this channel is running: say so while the bar is away.
+                if let channel = nowPlaying.channel, store.activeRecording(on: channel) != nil {
+                    HStack(spacing: 6) {
+                        Circle().fill(Tokens.ColorToken.tally).frame(width: 12, height: 12)
+                        Text("REC").font(.caption.weight(.heavy)).tracking(1)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.55), in: .capsule)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, 50)
+                    .padding(.trailing, 80)
+                    .allowsHitTesting(false)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Recording")
+                    .accessibilityIdentifier("rec-indicator")
+                }
+                if stripOpen {
+                    ChannelStrip { stripOpen = false }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            #endif
             if showStream, !portraitChrome {
                 StreamPanel(stream: live.session?.stream, stats: live.picture, sync: live.sync)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -1168,6 +1205,19 @@ struct PlayerScreen: View {
             }
         }
         #endif
+        // Once the picture moves, the likeliest next channel starts on the server: the one
+        // watched before this, or the one Up goes to. The server keeps one such guess.
+        .task(id: live.moving ? nowPlaying.channel?.id : nil) {
+            guard live.moving, let channel = nowPlaying.channel else { return }
+            try? await Task.sleep(for: .seconds(2))
+            while !Task.isCancelled, let api = store.api {
+                guard let next = warmTarget(after: channel) else { return }
+                let warmed = await api.warm(channelID: next.id, caps: Capabilities.current(), prefs: store.prefs)
+                live.playLogNote("warm \(next.displayNumber) \(warmed)")
+                // A guess stops after about 20 s unless a watch joins it.
+                try? await Task.sleep(for: .seconds(15))
+            }
+        }
         .onChange(of: store.prefs.track) { _, track in
             if live.sounds == nil {
                 nowPlaying.trackRestarts += 1
@@ -1313,7 +1363,23 @@ struct PlayerScreen: View {
                 nowPlaying.expanded = false
             }
         #else
-            nowPlaying.stop()
+            nowPlaying.dock()
+        #endif
+    }
+
+    private func warmTarget(after channel: Channel) -> Channel? {
+        if let previous = nowPlaying.previousChannel, previous.id != channel.id, store.channels.contains(previous) {
+            return previous
+        }
+        let lineup = store.channels
+        guard lineup.count > 1, let i = lineup.firstIndex(of: channel) else { return nil }
+        return lineup[(i + ChannelStep.offset(up: true) + lineup.count) % lineup.count]
+    }
+
+    private func openStrip() {
+        #if os(tvOS)
+            withAnimation(.smooth(duration: 0.25)) { stripOpen = true }
+            live.playLogNote("strip open")
         #endif
     }
 
@@ -1328,19 +1394,22 @@ struct PlayerScreen: View {
 
     #if os(tvOS)
         /// Names in the transport menu. The bar's own entries stay out of the accessibility tree.
+        /// The bar's entries, then More's after a slash.
         private var transportMenuNames: [String] {
             let recording = nowPlaying.channel.flatMap { store.activeRecording(on: $0) } != nil
-            var names = ["Channels", "Audio", recording ? "Stop recording" : "Record", "Multiview"]
-            if let current = delayMenu.first(where: \.current) {
-                names.insert("Live delay \(current.title)", at: 2)
-            }
+            var names = [recording ? "Stop recording" : "Record", "Multiview", "More"]
             if startOverChoice != nil {
-                names.append("Start over")
+                names.insert("Start over", at: 0)
             }
+            var more = ["Channels", "Audio"]
+            if let current = delayMenu.first(where: \.current) {
+                more.append("Live delay \(current.title)")
+            }
+            more.append("Stream")
             if live.sync?.detached == true {
-                names.insert(live.sync?.offByChoice == true ? "Sync screens" : "Back in sync", at: 0)
+                more.insert(live.sync?.offByChoice == true ? "Sync screens" : "Back in sync", at: 0)
             }
-            return names
+            return names + ["/"] + more
         }
     #endif
 
@@ -1900,6 +1969,10 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var onStartOver: () -> Void = {}
     var onStep: (Int) -> Void = { _ in }
     var onEscape: () -> Void = {}
+    /// Down with only the picture on screen. Nil leaves Down to AVKit.
+    var onDown: (() -> Void)?
+    /// The app's own overlay has the remote.
+    var overlayOpen = false
     var keysOn = false
     var onTransport: (Bool) -> Void = { _ in }
     var onDisplay: (String) -> Void = { _ in }
@@ -1929,6 +2002,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
         #endif
         #if os(tvOS)
             vc.delegate = vc
+            vc.onDown = onDown
+            vc.overlayOpen = overlayOpen
             vc.onTransport = onTransport
             vc.appliesPreferredDisplayCriteriaAutomatically = false
             context.coordinator.start(vc)
@@ -1993,6 +2068,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
             context.coordinator.picture.onClosed = onPictureClosed
         #endif
         #if os(tvOS)
+            vc.onDown = onDown
+            vc.overlayOpen = overlayOpen
             vc.onTransport = onTransport
             vc.onPictureInPicture = onPictureInPicture
             vc.onPictureRestore = onPictureRestore
@@ -2040,20 +2117,24 @@ struct SystemPlayer: UIViewControllerRepresentable {
             let together = UIAction(title: "Multiview", image: UIImage(systemName: "rectangle.split.2x1")) { _ in onTogether() }
             let stream = UIAction(title: streamOn ? "Hide stream" : "Stream", image: UIImage(systemName: "info.circle"), state: streamOn ? .on : .off) { _ in onStream() }
             let audioMenu = UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), children: audioActions)
-            var items: [UIMenuElement] = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, stream, record]
+            // A few actions a viewer reaches for; the rest wait under More. Nine bare icons
+            // in a row read as noise from the couch.
+            var more: [UIMenuElement] = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu]
             if !delay.isEmpty {
                 let choices = delay.map { entry in
                     UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
                 }
-                items.insert(UIMenu(title: "Live delay", image: UIImage(systemName: "clock"), children: choices), at: 2)
+                more.append(UIMenu(title: "Live delay", image: UIImage(systemName: "clock"), children: choices))
             }
+            more.append(stream)
+            if let rejoin {
+                more.insert(UIAction(title: rejoinTitle, image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in rejoin() }, at: 0)
+            }
+            var items: [UIMenuElement] = []
             if canStartOver {
                 items.append(UIAction(title: "Start over", image: UIImage(systemName: "backward.end")) { _ in onStartOver() })
             }
-            items.append(together)
-            if let rejoin {
-                items.insert(UIAction(title: rejoinTitle, image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in rejoin() }, at: 0)
-            }
+            items += [record, together, UIMenu(title: "More", image: UIImage(systemName: "ellipsis"), children: more)]
             vc.transportBarCustomMenuItems = items
             // The default action is Play From Beginning, which a live picture cannot do
             // unless the window still holds the start. An empty list leaves it off.
@@ -2421,7 +2502,8 @@ struct RecordingPlayerScreen: View {
     }
 
     var body: some View {
-        SystemPlayer(player: player, actions: actions, liveMenu: false, fileMenu: menu)
+        // One Back leaves, with the transport bar up or not; AVKit spent the first on hiding the bar.
+        SystemPlayer(player: player, actions: actions, liveMenu: false, fileMenu: menu, onEscape: { dismiss() })
             .ignoresSafeArea()
             .overlay {
                 if let error {
@@ -2429,6 +2511,7 @@ struct RecordingPlayerScreen: View {
                 }
             }
             .overlay(alignment: .top) { PlayerNote(text: note) }
+            .overlay { clockProbe }
         #if os(iOS)
             .overlay(alignment: .bottomTrailing) {
                 Group {
@@ -2505,6 +2588,22 @@ struct RecordingPlayerScreen: View {
         #endif
     }
 
+    /// UI tests read the player's clock here.
+    @ViewBuilder private var clockProbe: some View {
+        #if DEBUG
+            if UserDefaults.standard.bool(forKey: "BroadwaveChannelNow") {
+                TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                    let now = player.currentTime().seconds
+                    Text(String(format: "%.1f", now.isFinite ? now : 0))
+                        .font(.system(size: 2))
+                        .foregroundStyle(.clear)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("recording-time")
+                }
+            }
+        #endif
+    }
+
     #if os(iOS)
         /// Next recording as its own button, and the break entries in a Breaks menu.
         @ToolbarContentBuilder private var fileToolbar: some ToolbarContent {
@@ -2559,11 +2658,12 @@ struct RecordingPlayerScreen: View {
             let playlist: String
             var position = 0.0
             var total = 1
+            var growing = false
             switch source {
             case let .recording(first):
                 let one = episode ?? first
                 let start = try await api.play(recordingID: one.id)
-                (rec, found, playlist, position) = (one, start.markers ?? [], start.playlist, start.position)
+                (rec, found, playlist, position, growing) = (one, start.markers ?? [], start.playlist, start.position, start.growing)
             case let .library(channel):
                 let start = try await api.playVirtual(channel.id, index: index)
                 guard start.usesTuner != true else {
@@ -2579,8 +2679,10 @@ struct RecordingPlayerScreen: View {
             var failure: (any Error)?
             // A playlist the server is still writing can fail an item while it loads
             // (a changed discontinuity count). A fresh item reads it again once.
+            let length = Self.length(rec, growing: growing)
+            let aired = growing || rec.isRecording ? rec.startedAt : nil
             for _ in 0 ..< 2 {
-                let item = await api.linkedPlayerItem(playlist)
+                let item = await playerItem(api, playlist, length: length, aired: aired)
                 guard !Task.isCancelled else { return false }
                 PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
                 item.externalMetadata = metadata(rec)
@@ -2607,6 +2709,28 @@ struct RecordingPlayerScreen: View {
         }
     }
 
+    /// Apple TV plays a recording as on-demand video: 0:00 to its length, time left,
+    /// no LIVE badge or air-time clock (`OnDemandPlaylist`). iPhone and iPad keep the
+    /// plain item, which AirPlay can hand to a receiver.
+    private func playerItem(_ api: APIClient, _ playlist: String, length: Double?, aired: Date?) async -> AVPlayerItem {
+        #if os(tvOS)
+            await api.onDemandItem(playlist, length: length, aired: aired)
+        #else
+            await api.linkedPlayerItem(playlist)
+        #endif
+    }
+
+    /// A finished recording's length, or for one still recording the length it is planned to have.
+    private static func length(_ rec: Recording, growing: Bool) -> Double? {
+        if growing || rec.isRecording {
+            guard let ends = rec.endsAt else { return nil }
+            let planned = ends.timeIntervalSince(rec.startedAt)
+            return planned > 60 ? planned : nil
+        }
+        guard let length = rec.durationSec, length > 1 else { return nil }
+        return length
+    }
+
     /// The first play of a recording grows its playlist while the server transcodes it,
     /// and a seek past the end plays from 0. Waits as long as the web player does.
     private static func reach(_ item: AVPlayerItem, _ position: Double) async -> Bool {
@@ -2624,20 +2748,27 @@ struct RecordingPlayerScreen: View {
         return false
     }
 
+    /// The show over the scrubber, the episode under it, and the description in the Info tab.
     private func metadata(_ rec: Recording) -> [AVMetadataItem] {
-        let title = AVMutableMetadataItem()
-        title.identifier = .commonIdentifierTitle
-        title.value = (rec.subtitle ?? rec.title) as NSString
-        title.extendedLanguageTag = "und"
-        let line = AVMutableMetadataItem()
-        line.identifier = .iTunesMetadataTrackSubTitle
-        if case let .library(channel) = source {
-            line.value = "\(channel.number) \(channel.name)" as NSString
-        } else {
-            line.value = rec.guideNumber as NSString
+        func item(_ id: AVMetadataIdentifier, _ value: String) -> AVMetadataItem {
+            let m = AVMutableMetadataItem()
+            m.identifier = id
+            m.value = value as NSString
+            m.extendedLanguageTag = "und"
+            return m
         }
-        line.extendedLanguageTag = "und"
-        return [title, line]
+        let episode = ProgramLine.episode(label: rec.episodeLabel, season: rec.season, episode: rec.episode, subtitle: nil)
+        var line = [episode, rec.subtitle].compactMap(\.self).filter { !$0.isEmpty }
+        if case let .library(channel) = source {
+            line.append("\(channel.number) \(channel.name)")
+        } else if line.isEmpty {
+            line.append(rec.guideNumber)
+        }
+        var out = [item(.commonIdentifierTitle, rec.title), item(.iTunesMetadataTrackSubTitle, line.joined(separator: " · "))]
+        if let about = rec.description, !about.isEmpty {
+            out.append(item(.commonIdentifierDescription, about))
+        }
+        return out
     }
 
     /// Next recording, marking a break by hand, and removing one: the transport bar on
@@ -2910,14 +3041,29 @@ struct RecordingPlayerScreen: View {
 
 /// Covers the player from a new watch until the picture moves, as the web
 /// player does, so the frame a new room holds at its start does not look frozen.
+/// What shows until the picture moves: the channel's last frame, or the program's art,
+/// with the channel, the show, and what the server is doing.
 private struct TuningCard: View {
     let channel: Channel
     let show: String?
+    var still: URL?
+    /// The frequency is already open, so there is no antenna to tune.
+    var tuned = false
     @State private var started = Date()
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
+            if let still {
+                AsyncImage(url: still) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                            .overlay(Color.black.opacity(0.45))
+                    }
+                }
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+            }
             TimelineView(.periodic(from: started, by: 0.5)) { context in
                 VStack(spacing: 10) {
                     Text("\(channel.displayNumber) \(channel.displayName)")
@@ -2928,7 +3074,7 @@ private struct TuningCard: View {
                             .foregroundStyle(.secondary)
                     }
                     ProgressView()
-                    Text("\(TuningSteps.text(after: context.date.timeIntervalSince(started)))…")
+                    Text("\(TuningSteps.text(after: context.date.timeIntervalSince(started) + (tuned ? 3 : 0)))…")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

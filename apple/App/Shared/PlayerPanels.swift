@@ -162,6 +162,13 @@ final class LivePlayerController: AVPlayerViewController {
     var onStep: ((Int) -> Void)?
     var onTransport: ((Bool) -> Void)?
     #if os(tvOS)
+        /// Down with nothing on screen: the channel strip. Nil for a recording.
+        var onDown: (() -> Void)?
+        /// Something of the app's own is over the picture, such as the channel strip.
+        /// The remote is its, not a channel change.
+        var overlayOpen = false
+        /// Takes Down before AVKit's own Info panel does.
+        private let downGate = DownGate()
         var onPictureInPicture: ((Bool) -> Void)?
         var onPictureRestore: (() -> Void)?
         var onPictureClosed: (() -> Void)?
@@ -176,6 +183,7 @@ final class LivePlayerController: AVPlayerViewController {
         private let swipeGate = SwipeGate()
     #endif
     private var swallowedPress = false
+    private weak var infoTabsView: UIView?
     private var lastStep = Date.distantPast
 
     override func viewDidAppear(_ animated: Bool) {
@@ -183,6 +191,9 @@ final class LivePlayerController: AVPlayerViewController {
         installChannelSwipes()
         #if os(tvOS)
             claimFocus()
+            #if DEBUG
+                installPanelProbe()
+            #endif
         #endif
         #if os(iOS)
             if keysOn {
@@ -241,13 +252,27 @@ final class LivePlayerController: AVPlayerViewController {
             root.updateFocusIfNeeded()
         }
 
+        /// Nothing else on screen listens to the remote: no bar, panel, or strip.
+        fileprivate var pictureOnly: Bool {
+            !transportShown && !infoPanelVisible && !overlayOpen
+        }
+
         override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-            // A click while the bar is up moves through the bar. A click while it
-            // is hidden changes channel, the same as a swipe on the clickpad.
-            // The info panel uses the same arrows. A hidden bar with that panel up is not a channel swipe.
-            if !transportShown, !infoPanelVisible, let press = presses.first(where: { $0.type == .upArrow || $0.type == .downArrow }) {
+            // Down has one meaning with nothing on screen: the channel strip (the gate
+            // recognizer takes it). Up, and a remote's channel buttons, change channel.
+            // The bar, a panel, or the strip take the arrows for themselves.
+            if pictureOnly, presses.contains(where: { $0.type == .downArrow }), onDown != nil {
+                swallowedPress = true
+                return
+            }
+            if pictureOnly, let press = presses.first(where: { $0.type == .upArrow || $0.type == .downArrow }) {
                 swallowedPress = true
                 channelStep(up: press.type == .upArrow)
+                return
+            }
+            if !infoPanelVisible, !overlayOpen, let press = presses.first(where: { $0.type == .pageUp || $0.type == .pageDown }) {
+                swallowedPress = true
+                channelStep(up: press.type == .pageUp)
                 return
             }
             // AVKit spends Back on hiding its bar, so leaving took two presses and the
@@ -282,13 +307,38 @@ final class LivePlayerController: AVPlayerViewController {
     /// closed page in the window, moved below the screen at full alpha.
     private var infoPanelVisible: Bool {
         #if os(tvOS)
+            // The system Info tab is not one of ours. It has nothing to focus, so while it
+            // is up focus rests on its tab. The tab row stays in the window once closed.
             (customInfoViewControllers ?? []).contains { controller in
                 controller.viewIfLoaded.map(Self.onScreen) ?? false
-            }
+            } || focusInTabs
         #else
             false
         #endif
     }
+
+    #if os(tvOS)
+        private var focusInTabs: Bool {
+            guard let tabs = infoTabs, let focused = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView else { return false }
+            return focused.isDescendant(of: tabs)
+        }
+
+        /// AVKit's row of panel tabs (Info, Channels, …). Found once, then kept.
+        private var infoTabs: UIView? {
+            if let tabs = infoTabsView, tabs.window != nil {
+                return tabs
+            }
+            var stack: [UIView] = [view]
+            while let next = stack.popLast() {
+                if next.accessibilityIdentifier == "AVInfoMenuCollection" {
+                    infoTabsView = next
+                    return next
+                }
+                stack.append(contentsOf: next.subviews)
+            }
+            return nil
+        }
+    #endif
 
     private static func onScreen(_ view: UIView) -> Bool {
         guard let window = view.window else { return false }
@@ -318,11 +368,58 @@ final class LivePlayerController: AVPlayerViewController {
                 swipe.cancelsTouchesInView = true
                 host.addGestureRecognizer(swipe)
             }
+            downGate.open = { [weak self] in
+                guard let self else { return false }
+                return pictureOnly && onDown != nil
+            }
+            let down = UITapGestureRecognizer(target: self, action: #selector(pressedDown))
+            down.allowedPressTypes = [NSNumber(value: UIPress.PressType.downArrow.rawValue)]
+            down.delegate = downGate
+            view.addGestureRecognizer(down)
+            downGate.recognizer = down
+        #endif
+        holdAVKitBehindDown()
+    }
+
+    /// AVKit's own Down opens its Info panel. With nothing on screen it now waits for
+    /// the gate, which takes Down for the channel strip; otherwise AVKit keeps it.
+    /// AVKit adds recognizers as its bar and panels load, so this runs again when the bar moves.
+    private func holdAVKitBehindDown() {
+        #if os(tvOS)
+            guard let gate = downGate.recognizer else { return }
+            let down = NSNumber(value: UIPress.PressType.downArrow.rawValue)
+            var stack: [UIView] = [view]
+            while let next = stack.popLast() {
+                for recognizer in next.gestureRecognizers ?? [] where recognizer !== gate && !downGate.held.contains(ObjectIdentifier(recognizer)) {
+                    if recognizer.allowedPressTypes.contains(down) {
+                        recognizer.require(toFail: gate)
+                        downGate.held.insert(ObjectIdentifier(recognizer))
+                    }
+                }
+                stack.append(contentsOf: next.subviews)
+            }
+            #if DEBUG
+                print("broadwave down gate holds \(downGate.held.count)")
+            #endif
+        #endif
+    }
+
+    @objc private func pressedDown() {
+        #if os(tvOS)
+            guard pictureOnly else { return }
+            onDown?()
         #endif
     }
 
     @objc private func swiped(_ gesture: UISwipeGestureRecognizer) {
         guard !transportShown else { return }
+        #if os(tvOS)
+            if gesture.direction == .down, let onDown {
+                guard pictureOnly else { return }
+                onDown()
+                return
+            }
+        #endif
         channelStep(up: gesture.direction == .up)
     }
 
@@ -338,6 +435,7 @@ final class LivePlayerController: AVPlayerViewController {
         guard shown != transportShown else { return }
         transportShown = shown
         onTransport?(shown)
+        holdAVKitBehindDown()
         #if DEBUG
             print("broadwave transport \(shown ? "shown" : "hidden")")
             if shown, UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") {
@@ -347,6 +445,27 @@ final class LivePlayerController: AVPlayerViewController {
             }
         #endif
     }
+
+    #if DEBUG && os(tvOS)
+        /// UI tests read whether an Info, Channels, or Stream page is on screen here.
+        private func installPanelProbe() {
+            guard UserDefaults.standard.bool(forKey: "BroadwaveChannelNow"), view.viewWithTag(0xB0B) == nil else { return }
+            let probe = UILabel(frame: CGRect(x: 0, y: 0, width: 4, height: 4))
+            probe.tag = 0xB0B
+            probe.alpha = 0.02
+            probe.font = .systemFont(ofSize: 2)
+            probe.isAccessibilityElement = true
+            probe.accessibilityIdentifier = "panelProbe"
+            view.addSubview(probe)
+            Task { @MainActor [weak self, weak probe] in
+                while let self, let probe {
+                    probe.text = infoPanelVisible ? "panel" : "none"
+                    probe.accessibilityLabel = probe.text
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+            }
+        }
+    #endif
 
     #if DEBUG
         private func controlNames(in view: UIView) -> [String] {
@@ -372,6 +491,22 @@ final class LivePlayerController: AVPlayerViewController {
         var open: () -> Bool = { false }
 
         func gestureRecognizer(_: UIGestureRecognizer, shouldReceive _: UITouch) -> Bool {
+            open()
+        }
+    }
+
+    /// Lets Down in only while nothing but the picture is on screen.
+    private final class DownGate: NSObject, UIGestureRecognizerDelegate {
+        var open: () -> Bool = { false }
+        weak var recognizer: UIGestureRecognizer?
+        /// AVKit recognizers already waiting on this one.
+        var held: Set<ObjectIdentifier> = []
+
+        func gestureRecognizer(_: UIGestureRecognizer, shouldReceive _: UIPress) -> Bool {
+            open()
+        }
+
+        func gestureRecognizerShouldBegin(_: UIGestureRecognizer) -> Bool {
             open()
         }
     }
