@@ -73,10 +73,38 @@ function teardown() {
   host = null;
 }
 
+function HomeScreenHint({ onDone }: { onDone: () => void }) {
+  return (
+    <>
+      <p>{t("install.iosHint")}</p>
+      <button
+        type="button"
+        className="btn small ghost"
+        data-install-dismiss
+        onClick={() => {
+          rememberDismiss();
+          onDone();
+        }}
+      >
+        {t("install.gotIt")}
+      </button>
+    </>
+  );
+}
+
 /** Show the install banner. It stays off the player, and Back on it means Not now. */
 export function present(event: Event) {
   const prompt = event as InstallPromptEvent;
   if (typeof prompt.prompt !== "function") return;
+  mount(<Banner event={prompt} onDone={teardown} />);
+}
+
+/** Safari on iPhone and iPad: how to add Broadwave to the Home Screen. */
+export function presentHomeScreenHint() {
+  mount(<HomeScreenHint onDone={teardown} />);
+}
+
+function mount(content: React.ReactNode) {
   teardown();
   host = document.createElement("div");
   host.className = "install-offer";
@@ -103,6 +131,6 @@ export function present(event: Event) {
     host.querySelector<HTMLButtonElement>("[data-install-dismiss]")?.click();
   };
   window.addEventListener("keydown", onKey, true);
-  root.render(<Banner event={prompt} onDone={teardown} />);
+  root.render(content);
   place();
 }
