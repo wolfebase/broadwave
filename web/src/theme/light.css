@@ -624,3 +624,61 @@ html[data-theme="light"] .guide-cell.now::after {
 html[data-theme="light"] .guide-cell.now {
   background: color-mix(in srgb, var(--cat-color) 8%, var(--color-surface2));
 }
+
+/* The hero is a light card in the light theme: a category wash and the art's
+   blur under a white scrim, with dark ink. It was a black panel on a white page. */
+html[data-theme="light"] .hero {
+  background: var(--color-surface1);
+  border-color: var(--color-line);
+  box-shadow: 0 24px 60px rgba(20, 24, 32, 0.12);
+}
+
+html[data-theme="light"] .hero-glow {
+  background:
+    radial-gradient(70% 90% at 85% 10%, color-mix(in srgb, var(--cat-color, var(--cat-other)) 26%, transparent), transparent 60%),
+    radial-gradient(60% 80% at 0% 100%, color-mix(in srgb, var(--cat-color, var(--cat-other)) 14%, transparent), transparent 70%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.94) 0%, rgba(255, 255, 255, 0.84) 45%, rgba(255, 255, 255, 0) 64%);
+}
+
+html[data-theme="light"].layout-phone .hero-glow {
+  background:
+    radial-gradient(90% 60% at 50% 0%, color-mix(in srgb, var(--cat-color, var(--cat-other)) 24%, transparent), transparent 70%),
+    linear-gradient(180deg, transparent 0%, transparent 36%, rgba(255, 255, 255, 0.88) 50%, rgba(255, 255, 255, 0.96) 100%);
+}
+
+html[data-theme="light"] .hero-title {
+  color: var(--color-text);
+  text-shadow: none;
+}
+
+html[data-theme="light"] .hero-sub,
+html[data-theme="light"] .hero-left,
+html[data-theme="light"] .hero-next,
+html[data-theme="light"] .hero .ch-badge-name {
+  color: var(--color-text-secondary);
+}
+
+html[data-theme="light"] .hero-cat {
+  color: var(--color-text-secondary);
+}
+
+html[data-theme="light"] .hero .live-dot {
+  color: var(--color-tally-soft-ink, #b3261e);
+}
+
+html[data-theme="light"] .hero .live-dot-light {
+  background: var(--color-tally);
+}
+
+html[data-theme="light"] .hero .ch-badge-num {
+  color: var(--color-text);
+  background: rgba(20, 24, 32, 0.08);
+}
+
+html[data-theme="light"] .hero .progress {
+  background: rgba(20, 24, 32, 0.12);
+}
+
+html[data-theme="light"] .hero .progress-fill {
+  background: var(--cat-ink, var(--cat-color));
+}

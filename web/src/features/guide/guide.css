@@ -358,7 +358,7 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
 }
 
 .guide-cell.has-thumb,
-.guide-cell:has(> .cell-thumb:not([hidden])) {
+.guide-cell:has(> .cell-thumb:not(.lf-wait)) {
   padding-right: 64px;
 }
 

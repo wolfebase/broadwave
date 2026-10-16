@@ -65,3 +65,39 @@
 .shelf {
   min-width: 0;
 }
+
+.shelf-frame {
+  position: relative;
+}
+
+/* Only a mouse gets the arrows: touch swipes and a remote walks the cards. */
+.shelf-arrow {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  html:not([data-layout="tv"]) .shelf-arrow {
+    position: absolute;
+    top: 50%;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    translate: 0 -50%;
+    opacity: 0;
+    transition: opacity var(--motion-fast);
+  }
+
+  .shelf-arrow.left {
+    left: -12px;
+  }
+
+  .shelf-arrow.right {
+    right: -12px;
+  }
+
+  .shelf-frame:hover .shelf-arrow {
+    opacity: 1;
+  }
+}

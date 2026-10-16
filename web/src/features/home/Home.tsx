@@ -16,6 +16,7 @@ import { useHasFrame } from "../../ui/frames";
 import { LiveFrame } from "../../ui/LiveFrame";
 import { Atsc3Tag, ChannelBadge, Empty, LiveDot, Progress } from "../../ui/primitives";
 import { RecordingCard, Shelf } from "../../ui/shelf";
+import { gameKey, missingTuners } from "./homeRails";
 import "./home.css";
 
 const t = bind(homeMessages);
@@ -28,7 +29,7 @@ function mentions(text: string, name: string) {
 }
 
 export function Home() {
-  const { channels, index, now, recordings, ready, settled, record } = useData();
+  const { channels, index, now, recordings, ready, settled, record, stopRecord, devices } = useData();
   const player = usePlayer();
   const [teams, setTeams] = useState<TeamFollow[]>([]);
   useEffect(() => {
@@ -69,7 +70,7 @@ export function Home() {
         if (names.some((name) => mentions(text, name))) out.push({ channel, airing });
       }
     }
-    return out.sort((a, b) => a.airing.start.localeCompare(b.airing.start)).slice(0, 12);
+    return uniqueGames(out).slice(0, 12);
   }, [teams, channels, index, now]);
 
   const sports = useMemo(() => {
@@ -81,19 +82,30 @@ export function Home() {
         if (Date.parse(a.end) > now && s < until && categoryOf(a) === "sports") out.push({ channel, airing: a });
       }
     }
-    return out.sort((a, b) => a.airing.start.localeCompare(b.airing.start)).slice(0, 16);
-  }, [channels, index, now]);
+    // A game on two stations, or already under Your teams, shows once.
+    const taken = new Set(yours.map((y) => gameKey(y.airing)));
+    return uniqueGames(out)
+      .filter((g) => !taken.has(gameKey(g.airing)))
+      .slice(0, 16);
+  }, [channels, index, now, yours]);
 
   const tonight = useMemo(() => {
     const d = new Date(now);
     d.setHours(20, 0, 0, 0);
     if (d.getTime() + 3 * 3600_000 < now) d.setDate(d.getDate() + 1);
     const at = Math.max(now, d.getTime()) + 60_000;
-    return channels
-      .map((channel) => ({ channel, airing: airingAt(index, channel.id, at) }))
-      .filter((x): x is { channel: Channel; airing: Airing } => !!x.airing && categoryOf(x.airing) !== "other")
+    // Tonight leaves out what the sports rows already show, and a show on two stations.
+    const taken = new Set([...yours, ...sports].map((g) => gameKey(g.airing)));
+    return uniqueGames(
+      channels
+        .map((channel) => ({ channel, airing: airingAt(index, channel.id, at) }))
+        .filter((x): x is { channel: Channel; airing: Airing } => !!x.airing && categoryOf(x.airing) !== "other"),
+    )
+      .filter((x) => !taken.has(gameKey(x.airing)))
       .slice(0, 14);
-  }, [channels, index, now]);
+  }, [channels, index, now, yours, sports]);
+  const missing = missingTuners(devices, now);
+  const heroRecording = hero ? recordings.find((r) => r.status === "recording" && r.channelId === hero.channel.id) : undefined;
 
   const recordingNow = recordings.filter((r) => r.status === "recording");
   const resume = continueWatching(recordings);
@@ -156,9 +168,15 @@ export function Home() {
                 <PlayIcon /> {t("home.watch")}
               </button>
               {hero.airing ? (
-                <button type="button" className="btn big" aria-label={actionName(t("home.record"), hero.airing.title)} onClick={() => void record(hero.channel, hero.airing!.title)}>
-                  <RecordIcon className="tally" /> {t("home.record")}
-                </button>
+                heroRecording ? (
+                  <button type="button" className="btn big" aria-pressed="true" aria-label={actionName(t("home.stopRecording"), hero.airing.title)} onClick={() => void stopRecord(heroRecording.id)}>
+                    <RecordIcon className="tally" /> {t("home.recording")}
+                  </button>
+                ) : (
+                  <button type="button" className="btn big" aria-label={actionName(t("home.record"), hero.airing.title)} onClick={() => void record(hero.channel, hero.airing!.title)}>
+                    <RecordIcon className="tally" /> {t("home.record")}
+                  </button>
+                )
               ) : null}
               {(() => {
                 const n = nextAfter(index, hero.channel.id, hero.airing ? Date.parse(hero.airing.end) : now);
@@ -171,9 +189,18 @@ export function Home() {
         </section>
       ) : null}
 
-      {recordingNow.length > 0 ? (
+      {missing.length > 0 ? (
+        <div className="home-banner" role="status">
+          <p>{missing.length === 1 ? t("home.tunerMissing", { name: missing[0].name, since: missing[0].since }) : t("home.tunersMissing", missing.length)}</p>
+          <button type="button" className="btn" onClick={() => navigate("/sources")}>
+            {t("home.checkTuners")}
+          </button>
+        </div>
+      ) : null}
+
+      {recordingNow.filter((r) => r.id !== heroRecording?.id).length > 0 ? (
         <div className="rec-strip">
-          {recordingNow.map((r) => (
+          {recordingNow.filter((r) => r.id !== heroRecording?.id).map((r) => (
             <span key={r.id} className="rec-chip">
               <span className="live-dot-light" aria-hidden="true" /> {t("home.recordingTitle", { title: r.title })}
             </span>
@@ -191,7 +218,7 @@ export function Home() {
         {onNow.map((l) => (
           <button key={l.channel.id} type="button" className={`now-card${l.airing?.imageUrl ? " has-art" : ""}`} data-cat={l.cat} onClick={() => player.open(l.channel)}>
             {l.airing?.imageUrl ? (
-              <span className="nc-art" aria-hidden="true" style={{ backgroundImage: `url(/media/art/airing/${l.airing.id}?w=640)` }} />
+              <img className="nc-art" alt="" loading="lazy" decoding="async" src={`/media/art/airing/${l.airing.id}?w=640`} />
             ) : null}
             <LiveFrame id={l.channel.id} className="nc-frame" />
             <span className="nc-top">
@@ -311,4 +338,17 @@ export function Home() {
       ) : null}
     </div>
   );
+}
+
+/** Soonest first, each show once: a game on two stations is one game. */
+function uniqueGames<T extends { airing: Airing }>(list: T[]): T[] {
+  const seen = new Set<string>();
+  return [...list]
+    .sort((a, b) => a.airing.start.localeCompare(b.airing.start))
+    .filter((item) => {
+      const key = gameKey(item.airing);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
