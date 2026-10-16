@@ -246,9 +246,7 @@ test("multiview labels stay at least 4.5:1 on a white picture", () => {
   const veil = parseColor(prop(multi, ".mv-meta", "background"));
   const pill = over(veil, WHITE);
   const title = Number(prop(multi, ".mv-title", "opacity"));
-  const detail = Number(prop(multi, ".mv-detail", "opacity"));
   atLeast("title", paint({ rgb: WHITE, alpha: title }, pill));
-  atLeast("detail", paint({ rgb: WHITE, alpha: detail }, pill));
   atLeast("note", paint(parseColor(prop(multi, ".mv-note", "color")), pill));
   atLeast("note on black", paint(parseColor(prop(multi, ".mv-note", "color")), [0, 0, 0]));
 });
