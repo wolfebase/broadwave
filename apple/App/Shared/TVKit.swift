@@ -322,6 +322,7 @@
                 }
                 .accessibilityElement(children: .combine)
                 HStack(spacing: 32) { actions }
+                    .buttonStyle(TVChipStyle())
                     .focusSection()
             }
             .frame(maxWidth: .infinity)
