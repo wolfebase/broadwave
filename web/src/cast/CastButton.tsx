@@ -4,6 +4,7 @@ import { bind } from "../i18n/runtime.ts";
 import { readToken } from "../lib/deviceToken";
 import { readLiveDelay } from "../lib/events";
 import { CastIcon } from "../ui/icons";
+import { mediaLinkFor } from "./link";
 import { castControl, castLoad, castOutgoing } from "./protocol";
 import { ensureSender, requestCast, type CastLink } from "./sender";
 
@@ -40,7 +41,19 @@ export function CastButton({
   useEffect(() => {
     if (!link || !castOutgoing(appId, playlist, true)) return;
     const token = readToken();
-    link.send(castLoad({ channelId, playlist, room, latency: readLiveDelay(), token: token || undefined, title, subtitle }));
+    const load = { channelId, playlist, room, latency: readLiveDelay(), token: token || undefined, title, subtitle };
+    if (!token) {
+      link.send(castLoad(load));
+      return;
+    }
+    // Away from home the television cannot always use the token. A media link plays without it.
+    let current = true;
+    void mediaLinkFor(window.location.origin, playlist, token).then((media) => {
+      if (current) link.send(castLoad({ ...load, media }));
+    });
+    return () => {
+      current = false;
+    };
   }, [link, appId, channelId, playlist, room, title, subtitle]);
 
   const mode = castControl(appId, playlist, link !== null);
