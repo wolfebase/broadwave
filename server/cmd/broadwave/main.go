@@ -152,15 +152,9 @@ func main() {
 	if *staging {
 		slog.Info("staging: scheduled recordings and guide pulls, background tunes, and the tuner emulator are off; a recording or guide refresh you start still runs")
 	} else if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {
-		minutes := int(left / time.Minute)
-		if minutes < 1 {
-			return nil
-		}
-		_, err := hub.RecordMeta(context.Background(), minutes, store.Recording{
-			ChannelID: rec.ChannelID, Title: rec.Title, Subtitle: rec.Subtitle,
-			Description: rec.Description, Category: rec.Category, ProgramID: rec.ProgramID, GameID: rec.GameID,
-		})
-		if err != nil {
+		// The pass, game, and episode carry over; a failed start here is
+		// tried again by the pass tick for the time still left.
+		if _, err := dvr.Resume(context.Background(), st, hub, rec, left); err != nil {
 			slog.Error(fmt.Sprintf("recording: resume %s: %v", rec.Title, err))
 		}
 		return nil
@@ -212,10 +206,15 @@ func main() {
 			return
 		}
 		if n > 0 {
-			slog.Info(fmt.Sprintf("guide: broadcast filled %d listings", n))
+			slog.Debug(fmt.Sprintf("guide: broadcast filled %d listings", n))
 		}
 	}
 	handler := api.Handler()
+	bus.Versions = api.DataVersions
+	go api.WatchData(context.Background(), 2*time.Second)
+	// sources.found goes out when discovery found a different set, not every
+	// five minutes: each one sent every app to refetch its tuners.
+	found := foundOnce(st)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -226,7 +225,9 @@ func main() {
 			return
 		}
 		slog.Info(fmt.Sprintf("discovery: %d device(s)", n))
-		bus.Publish("sources.found", map[string]int{"found": n})
+		if found(n) {
+			bus.Publish("sources.found", map[string]int{"found": n})
+		}
 		// SiliconDust asks for a random 20-28 h gap after each successful pull.
 		// A restart waits out whatever nextGuidePull was already stored.
 		for !*staging {
@@ -241,7 +242,13 @@ func main() {
 		tick := time.NewTicker(time.Hour)
 		defer tick.Stop()
 		for range tick.C {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			// Old listings go even when the guide pull keeps failing, and the
+			// query planner's statistics follow the catalog's shape.
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			_, _ = st.PruneAirings(ctx, time.Now())
+			_ = st.Optimize(ctx)
+			cancel()
+			ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
 			n, err := api.RefreshSources(ctx, time.Now())
 			cancel()
 			if err != nil {
@@ -264,7 +271,9 @@ func main() {
 				slog.Error(fmt.Sprintf("discovery: %v", err))
 				continue
 			}
-			bus.Publish("sources.found", map[string]int{"found": n})
+			if found(n) {
+				bus.Publish("sources.found", map[string]int{"found": n})
+			}
 		}
 	}()
 	go api.WatchHome(context.Background())
@@ -487,4 +496,22 @@ func recordingsDir(configDir, flagged string) string {
 		return abs
 	}
 	return flagged
+}
+
+// foundOnce reports a discovery pass that changed something: a different
+// device count, or a lineup or tuner change the channels version counted.
+func foundOnce(st *store.Store) func(n int) bool {
+	var mu sync.Mutex
+	lastN, lastV := -1, int64(-1)
+	return func(n int) bool {
+		v, err := st.DataVersions(context.Background())
+		if err != nil {
+			return true
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		changed := n != lastN || v.Channels != lastV
+		lastN, lastV = n, v.Channels
+		return changed
+	}
 }

@@ -560,16 +560,31 @@ func trackLog(tracks []AudioTrack) string {
 	return strings.Join(parts, ", ")
 }
 
-func (f *feed) sourceFor(want Rendition) Source {
-	src := f.source
-	role := "main"
+func trackRole(want Rendition) string {
 	switch want.Track {
 	case "lang":
-		role = "language"
+		return "language"
 	case "vi":
-		role = "described"
+		return "described"
 	}
-	if t, ok := PickTrack(f.tracks, role); ok {
+	return "main"
+}
+
+// soundPID is the PID of the sound an encode of want maps, or 0 when the
+// program map has not been read.
+func (f *feed) soundPID(want Rendition) int {
+	if src := f.sourceFor(want); src.AudioPID > 0 {
+		return src.AudioPID
+	}
+	if t, ok := PickTrack(f.tracks, trackRole(want)); ok {
+		return t.PID
+	}
+	return 0
+}
+
+func (f *feed) sourceFor(want Rendition) Source {
+	src := f.source
+	if t, ok := PickTrack(f.tracks, trackRole(want)); ok {
 		// The encode that started before the PMT mapped the program's first
 		// audio stream. Keeping that map when the choice is the same stream
 		// avoids restarting it. A later stream still has to name its PID.
