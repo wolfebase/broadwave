@@ -144,7 +144,11 @@ final class RecordingPlaybackTests: WatchingCase {
         try launch(["-BroadwaveTab", "recordings", "-BroadwaveChannelNow", "YES"])
         try open(title)
         let start = Date()
-        XCTAssertTrue(until(20) { self.playing() }, "the recording never started")
+        let started = until(20) { self.playing() }
+        if !started {
+            shot("rec-growing-stuck")
+        }
+        XCTAssertTrue(started, "the recording never started: clock \(element("recording-time").label)")
         print("TIMING in-progress recording select->playing \(String(format: "%.2f", Date().timeIntervalSince(start)))s")
         wait(4)
         press(.select, wait: 1.5)
