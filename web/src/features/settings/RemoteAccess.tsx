@@ -3,6 +3,8 @@ import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { isForbidden, isUnauthorized } from "../../lib/deviceToken";
 import type { InviteGrant, RemoteStatus, Settings } from "../../types";
+import { events } from "../../lib/events";
+import { CloudflareCard } from "./CloudflareCard";
 import { createInvite, deleteInvite, getRemote } from "./pairApi";
 import { scopeLabel, scopesForAccess } from "./pairCode";
 
@@ -98,13 +100,14 @@ export function RemoteAccess({ onChange }: { onChange: (values: Partial<Settings
     };
   }, [apply, fail]);
 
-  // While the tunnel connects, look again so the address fills in.
-  const waiting = status?.tunnel.state === "starting" || (status?.tokenSet && !status.remoteUrl);
+  // The server says when the tunnel or the address changes.
   useEffect(() => {
-    if (!waiting) return;
-    const timer = window.setInterval(() => void load(), 3000);
-    return () => window.clearInterval(timer);
-  }, [waiting, load]);
+    const off = events().on("remote.changed", () => void load());
+    return () => {
+      off();
+    };
+  }, [load]);
+  const reload = useCallback(() => void load(), [load]);
 
   async function save(values: Partial<Settings>) {
     setBusy(true);
@@ -161,75 +164,11 @@ export function RemoteAccess({ onChange }: { onChange: (values: Partial<Settings
   const line = status ? stateLine(status) : "";
 
   return (
-    <section aria-labelledby="remote-title">
+    <section aria-labelledby="remote-title" className="remote">
       <h2 id="remote-title">{t("remote.title")}</h2>
       <p className="dim">{t("remote.lead")}</p>
       {status?.here ? <p className="hint">{t("remote.here")}</p> : null}
-      {line ? (
-        <p className={status?.tunnel.state === "error" || status?.tunnel.state === "missing" ? "error" : "hint"} role="status">
-          {line}
-        </p>
-      ) : null}
-      {status?.remoteUrl ? (
-        <p className="hint">
-          {t("remote.addressNow", { url: status.remoteUrl })}
-        </p>
-      ) : null}
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (token.trim()) void save({ tunnelToken: token.trim() });
-        }}
-      >
-        <label className="field">
-          {t("remote.token")}
-          <input
-            type="password"
-            value={token}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder={status?.tokenSet ? t("remote.tokenSet") : "cloudflared service install eyJ…"}
-            onChange={(event) => setToken(event.target.value)}
-          />
-          <span className="hint">
-            {t("remote.tokenHint")}{" "}
-            <a href={guideURL} target="_blank" rel="noreferrer">
-              {t("remote.guide")}
-            </a>
-          </span>
-        </label>
-        <button type="submit" className="btn" disabled={busy || !token.trim()}>
-          {t("remote.save")}
-        </button>
-        {status?.tokenSet ? (
-          <button type="button" className="btn" disabled={busy} onClick={() => void save({ tunnelToken: "" })}>
-            {t("remote.remove")}
-          </button>
-        ) : null}
-      </form>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void save({ remoteUrl: address.trim() });
-        }}
-      >
-        <label className="field">
-          {t("remote.address")}
-          <input
-            value={address}
-            inputMode="url"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder={status?.remoteUrl || "tv.example.com"}
-            onChange={(event) => setAddress(event.target.value)}
-          />
-          <span className="hint">{t("remote.addressHint")}</span>
-        </label>
-        <button type="submit" className="btn" disabled={busy || address.trim() === (status?.configured ?? "")}>
-          {t("remote.save")}
-        </button>
-      </form>
-
+      <CloudflareCard remote={status} onRemote={reload} />
       <h3 className="section-title">{t("remote.invite")}</h3>
       {status && !status.remoteUrl ? <p className="hint">{t("remote.inviteNeedsAddress")}</p> : null}
       <form onSubmit={(event) => void invite(event)}>
@@ -281,6 +220,73 @@ export function RemoteAccess({ onChange }: { onChange: (values: Partial<Settings
           </ul>
         </>
       ) : null}
+      <details className="remote-advanced">
+        <summary>{t("remote.cf.advanced")}</summary>
+        <p className="hint">{t("remote.cf.advancedHint")}</p>
+        {line && status?.tokenSet ? (
+          <p className={status?.tunnel.state === "error" || status?.tunnel.state === "missing" ? "error" : "hint"} role="status">
+            {line}
+          </p>
+        ) : null}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (token.trim()) void save({ tunnelToken: token.trim() });
+          }}
+        >
+          <label className="field">
+            {t("remote.token")}
+            <input
+              type="password"
+              value={token}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={status?.tokenSet ? t("remote.tokenSet") : "cloudflared service install eyJ…"}
+              onChange={(event) => setToken(event.target.value)}
+            />
+            <span className="hint">
+              {t("remote.tokenHint")}{" "}
+              <a href={guideURL} target="_blank" rel="noreferrer">
+                {t("remote.guide")}
+              </a>
+            </span>
+          </label>
+          <span className="remote-buttons">
+            <button type="submit" className="btn" disabled={busy || !token.trim()}>
+              {t("remote.save")}
+            </button>
+            {status?.tokenSet ? (
+              <button type="button" className="btn" disabled={busy} onClick={() => void save({ tunnelToken: "" })}>
+                {t("remote.remove")}
+              </button>
+            ) : null}
+          </span>
+        </form>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save({ remoteUrl: address.trim() });
+          }}
+        >
+          <label className="field">
+            {t("remote.address")}
+            <input
+              value={address}
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={status?.remoteUrl || "tv.example.com"}
+              onChange={(event) => setAddress(event.target.value)}
+            />
+            <span className="hint">{t("remote.addressHint")}</span>
+          </label>
+          <span className="remote-buttons">
+            <button type="submit" className="btn" disabled={busy || address.trim() === (status?.configured ?? "")}>
+              {t("remote.save")}
+            </button>
+          </span>
+        </form>
+      </details>
       {error ? (
         <p className="error" role="alert">
           {error}

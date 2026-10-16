@@ -745,7 +745,6 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		"lastGuideErrorAt":    true,
 		"adaptive":            true,
 		SettingRemoteURL:      true,
-		SettingTunnelToken:    true,
 		"tunnelTokenSet":      true,
 	}
 	cleaned := map[string]string{}
@@ -848,13 +847,6 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 				return nil, err
 			}
 			v = norm
-		}
-		if k == SettingTunnelToken {
-			token, err := CleanTunnelToken(v)
-			if err != nil {
-				return nil, err
-			}
-			v = token
 		}
 		if k == "tmdbKey" && strings.TrimSpace(v) == "" {
 			continue

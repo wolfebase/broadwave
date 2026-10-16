@@ -133,7 +133,7 @@ export interface paths {
          * @description WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
          *
          *     Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
-         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `screen.remote` {action, from} (a remote pressed a button for this screen; see `/screens/{id}/remote`), `client.revoked` {id} (a paired device was revoked; the device with that id is signed out and should show the sign-in screen), `error` {code, message}.
+         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `screen.remote` {action, from} (a remote pressed a button for this screen; see `/screens/{id}/remote`), `client.revoked` {id} (a paired device was revoked; the device with that id is signed out and should show the sign-in screen), `remote.changed` (Away from home changed; an admin reads `/remote` and `/remote/cloudflare` again), `error` {code, message}.
          *
          *     Client to server: `here` {id, name, kind, channelId} (names this screen; `id` is the app's own stable id, 1-64 letters, digits, or `-`; kind is iphone, ipad, appletv, or web; `channelId` is the channel it plays alone, sent again on each change, so a screen with sync off still shows what it watches in `/screens`), `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
          *     `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
@@ -1315,6 +1315,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/remote/cloudflare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Sign in with Cloudflare. The sign-in, the setup steps, or the tunnel it made.
+         *     Admin, and only from the home network: a request through the tunnel or the
+         *     public name is refused with `not_home`. A `remote.changed` event on the
+         *     socket says to read it again.
+         */
+        get: operations["getCloudflare"];
+        put?: never;
+        post?: never;
+        /**
+         * @description Stops the tunnel Broadwave runs and forgets its token. The public address is
+         *     cleared when it is the tunnel's. With `cloudflare=1` and a fresh sign-in
+         *     (`state` authorized), the tunnel is also deleted in Cloudflare, and its DNS
+         *     name when the sign-in may. `dnsLeft` names a DNS entry that may remain.
+         */
+        delete: operations["removeCloudflare"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote/cloudflare/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Starts a sign-in. Open `loginUrl` in a browser, pick a domain, and authorize.
+         *     The server waits for Cloudflare in the background until `expiresAt` (about 9
+         *     minutes), then the state is authorized. The certificate it gets controls every
+         *     tunnel in the account, so it stays in memory and is dropped after setup, after
+         *     15 minutes unused, or on cancel. Purpose `remove` deletes the tunnel in
+         *     Cloudflare as soon as the sign-in finishes.
+         */
+        post: operations["startCloudflareLogin"];
+        /** @description Stops waiting, drops the certificate, and clears an error. Setup that is running finishes on its own. */
+        delete: operations["cancelCloudflareLogin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote/cloudflare/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description After the sign-in: makes a tunnel named `broadwave-` and the start of the
+         *     server's id (or uses this server's own again), points `label.<domain>` at it,
+         *     saves the tunnel's run token in the config folder (never the catalog), sets the
+         *     public address, starts cloudflared, and drops the certificate. It runs in the
+         *     background through the steps tunnel, dns, and connect. A name already in DNS
+         *     comes back as state authorized with error `name_taken`; send `overwrite` to
+         *     replace it.
+         */
+        post: operations["setupCloudflare"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/invites": {
         parameters: {
             query?: never;
@@ -1802,6 +1880,43 @@ export interface components {
             /** Format: date-time */
             since?: string;
         };
+        CloudflareStatus: {
+            /** @enum {string} */
+            state: "idle" | "waiting" | "authorized" | "provisioning" | "connected" | "error";
+            /** @enum {string} */
+            purpose?: "setup" | "remove";
+            /** @description Open this to sign in. While waiting. */
+            loginUrl?: string;
+            /**
+             * Format: date-time
+             * @description When waiting or the held sign-in ends.
+             */
+            expiresAt?: string;
+            zone?: components["schemas"]["CloudflareZone"];
+            /** @description The name being set up, or the one in use. */
+            hostname?: string;
+            /**
+             * @description While provisioning.
+             * @enum {string}
+             */
+            step?: "tunnel" | "dns" | "connect";
+            error?: components["schemas"]["CloudflareProblem"];
+            /** @description After turning off: a DNS name that may still point at the removed tunnel. */
+            dnsLeft?: string;
+            /** @description A tunnel Broadwave made is saved and runs. */
+            managed: boolean;
+            tunnel: components["schemas"]["TunnelStatus"];
+        };
+        CloudflareZone: {
+            id: string;
+            /** @description The domain. Empty when the sign-in may not read it; then setup takes the whole name. */
+            name?: string;
+        };
+        CloudflareProblem: {
+            /** @description timeout, login_failed, no_zone, bad_cert, name_taken, not_permitted, setup_failed, wrong_account, remove_failed. */
+            code: string;
+            message: string;
+        };
         RemoteStatus: {
             /** @description The address in use: the saved one, or the tunnel's hostname. Empty when there is none. */
             remoteUrl: string;
@@ -1843,7 +1958,7 @@ export interface components {
         Error: {
             /**
              * @description Stable machine code. An unknown code is still a failure.
-             *     Known codes: bad_request, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, no_signal, no_source, not_found, pictures_full, rate_limited, recording_soon, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable.
+             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, remove_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
              */
             code: string;
             /** @description Short text safe to show a user. */
@@ -2740,7 +2855,7 @@ export interface components {
             deviceAuth?: "0" | "1";
             /** @description The https address that reaches this server from outside, such as https://tv.example.com. A bare name gets https. Empty clears it. */
             remoteUrl?: string;
-            /** @description A Cloudflare tunnel token, or the install command that contains it. The server runs cloudflared with it. Never returned. Empty clears it and stops the tunnel. */
+            /** @description A Cloudflare tunnel token, or the install command that contains it. The server keeps it in the config folder, not the catalog, and runs cloudflared with it. Never returned. Empty clears it and stops the tunnel. */
             tunnelToken?: string;
             /** @enum {string} */
             readonly tunnelTokenSet?: "0" | "1";
@@ -5391,6 +5506,142 @@ export interface operations {
             };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+        };
+    };
+    getCloudflare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Where the sign-in stands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    removeCloudflare: {
+        parameters: {
+            query?: {
+                cloudflare?: "1";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Turned off */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            502: components["responses"]["Error"];
+        };
+    };
+    startCloudflareLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Omitted is setup.
+                     * @enum {string}
+                     */
+                    purpose?: "setup" | "remove";
+                };
+            };
+        };
+        responses: {
+            /** @description Waiting for the owner */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    cancelCloudflareLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stopped */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    setupCloudflare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The first part of the name, such as tv. When zone.name is empty, the whole name, such as tv.example.com. */
+                    label: string;
+                    /** @description Replace a DNS entry that already has this name. */
+                    overwrite?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Setup started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     listInvites: {
