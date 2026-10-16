@@ -1207,7 +1207,8 @@ func TestDeltaPlaylistSkipsTheHead(t *testing.T) {
 }
 
 // A part between two segments stays in the delta, and a discontinuity
-// sequence is not a break. The bytes are the contract for a scan that does
+// sequence is not a break. The skip follows the header's EXT-X-MAP: AVPlayer
+// in low-latency mode stops loading media when it comes before the map. The bytes are the contract for a scan that does
 // not rebuild the playlist as text.
 func TestDeltaPlaylistBytes(t *testing.T) {
 	in := "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:2\n" +
@@ -1221,7 +1222,7 @@ func TestDeltaPlaylistBytes(t *testing.T) {
 		"#EXT-X-PART:DURATION=0.500,URI=\"partOpen.m4s\"\n"
 	want := "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:2\n" +
 		"#EXT-X-DISCONTINUITY-SEQUENCE:3\n#EXT-X-MEDIA-SEQUENCE:10\n" +
-		"#EXT-X-SKIP:SKIPPED-SEGMENTS=1\n#EXT-X-MAP:URI=\"init.mp4\"\n" +
+		"#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-SKIP:SKIPPED-SEGMENTS=1\n" +
 		"#EXT-X-PART:DURATION=0.500,URI=\"partA.m4s\"\n" +
 		"#EXT-X-DISCONTINUITY\n#EXT-X-PROGRAM-DATE-TIME:2026-10-09T12:00:02.000Z\n#EXTINF:2.000,\nseg1.m4s\n" +
 		"#EXT-X-PROGRAM-DATE-TIME:2026-10-09T12:00:04.000Z\n#EXTINF:2.000,\nseg2.m4s\n" +
@@ -1980,7 +1981,7 @@ func TestNoPartIsOneField(t *testing.T) {
 	}
 	write(avFragment(3*group, field, false))
 	write(avFragment(3*group+field, 20000, true))
-	playlist := waitPlaylist(t, dir, `URI="part00003.m4s"`)
+	playlist := waitPlaylist(t, dir, `YES,URI="part00003.m4s"`)
 	if !strings.Contains(playlist, "#EXT-X-PART:DURATION=0.239,INDEPENDENT=YES,URI=\"part00003.m4s\"") {
 		t.Fatalf("the field and the frames after it should be one 0.239 s part:\n%s", playlist)
 	}

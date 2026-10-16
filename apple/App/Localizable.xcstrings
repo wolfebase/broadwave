@@ -1017,6 +1017,17 @@
         }
       }
     },
+    "Behind live": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Behind live"
+          }
+        }
+      }
+    },
     "Bitrate": {
       "extractionState": "manual",
       "localizations": {
@@ -1475,6 +1486,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect"
+          }
+        }
+      }
+    },
+    "Connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection"
           }
         }
       }
@@ -2654,6 +2676,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Home"
+          }
+        }
+      }
+    },
+    "Home address": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home address"
           }
         }
       }
@@ -5361,6 +5394,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Second language"
+          }
+        }
+      }
+    },
+    "Secure (HTTP/2)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secure (HTTP/2)"
           }
         }
       }

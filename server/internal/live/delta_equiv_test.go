@@ -209,7 +209,19 @@ func deltaPlaylistText(body []byte) []byte {
 	}
 	var b strings.Builder
 	wroteSkip := false
+	header := false
+	if !blocks[0].seg {
+		for _, line := range blocks[0].lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "#EXT-X-MEDIA-SEQUENCE:") {
+				header = true
+			}
+		}
+	}
 	for i, block := range blocks {
+		if header && i == 1 {
+			b.WriteString("#EXT-X-SKIP:SKIPPED-SEGMENTS=" + strconv.Itoa(start) + "\n")
+			wroteSkip = true
+		}
 		if block.seg && i < segAt[start] {
 			continue
 		}
@@ -222,7 +234,7 @@ func deltaPlaylistText(body []byte) []byte {
 				line = "#EXT-X-VERSION:9"
 			}
 			b.WriteString(line + "\n")
-			if !wroteSkip && strings.HasPrefix(trim, "#EXT-X-MEDIA-SEQUENCE:") {
+			if !wroteSkip && !header && strings.HasPrefix(trim, "#EXT-X-MEDIA-SEQUENCE:") {
 				b.WriteString("#EXT-X-SKIP:SKIPPED-SEGMENTS=" + strconv.Itoa(start) + "\n")
 				wroteSkip = true
 			}

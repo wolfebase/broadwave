@@ -355,6 +355,7 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	secure := startDirect(ctx, st, api, *configDir, *addr, handler)
 	if api.Updates != nil {
 		go api.Updates.Run(ctx)
 	}
@@ -365,6 +366,9 @@ func main() {
 		tunnels.Stop()
 		shut, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
+		if secure != nil {
+			_ = secure.Shutdown(shut)
+		}
 		_ = server.Shutdown(shut)
 	}()
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
