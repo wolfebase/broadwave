@@ -65,3 +65,38 @@ func (s *Store) PruneAirings(ctx context.Context, now time.Time) (int64, error) 
 	}
 	return res.RowsAffected()
 }
+
+// GuideCoverage is the listings each feed holds from now on: how many rows
+// each source has, and which source lists each channel. A guide refresh
+// compares against it before it replaces anything.
+type GuideCoverage struct {
+	Rows     map[string]int
+	Channels map[int64]string
+}
+
+// FeedCoverage reads the coverage of the listings that came from a feed
+// (not the broadcast) and have not ended.
+func (s *Store) FeedCoverage(ctx context.Context, now time.Time) (GuideCoverage, error) {
+	out := GuideCoverage{Rows: map[string]int{}, Channels: map[int64]string{}}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT channel_id, guide_source, COUNT(*) FROM airings
+WHERE ends_at > ? AND guide_source <> 'broadcast'
+GROUP BY channel_id, guide_source
+ORDER BY channel_id, COUNT(*)`, now.UTC().Format(time.RFC3339))
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var source string
+		var n int
+		if err := rows.Scan(&id, &source, &n); err != nil {
+			return out, err
+		}
+		out.Rows[source] += n
+		// Ordered by count, so the source with the most rows wins the channel.
+		out.Channels[id] = source
+	}
+	return out, rows.Err()
+}
