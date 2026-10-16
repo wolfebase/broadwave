@@ -1008,3 +1008,14 @@ th {
   width: 100%;
   box-sizing: border-box;
 }
+
+/* Offline on the saved guide: progress bars are a guess until the server answers. */
+html[data-stale] .progress {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+
+html[data-stale] .banner-error {
+  background: var(--color-surface2);
+  color: var(--color-text-secondary);
+}
