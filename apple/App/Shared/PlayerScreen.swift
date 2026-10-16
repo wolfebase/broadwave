@@ -21,6 +21,10 @@ struct PictureStats: Equatable {
     var dropped = 0
     var buffer = 0.0
     var fps: Float = 0
+    /// Seconds between the station's clock and the frame on screen, in tenths. Nil before the first dated frame.
+    var behind: Double?
+    /// The picture comes over the server's secure address (HTTPS, HTTP/2).
+    var secure = false
 }
 
 @MainActor
@@ -506,6 +510,9 @@ final class LivePlayer {
                     rate = await videoPicture(item).rate
                 }
                 samplePicture(rate: rate)
+                #if DEBUG
+                    liveDelayReport()
+                #endif
                 // The playhead observer does not fire while the picture is stuck,
                 // so a dead server would never be named. Two samples a few ms apart
                 // would read as a stuck picture, so only sample when it has gone quiet.
@@ -515,6 +522,26 @@ final class LivePlayer {
             }
         }
     }
+
+    #if DEBUG
+        @ObservationIgnored private var delayTicks = 0
+
+        /// Simulator testing: with -BroadwaveSyncLog 1, every 5 s the live picture's
+        /// distance from the station clock, the address it plays from, and what
+        /// AVPlayer said about low latency.
+        private func liveDelayReport() {
+            guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog"), let item = player.currentItem else { return }
+            delayTicks += 1
+            guard delayTicks % 5 == 0, let date = item.currentDate() else { return }
+            let delay = (Date().timeIntervalSince(date) * 10).rounded() / 10
+            let uri = item.accessLog()?.events.last?.uri ?? "-"
+            let notes = (item.errorLog()?.events ?? []).compactMap(\.errorComment).filter { $0.localizedCaseInsensitiveContains("latency") }
+            let last = item.errorLog()?.events.last.map { "\($0.errorStatusCode) \($0.errorComment ?? "-") \($0.uri ?? "-")" } ?? "-"
+            let wait = player.reasonForWaitingToPlay?.rawValue ?? "-"
+            let line = "live delay=\(delay)s uri=\(uri) lowLatencyNotes=\(notes.isEmpty ? "-" : notes.joined(separator: " | ")) tc=\(player.timeControlStatus.rawValue) wait=\(wait) lastError=\(last)"
+            playLog.notice("\(line, privacy: .public)")
+        }
+    #endif
 
     private func samplePicture(rate: Float) {
         guard let item = player.currentItem else { return }
@@ -538,6 +565,10 @@ final class LivePlayer {
         if let event = item.accessLog()?.events.last {
             next.dropped = event.numberOfDroppedVideoFrames
         }
+        if let date = item.currentDate() {
+            next.behind = (Date().timeIntervalSince(date) * 10).rounded() / 10
+        }
+        next.secure = (item.asset as? AVURLAsset)?.url.scheme == "https"
         let match = PlayerTuning.matchingDisplay(
             width: next.width,
             height: next.height,
@@ -2216,6 +2247,8 @@ struct StreamPanel: View {
             line("Output", outputText)
             line("Dropped frames", "\(stats.dropped)")
             line("Buffer", String(format: "%.1fs", stats.buffer))
+            line("Behind live", stats.behind.map { String(format: "%.1fs", $0) } ?? "—")
+            line("Connection", stats.secure ? String(localized: "Secure (HTTP/2)") : String(localized: "Home address"))
             line("Sync", syncText)
         }
         .padding(16)

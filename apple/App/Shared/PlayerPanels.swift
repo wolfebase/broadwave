@@ -133,6 +133,8 @@ struct StreamFactsPanel: View {
             fact("Bitrate", facts.bitrate)
             fact("Dropped frames", facts.dropped)
             fact("Drift", facts.drift)
+            fact("Behind live", live.picture.behind.map { String(format: "%.1f s", $0) } ?? "—")
+            fact("Connection", live.picture.secure ? String(localized: "Secure (HTTP/2)") : String(localized: "Home address"))
             Spacer(minLength: 0)
         }
         .padding(28)
