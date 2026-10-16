@@ -1,0 +1,507 @@
+/* Settings, Away from home: the Sign in with Cloudflare card. Loads with the
+   settings page, not the shell. */
+
+.cf-card {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
+  box-shadow: inset 0 1px 0 var(--color-glass-highlight);
+  min-width: 0;
+}
+
+/* The way in carries the brand: a soft glow from the corner and a gradient edge. */
+.cf-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--color-accent) 20%, transparent), transparent 58%),
+    radial-gradient(90% 120% at 0% 100%, color-mix(in srgb, var(--brand-violet) 12%, transparent), transparent 60%),
+    var(--color-surface1);
+}
+
+.cf-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--brand-gradient);
+  opacity: 0.85;
+}
+
+.cf-head {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.cf-text {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.cf-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  font-size: 26px;
+  color: var(--color-accent-ink, var(--color-accent));
+  background: var(--color-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+.cf-mark.cf-ok {
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 34%, transparent);
+}
+
+.cf-pulse {
+  animation: cf-pulse 1.8s var(--ease-out) infinite;
+}
+
+@keyframes cf-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--color-accent) 0%, transparent);
+  }
+}
+
+.cf-title {
+  font-size: var(--type-title3-size);
+  font-weight: var(--type-title3-weight);
+  letter-spacing: var(--type-title3-tracking);
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cf-body {
+  color: var(--color-text-secondary);
+  font-size: var(--type-body-size);
+  line-height: 1.45;
+  margin: 0;
+  max-width: 60ch;
+}
+
+.cf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+
+/* Long words in a pseudo-locale wrap instead of pushing the page wide. */
+.cf-card .btn {
+  white-space: normal;
+  text-align: center;
+  max-width: 100%;
+}
+
+.cf-go {
+  box-shadow: var(--brand-glow);
+}
+
+/* Waiting: a bar that empties as the sign-in runs out. */
+.cf-timer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cf-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface3);
+  overflow: hidden;
+}
+
+.cf-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--brand-gradient);
+  transform-origin: left center;
+  transition: transform 1s linear;
+}
+
+.cf-count {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* The name: an input that runs into the domain. */
+.cf-field > span:first-child {
+  font-weight: 600;
+}
+
+.cf-name {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface2);
+  transition: border-color var(--motion-fast) var(--ease-out);
+}
+
+.cf-name:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* Sized to what is typed (the width comes from the component), so the
+   domain sits right after it. */
+.field .cf-name input {
+  flex: 0 1 auto;
+  min-width: 2ch;
+  max-width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: transparent;
+  font-size: var(--type-title3-size);
+  font-weight: 650;
+  color: var(--color-text);
+  padding: 0 0 0 14px;
+  box-sizing: content-box;
+}
+
+.field .cf-name.whole input {
+  padding-right: 14px;
+}
+
+/* Where the browser can, the field is exactly as wide as the name. */
+@supports (field-sizing: content) {
+  .field .cf-name input {
+    field-sizing: content;
+    width: auto !important;
+  }
+}
+
+/* Without the domain the whole name is typed, so the field is full width. */
+.field .cf-name.whole {
+  width: 100%;
+}
+
+.field .cf-name.whole input {
+  flex: 1 1 auto;
+  field-sizing: fixed;
+  width: 100% !important;
+}
+
+/* The group draws the ring; the field inside it does not. */
+html:root .field .cf-name input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.cf-suffix {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0 16px 0 1px;
+  font-size: var(--type-title3-size);
+  font-weight: 650;
+  color: var(--color-text-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.cf-bad {
+  color: var(--color-tally-ink);
+}
+
+/* Problems and notes sit inside the card. */
+.cf-alert,
+.cf-note,
+.cf-confirm {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--type-footnote-size);
+}
+
+.cf-alert {
+  background: var(--color-tally-soft);
+  border: 1px solid color-mix(in srgb, var(--color-tally) 35%, transparent);
+  color: var(--color-text);
+}
+
+/* A name in use is a choice, not a failure. */
+.cf-alert.cf-choice {
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 38%, transparent);
+}
+
+.cf-alert p {
+  margin: 0;
+}
+
+.cf-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+}
+
+.cf-note {
+  background: var(--color-surface2);
+  border: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+}
+
+.cf-confirm {
+  background: var(--color-surface2);
+  border: 1px solid var(--color-line-strong);
+}
+
+.cf-confirm h4 {
+  margin: 0;
+  font-size: var(--type-headline-size);
+}
+
+/* Setup steps. */
+.cf-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.cf-steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--type-body-size);
+  color: var(--color-text-tertiary);
+  transition: color var(--motion-base) var(--ease-out);
+}
+
+.cf-steps li[data-mark="done"],
+.cf-steps li[data-mark="now"] {
+  color: var(--color-text);
+}
+
+.cf-steps li[data-mark="now"] {
+  font-weight: 600;
+}
+
+.cf-step-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--color-line-strong);
+  font-size: 14px;
+}
+
+li[data-mark="done"] .cf-step-icon {
+  border-color: var(--color-success);
+  background: var(--color-success);
+  color: var(--color-canvas);
+}
+
+li[data-mark="now"] .cf-step-icon {
+  border-color: var(--color-surface3);
+  border-top-color: var(--color-accent);
+  animation: cf-spin 0.9s linear infinite;
+}
+
+@keyframes cf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Connected. */
+.cf-live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--type-footnote-size);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary);
+}
+
+.cf-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-tally);
+}
+
+.cf-live[data-state="connected"] .cf-dot {
+  background: var(--color-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success) 22%, transparent);
+}
+
+.cf-live[data-state="connecting"] .cf-dot {
+  background: var(--color-warning);
+  animation: cf-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes cf-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.cf-url {
+  margin: 0;
+  font-size: var(--type-title2-size);
+  font-weight: var(--type-title2-weight);
+  letter-spacing: var(--type-title2-tracking);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.cf-on .cf-url {
+  background: linear-gradient(180deg, var(--color-text) 30%, color-mix(in srgb, var(--color-accent) 55%, var(--color-text)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.remote {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.remote > h2,
+.remote > p {
+  margin: 0;
+}
+
+/* Advanced: the pasted token and an address for your own cloudflared. */
+.remote-advanced {
+  display: grid;
+  gap: var(--space-3);
+  border-top: 1px solid var(--color-line);
+  padding-top: var(--space-4);
+}
+
+.remote-advanced > summary {
+  cursor: pointer;
+  width: fit-content;
+  font-size: var(--type-headline-size);
+  font-weight: 700;
+  padding: var(--space-1) var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
+  border-radius: var(--radius-sm);
+}
+
+.remote-advanced[open] > summary {
+  margin-bottom: var(--space-2);
+}
+
+/* details does not lay out its content as a grid everywhere. */
+.remote-advanced > .hint {
+  margin: 0 0 var(--space-3);
+}
+
+.remote-advanced form {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.remote-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Phone: buttons fill the row, so a thumb finds them. */
+.layout-phone .cf-card {
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+}
+
+.layout-phone .cf-actions > .btn {
+  flex: 1 1 100%;
+  justify-content: center;
+}
+
+.layout-phone .cf-mark {
+  width: 40px;
+  height: 40px;
+  font-size: 22px;
+}
+
+.layout-phone .cf-url {
+  font-size: var(--type-title3-size);
+}
+
+/* TV: room to breathe, and fields as large as the type. */
+html[data-layout="tv"] .cf-card {
+  padding: var(--space-10);
+  gap: var(--space-6);
+  max-width: 1200px;
+}
+
+html[data-layout="tv"] .cf-mark {
+  width: 80px;
+  height: 80px;
+  font-size: 44px;
+  border-radius: var(--radius-lg);
+}
+
+html[data-layout="tv"] .field .cf-name input {
+  min-height: 84px;
+  padding-left: 24px;
+}
+
+html[data-layout="tv"] .cf-suffix {
+  padding-right: 24px;
+}
+
+html[data-layout="tv"] .cf-step-icon {
+  width: 40px;
+  height: 40px;
+  font-size: 24px;
+}
+
+html[data-layout="tv"] .cf-dot {
+  width: 16px;
+  height: 16px;
+}
+
+html[data-layout="tv"] .cf-bar {
+  height: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cf-pulse,
+  .cf-live[data-state="connecting"] .cf-dot {
+    animation: none;
+  }
+
+  li[data-mark="now"] .cf-step-icon {
+    animation: none;
+    border-color: var(--color-accent);
+  }
+
+  .cf-bar > span,
+  .cf-steps li {
+    transition: none;
+  }
+}

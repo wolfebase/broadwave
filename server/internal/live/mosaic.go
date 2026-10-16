@@ -326,7 +326,7 @@ func (h *Hub) startMosaicLocked(mo *mosaic) error {
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = dir
 	cmd.ExtraFiles = readers
-	logCommand(cmd)
+	logCommand(cmd, "mosaic")
 	stdout, gate, done, err := packOutput(cmd)
 	if err != nil {
 		closeAll()
@@ -340,7 +340,7 @@ func (h *Hub) startMosaicLocked(mo *mosaic) error {
 	for _, r := range readers {
 		_ = r.Close()
 	}
-	packIn := startPack(dir, stdout, gate, done, nil)
+	packIn := startPack(dir, stdout, gate, done, nil, false)
 	NotePID(h.Dir, cmd.Process.Pid)
 	now := time.Now()
 	out := &rendition{dir: dir, cmd: cmd, seen: now, began: now, args: args, gate: gate, packDone: done, input: packIn, fallback: mo.software}
@@ -470,9 +470,9 @@ func (h *Hub) MosaicPlaylist(key string) ([]byte, error) {
 
 // WaitMosaic holds a blocking playlist request until the mosaic's playlist
 // lists that segment or part.
-func (h *Hub) WaitMosaic(key string, msn, part int) {
+func (h *Hub) WaitMosaic(ctx context.Context, key string, msn, part int) {
 	if out := h.mosaicOut(key); out != nil {
-		out.gate.block(msn, part)
+		out.gate.block(ctx, msn, part)
 	}
 }
 
@@ -629,7 +629,7 @@ func (h *Hub) ExportMosaic(ctx context.Context, ids []int64, w io.Writer) error 
 	cmd := exec.CommandContext(ctx, h.FFmpeg, "-hide_banner", "-loglevel", "error",
 		"-live_start_index", "-2", "-i", playlist, "-map", "0", "-c", "copy", "-f", "mpegts", "pipe:1")
 	cmd.Stdout = w
-	logCommand(cmd)
+	logCommand(cmd, "mosaic export")
 	if err := cmd.Run(); err != nil && ctx.Err() == nil {
 		return err
 	}

@@ -21,6 +21,22 @@ type Planned struct {
 	Skipped    bool         `json:"skipped"`
 	Reason     string       `json:"reason,omitempty"`
 	Suggestion *Suggestion  `json:"suggestion,omitempty"`
+	// runsUntil is a recording of this airing already running past its
+	// planned end: a game that went long.
+	runsUntil time.Time
+}
+
+// tunerSpan is how long the airing holds a tuner: from its padding before
+// to its padding after, plus the hour a sports listing without a matched
+// game records, or as long as its recording already runs. The listing's own
+// times missed a back-to-back pair whose padding overlaps.
+func (p Planned) tunerSpan() (time.Time, time.Time) {
+	start := p.Airing.Start.Add(-time.Duration(p.PadBefore) * time.Minute)
+	end := p.Airing.End.Add(time.Duration(p.PadAfter)*time.Minute + SportsTail(p.Airing))
+	if p.runsUntil.After(end) {
+		end = p.runsUntil
+	}
+	return start, end
 }
 
 // Plan matches passes to airings and marks any span where more channels overlap than the tuner count.
@@ -38,8 +54,25 @@ func Plan(passes []store.Pass, airings []store.Airing, tunerCount int, from, to 
 // takes a tuner from one that will.
 func PlanLibrary(passes []store.Pass, airings []store.Airing, tunerCount int, from, to time.Time, recs []store.Recording, seen, skips map[string]bool) []Planned {
 	items := ApplyLibrary(match(passes, airings, from, to), passes, recs, seen, skips)
+	noteRunning(items, recs)
 	resolvePriority(items, tunerCount)
 	return items
+}
+
+// noteRunning extends an airing's tuner span to the end of the recording
+// already making it, when that runs longer (a game in overtime).
+func noteRunning(items []Planned, recs []store.Recording) {
+	for i := range items {
+		air := items[i].Airing
+		for _, rec := range recs {
+			if rec.Status != "recording" || rec.EndsAt == nil || rec.ChannelID != air.ChannelID || !strings.EqualFold(rec.Title, air.Title) {
+				continue
+			}
+			if rec.StartedAt.Before(air.End) && rec.EndsAt.After(items[i].runsUntil) {
+				items[i].runsUntil = *rec.EndsAt
+			}
+		}
+	}
 }
 
 func match(passes []store.Pass, airings []store.Airing, from, to time.Time) []Planned {
@@ -195,8 +228,9 @@ func resolvePriority(items []Planned, tunerCount int) {
 	}
 	events := make([]event, 0, len(items)*2)
 	for i, item := range items {
-		events = append(events, event{at: item.Airing.Start, index: i, start: true})
-		events = append(events, event{at: item.Airing.End, index: i, start: false})
+		start, end := item.tunerSpan()
+		events = append(events, event{at: start, index: i, start: true})
+		events = append(events, event{at: end, index: i, start: false})
 	}
 	sort.SliceStable(events, func(i, j int) bool {
 		if events[i].at.Equal(events[j].at) && events[i].start != events[j].start {

@@ -4,6 +4,7 @@ import (
 	"broadwave/internal/dvr"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"mime"
@@ -614,8 +615,10 @@ func (s *Server) backup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	path := filepath.Join(dir, "broadwave-backup.db")
-	_ = os.Remove(path)
+	// Each download gets its own copy, so two at once do not overwrite
+	// each other's file while it is being sent.
+	path := filepath.Join(dir, fmt.Sprintf("broadwave-backup-%d.db", time.Now().UnixNano()))
+	defer os.Remove(path)
 	if err := s.Store.BackupTo(r.Context(), path); err != nil {
 		writeError(w, err)
 		return

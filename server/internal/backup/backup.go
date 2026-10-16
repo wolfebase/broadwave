@@ -393,9 +393,7 @@ func vacuumFile(ctx context.Context, src, dest string) error {
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(1)
-	escaped := strings.ReplaceAll(dest, "'", "''")
-	_, err = db.ExecContext(ctx, fmt.Sprintf(`VACUUM INTO '%s'`, escaped))
-	return err
+	return store.VacuumInto(ctx, db, dest)
 }
 
 func copyFile(src, dst string) error {

@@ -53,7 +53,7 @@ func TestNoteReadsHostnamesConnectionsAndErrors(t *testing.T) {
 func TestApplyRunsOnceAndStops(t *testing.T) {
 	started := make(chan string, 4)
 	r := &Runner{Bin: "/bin/cloudflared"}
-	r.start = func(ctx context.Context, bin, token string) (io.ReadCloser, func() error, error) {
+	r.start = func(ctx context.Context, bin, token, _ string) (io.ReadCloser, func() error, error) {
 		started <- token
 		pr, pw := io.Pipe()
 		go func() {
@@ -63,17 +63,17 @@ func TestApplyRunsOnceAndStops(t *testing.T) {
 		}()
 		return pr, func() error { return ctx.Err() }, nil
 	}
-	r.Apply("tok-a")
+	r.Apply("tok-a", "")
 	if got := <-started; got != "tok-a" {
 		t.Fatal(got)
 	}
-	r.Apply("tok-a")
+	r.Apply("tok-a", "")
 	waitFor(t, func() bool { return r.Status().State == "connected" })
-	r.Apply("tok-b")
+	r.Apply("tok-b", "")
 	if got := <-started; got != "tok-b" {
 		t.Fatal(got)
 	}
-	r.Apply("")
+	r.Apply("", "")
 	if st := r.Status(); st.State != "off" {
 		t.Fatalf("off %+v", st)
 	}
@@ -88,7 +88,7 @@ func TestApplyAtOnceLeavesOneCloudflared(t *testing.T) {
 	var mu sync.Mutex
 	running := map[string]int{}
 	r := &Runner{Bin: "/bin/cloudflared"}
-	r.start = func(ctx context.Context, bin, token string) (io.ReadCloser, func() error, error) {
+	r.start = func(ctx context.Context, bin, token, _ string) (io.ReadCloser, func() error, error) {
 		mu.Lock()
 		running[token]++
 		mu.Unlock()
@@ -109,7 +109,7 @@ func TestApplyAtOnceLeavesOneCloudflared(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				r.Apply(tok + strconv.Itoa(i))
+				r.Apply(tok+strconv.Itoa(i), "")
 			}()
 		}
 		wg.Wait()
@@ -127,7 +127,7 @@ func TestApplyAtOnceLeavesOneCloudflared(t *testing.T) {
 
 func TestMissingCloudflaredSaysSo(t *testing.T) {
 	r := &Runner{}
-	r.Apply("tok")
+	r.Apply("tok", "")
 	if st := r.Status(); st.State != "missing" {
 		t.Fatalf("%+v", st)
 	}
@@ -141,5 +141,40 @@ func waitFor(t *testing.T, ok func() bool) {
 			t.Fatal("timed out")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestOriginRunsWithURLAndRestartsWhenItChanges(t *testing.T) {
+	if got := strings.Join(Args(""), " "); strings.Contains(got, "--url") || !strings.HasSuffix(got, " run") {
+		t.Fatalf("pasted token args %q", got)
+	}
+	if got := strings.Join(Args("http://127.0.0.1:8477"), " "); !strings.Contains(got, "--url http://127.0.0.1:8477 run") {
+		t.Fatalf("local tunnel args %q", got)
+	}
+	started := make(chan string, 4)
+	r := &Runner{Bin: "/bin/cloudflared"}
+	r.start = func(ctx context.Context, bin, token, origin string) (io.ReadCloser, func() error, error) {
+		started <- token + " " + origin
+		pr, pw := io.Pipe()
+		go func() {
+			<-ctx.Done()
+			_ = pw.Close()
+		}()
+		return pr, func() error { return ctx.Err() }, nil
+	}
+	r.Apply("tok", "http://127.0.0.1:8477")
+	if got := <-started; got != "tok http://127.0.0.1:8477" {
+		t.Fatal(got)
+	}
+	r.Apply("tok", "http://127.0.0.1:8477")
+	r.Apply("tok", "http://127.0.0.1:9000")
+	if got := <-started; got != "tok http://127.0.0.1:9000" {
+		t.Fatal(got)
+	}
+	r.Stop()
+	select {
+	case extra := <-started:
+		t.Fatalf("started again with %q", extra)
+	case <-time.After(50 * time.Millisecond):
 	}
 }

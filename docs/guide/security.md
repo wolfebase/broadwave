@@ -12,10 +12,12 @@ This stops a web page from calling your server by pointing the page's own name a
 
 The tuner's `DeviceAuth` value is not stored and is not written to the log. Passwords for a guide account or a playlist are stored so the server can refresh them, and Settings does not show a saved password. The Schedules Direct password and the movie artwork key stay blank and say Saved, on the web and in the Apple apps. The TheSportsDB key field says Saved on the web and stays blank in the Apple apps.
 
-A support bundle leaves passwords and tuner credentials out. Settings calls the button "Download a support bundle". The hint under it is "Logs, versions, and settings. Passwords are left out."
+The Cloudflare tunnel token is kept in the config folder under `secrets/cloudflare.json`, readable only by the server, never in the catalog, so a backup never holds it. Sign in with Cloudflare keeps the sign-in itself in memory only while you set up, then drops it.
+
+A support bundle leaves passwords, tuner credentials, and the tunnel token out. Settings calls the button "Download a support bundle". The hint under it is "Logs, versions, and settings. Passwords are left out."
 
 ## Away from home
 
-Use Tailscale, or another VPN that only your devices can join, and open the server's address on that VPN. Do not forward port 8477 or 8478, and do not turn on Tailscale Funnel. [Away from home](remote.md) covers the address, MagicDNS names, device sign-in, and the playlist and port 8478, which stay open with no code.
+Use Sign in with Cloudflare, or Tailscale, or another VPN that only your devices can join. Sign in with Cloudflare only starts from the home network, on an admin device. Do not forward port 8477 or 8478, and do not turn on Tailscale Funnel. [Away from home](remote.md) covers the address, MagicDNS names, device sign-in, and the playlist and port 8478, which stay open with no code.
 
 The apps do not install tuner firmware.

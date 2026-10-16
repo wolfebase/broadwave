@@ -1,11 +1,18 @@
 package httpapi
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
+	"os"
 	"strings"
+
+	"modernc.org/sqlite"
 
 	"broadwave/internal/disk"
 	"broadwave/internal/live"
@@ -33,7 +40,32 @@ func httpError(w http.ResponseWriter, message string, status int) {
 
 func writeError(w http.ResponseWriter, err error) {
 	status, code, message, details := errorFor(err)
+	if status >= 500 {
+		slog.Error("api: " + err.Error())
+	}
 	apiError(w, status, code, message, details)
+}
+
+// internalMessage is what a viewer reads for a failure inside the server.
+const internalMessage = "Something went wrong on the server. The server log says why."
+
+// systemError is a failure from the catalog, the disk, or the network. Its
+// text names files, SQL, and addresses; it goes to the log, not the viewer.
+// Errors the server words itself keep their text.
+func systemError(err error) bool {
+	var path *fs.PathError
+	var link *os.LinkError
+	var op *net.OpError
+	var dns *net.DNSError
+	var syntax *json.SyntaxError
+	var db *sqlite.Error
+	switch {
+	case errors.As(err, &path), errors.As(err, &link), errors.As(err, &op), errors.As(err, &dns),
+		errors.As(err, &syntax), errors.As(err, &db),
+		errors.Is(err, context.DeadlineExceeded), errors.Is(err, sql.ErrConnDone), errors.Is(err, sql.ErrTxDone):
+		return true
+	}
+	return false
 }
 
 // watchError is writeError for a channel start. A viewer never reads Go or
@@ -68,6 +100,8 @@ func errorFor(err error) (int, string, string, map[string]any) {
 		return http.StatusInsufficientStorage, "disk_low", blocked.Error(), nil
 	case errors.Is(err, live.ErrNoSignal):
 		return http.StatusServiceUnavailable, "no_signal", live.ErrNoSignal.Error(), nil
+	case errors.Is(err, live.ErrNoPicture):
+		return http.StatusServiceUnavailable, "start_failed", live.ErrNoPicture.Error(), nil
 	case errors.Is(err, live.ErrStreamDown):
 		return http.StatusServiceUnavailable, "stream_down", live.ErrStreamDown.Error(), nil
 	case errors.As(err, &streams):
@@ -83,6 +117,8 @@ func errorFor(err error) (int, string, string, map[string]any) {
 		return http.StatusServiceUnavailable, "tuner_refused", live.ErrTunerRefused.Error(), nil
 	case errors.Is(err, sql.ErrNoRows):
 		return http.StatusNotFound, "not_found", "Not found.", nil
+	case systemError(err):
+		return http.StatusInternalServerError, "internal", internalMessage, nil
 	default:
 		return http.StatusInternalServerError, "internal", err.Error(), nil
 	}
