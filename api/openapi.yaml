@@ -3272,8 +3272,9 @@ components:
         programId: { type: string }
         gameId: { type: string, description: "Scoreboard game this recording is following. Empty when it is not a matched game." }
         passId: { type: integer, format: int64, description: "The pass that started it; its keep and limit rules apply. Absent for one started by hand or found in a folder." }
-        status: { type: string, enum: [recording, complete, failed, stopped, imported] }
+        status: { type: string, enum: [recording, complete, failed, stopped, imported, interrupted], description: "`interrupted`: cut short when the server stopped; the file holds the show up to then, and the rest records as a second piece." }
         error: { type: string }
+        partial: { type: boolean, description: "Holds only part of its airing: a piece before or after a restart, or a retry after a failure. It does not count as having the episode, so the next airing still records. Absent when false." }
         startedAt: { type: string, format: date-time }
         endsAt: { type: string, format: date-time }
         endedAt: { type: string, format: date-time }

@@ -153,6 +153,16 @@ type Recording struct {
 	Keep bool `json:"keep,omitempty"`
 	// WatchedAt is when it was marked watched; nil when it was not.
 	WatchedAt *time.Time `json:"-"`
+	// Partial is set on a recording that holds only part of its airing: the
+	// piece before or after a restart, or a retry that started late. It does
+	// not count as having the episode.
+	Partial bool `json:"partial,omitempty"`
+}
+
+// Incomplete reports a recording that does not hold its whole airing: cut
+// short by a restart, failed, or a partial piece.
+func (r Recording) Incomplete() bool {
+	return r.Partial || r.Status == "failed" || r.Status == "interrupted"
 }
 
 type Pass struct {
@@ -561,6 +571,23 @@ WHERE id = ?`, h.ContinuityErrors, h.TransportErrors, h.SyncLosses, h.Packets, h
 	return err
 }
 
+// MarkPartial notes a recording that holds only part of its airing. A piece
+// resumed after a restart keeps the listing's episode from the piece before
+// it: the listing at the new start can already be the next show's.
+func (s *Store) MarkPartial(ctx context.Context, id int64, from *Recording) error {
+	if from == nil {
+		_, err := s.db.ExecContext(ctx, `UPDATE recordings SET partial = 1 WHERE id = ?`, id)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `
+UPDATE recordings SET partial = 1, season = ?, episode = ?, episode_label = ?, original_air = ?,
+	subtitle = CASE WHEN ? != '' THEN ? ELSE subtitle END,
+	program_id = CASE WHEN ? != '' THEN ? ELSE program_id END
+WHERE id = ?`, from.Season, from.Episode, from.EpisodeLabel, from.OriginalAir,
+		from.Subtitle, from.Subtitle, from.ProgramID, from.ProgramID, id)
+	return err
+}
+
 func (s *Store) SetRecordingEnd(ctx context.Context, id int64, ends time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE recordings SET ends_at = ? WHERE id = ?`, ends.UTC().Format(time.RFC3339), id)
 	return err
@@ -573,7 +600,7 @@ const recordingColumns = `r.id, r.channel_id, r.guide_number, r.title, r.path, r
 	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id, r.gaps, COALESCE(r.lost_seconds, 0),
 	r.season, r.episode, r.episode_label, r.original_air, r.breaks_scanned,
 	r.intro_start, r.intro_end, r.credits_start, EXISTS (SELECT 1 FROM episode_prints e WHERE e.recording_id = r.id),
-	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, '')`
+	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, ''), r.partial`
 
 // recordingSelect is one recording, joined to its playhead. The library
 // orders by id. One recording adds WHERE r.id = ?, which is the primary key.
@@ -605,7 +632,7 @@ func scanRecordings(rows *sql.Rows) ([]Recording, error) {
 		var lost float64
 		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID, &gaps, &lost,
 			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.BreaksScanned,
-			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Keep, &watchedAt, &rec.Position, &played); err != nil {
+			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Keep, &watchedAt, &rec.Position, &played, &rec.Partial); err != nil {
 			return nil, err
 		}
 		// Position 0 still counts: someone who starts a recording over saves
@@ -738,10 +765,11 @@ func (s *Store) DeleteRecording(ctx context.Context, id int64) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if recErr == nil && rec.Status != "failed" {
-		// A recording that never started is not an episode the viewer chose
-		// to drop. Marking it deleted would skip the next airing. The mark
-		// shares this transaction, so a delete that fails does not drop it.
+	if recErr == nil && !rec.Incomplete() {
+		// A recording that never started, or holds only part of the show, is
+		// not an episode the viewer chose to drop. Marking it deleted would
+		// skip the next airing. The mark shares this transaction, so a delete
+		// that fails does not drop it.
 		if err := rememberSeen(ctx, tx, EpisodeKey(rec.ProgramID, rec.Title, rec.Subtitle, rec.ChannelID), true); err != nil {
 			return err
 		}

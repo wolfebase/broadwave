@@ -37,6 +37,9 @@ type Device struct {
 	hdhr.Device
 	Priority int    `json:"priority"`
 	LastSeen string `json:"lastSeen"`
+	// Retired is a tuner the owner took away on purpose. It counts toward no
+	// plan and raises no note until it answers again.
+	Retired bool `json:"retired,omitempty"`
 }
 
 type Channel struct {
@@ -260,7 +263,8 @@ ON CONFLICT(device_id) DO UPDATE SET
 	base_url=excluded.base_url,
 	lineup_url=excluded.lineup_url,
 	tuner_count=excluded.tuner_count,
-	last_seen=excluded.last_seen
+	last_seen=excluded.last_seen,
+	retired=0
 `, dev.DeviceID, dev.FriendlyName, dev.ModelNumber, dev.FirmwareName, dev.FirmwareVersion,
 		dev.UpgradeAvailable, dev.BaseURL, dev.LineupURL, dev.TunerCount, now)
 	if err != nil {
@@ -495,7 +499,7 @@ ORDER BY d.priority, c.id`, guideNumber, exceptID)
 func (s *Store) Devices(ctx context.Context) ([]Device, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT device_id, friendly_name, model_number, firmware_name, firmware_version,
-	upgrade_available, base_url, lineup_url, tuner_count, priority, last_seen
+	upgrade_available, base_url, lineup_url, tuner_count, priority, last_seen, retired
 FROM devices ORDER BY priority, friendly_name`)
 	if err != nil {
 		return nil, err
@@ -505,12 +509,25 @@ FROM devices ORDER BY priority, friendly_name`)
 	for rows.Next() {
 		var d Device
 		if err := rows.Scan(&d.DeviceID, &d.FriendlyName, &d.ModelNumber, &d.FirmwareName, &d.FirmwareVersion,
-			&d.UpgradeAvailable, &d.BaseURL, &d.LineupURL, &d.TunerCount, &d.Priority, &d.LastSeen); err != nil {
+			&d.UpgradeAvailable, &d.BaseURL, &d.LineupURL, &d.TunerCount, &d.Priority, &d.LastSeen, &d.Retired); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+// SetDeviceRetired marks a tuner taken away on purpose, or brings it back.
+// Its channels and recordings stay; the next time it answers, the mark clears.
+func (s *Store) SetDeviceRetired(ctx context.Context, deviceID string, retired bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE devices SET retired = ? WHERE device_id = ?`, boolInt(retired), deviceID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNoDevice
+	}
+	return nil
 }
 
 // ErrNoDevice means no device has that id.

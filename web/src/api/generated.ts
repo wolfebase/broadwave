@@ -374,6 +374,7 @@ export type Recording = {
   passId?: number;
   status: string;
   error?: string;
+  partial?: boolean;
   startedAt: string;
   endsAt?: string;
   endedAt?: string;

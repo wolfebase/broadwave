@@ -152,15 +152,9 @@ func main() {
 	if *staging {
 		slog.Info("staging: scheduled recordings and guide pulls, background tunes, and the tuner emulator are off; a recording or guide refresh you start still runs")
 	} else if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {
-		minutes := int(left / time.Minute)
-		if minutes < 1 {
-			return nil
-		}
-		_, err := hub.RecordMeta(context.Background(), minutes, store.Recording{
-			ChannelID: rec.ChannelID, Title: rec.Title, Subtitle: rec.Subtitle,
-			Description: rec.Description, Category: rec.Category, ProgramID: rec.ProgramID, GameID: rec.GameID,
-		})
-		if err != nil {
+		// The pass, game, and episode carry over; a failed start here is
+		// tried again by the pass tick for the time still left.
+		if _, err := dvr.Resume(context.Background(), st, hub, rec, left); err != nil {
 			slog.Error(fmt.Sprintf("recording: resume %s: %v", rec.Title, err))
 		}
 		return nil
