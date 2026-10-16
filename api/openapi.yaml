@@ -678,10 +678,11 @@ paths:
     get:
       tags: [channels]
       operationId: listFrames
-      summary: Channels that already have a fresh preview.
+      summary: Channels that already have a fresh preview, and channels with no signal.
       description: |
         A channel is listed when its preview JPEG exists and is newer than 10 minutes.
         Nothing is tuned to make one. Cards ask for `/channels/{id}/frame` only for these ids.
+        `noSignal` lists the channels a tune found off the air in the last 10 minutes.
       responses:
         "200":
           description: Channel ids with a preview
@@ -2988,6 +2989,13 @@ components:
       properties:
         channels:
           type: array
+          items: { type: integer, format: int64 }
+        noSignal:
+          type: array
+          description: |
+            Channels whose last tune in the past 10 minutes found no signal. A watch of
+            one fails with `no_signal` after a short check (about 2 s) instead of the full
+            wait, and a tune of it that locks takes it off this list.
           items: { type: integer, format: int64 }
     Airing:
       type: object

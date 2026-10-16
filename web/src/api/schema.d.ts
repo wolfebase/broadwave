@@ -458,9 +458,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Channels that already have a fresh preview.
+         * Channels that already have a fresh preview, and channels with no signal.
          * @description A channel is listed when its preview JPEG exists and is newer than 10 minutes.
          *     Nothing is tuned to make one. Cards ask for `/channels/{id}/frame` only for these ids.
+         *     `noSignal` lists the channels a tune found off the air in the last 10 minutes.
          */
         get: operations["listFrames"];
         put?: never;
@@ -2077,6 +2078,12 @@ export interface components {
         /** @description Channel ids whose preview JPEG exists and is newer than 10 minutes. */
         FrameList: {
             channels: number[];
+            /**
+             * @description Channels whose last tune in the past 10 minutes found no signal. A watch of
+             *     one fails with `no_signal` after a short check (about 2 s) instead of the full
+             *     wait, and a tune of it that locks takes it off this list.
+             */
+            noSignal?: number[];
         };
         Airing: {
             /** Format: int64 */

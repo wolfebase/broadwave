@@ -3,6 +3,7 @@ package live
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"time"
 
@@ -39,7 +40,17 @@ var errNoLock = errors.New("no lock")
 var errDark = errors.New("no signal")
 
 // darkProbe is how long a probe waits for a tuner on a frequency to lock.
-var darkProbe = 7 * time.Second
+// quickProbe is the wait for a channel that found no signal within
+// noSignalFor: a station that comes back locks well inside it.
+var (
+	darkProbe  = 7 * time.Second
+	quickProbe = 2 * time.Second
+)
+
+// noSignalFor is how long a tune that found no signal is remembered: the
+// guide marks the channel, and a watch of it fails after quickProbe instead
+// of darkProbe (or the 10 s a FLEX takes to refuse an open of the frequency).
+const noSignalFor = 10 * time.Minute
 
 // NoSignal is true when this channel's tuner has sent nothing and reports no
 // lock. A tuner that does not answer, and a feed with no tuner, are not.
@@ -122,16 +133,41 @@ func (h *Hub) markDarkLocked(channelID int64, freq int) {
 func (h *Hub) RecentlyDark(channelID int64, freq int) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	return h.darkWithinLocked(channelID, freq, darkFor)
+}
+
+func (h *Hub) darkWithinLocked(channelID int64, freq int, d time.Duration) bool {
+	now := time.Now()
 	for key, at := range h.dark {
-		if time.Since(at) >= darkFor {
+		if now.Sub(at) >= noSignalFor {
 			delete(h.dark, key)
 		}
 	}
-	if _, ok := h.dark[darkKey{channel: channelID}]; ok {
+	if at, ok := h.dark[darkKey{channel: channelID}]; ok && now.Sub(at) < d {
 		return true
 	}
-	_, ok := h.dark[darkKey{freq: freq}]
-	return freq > 0 && ok
+	at, ok := h.dark[darkKey{freq: freq}]
+	return freq > 0 && ok && now.Sub(at) < d
+}
+
+// NoSignalChannels lists the channels whose last tune, in the last noSignalFor,
+// found no signal.
+func (h *Hub) NoSignalChannels() []int64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	now := time.Now()
+	out := []int64{}
+	for key, at := range h.dark {
+		if now.Sub(at) >= noSignalFor {
+			delete(h.dark, key)
+			continue
+		}
+		if key.channel != 0 {
+			out = append(out, key.channel)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // Measure tunes a channel long enough to read /tunerN/status, then releases it
