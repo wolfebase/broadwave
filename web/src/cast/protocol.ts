@@ -18,6 +18,8 @@ export type CastLoad = {
   room: string;
   latency: Latency;
   token?: string;
+  /** The mk of a media link for this playlist. The picture plays without a header with it. */
+  mediaKey?: string;
   title: string;
   subtitle: string;
 };
@@ -163,15 +165,38 @@ export function mediaPath(playlist: string): string | null {
   return url.pathname;
 }
 
-/** Absolute playlist URL on the page's own origin. The token is not in it. */
-export function mediaURL(page: string, playlist: string): string | null {
+/** Absolute playlist URL on the page's own origin. The token is not in it; a media link's mk can be. */
+export function mediaURL(page: string, playlist: string, key = ""): string | null {
   const path = mediaPath(playlist);
   if (!path) return null;
   const url = new URL(page);
   url.pathname = path;
   url.search = "";
   url.hash = "";
+  if (key) url.searchParams.set("mk", key);
   return url.toString();
+}
+
+/**
+ * The mk of a media link to this same playlist, or null. The link may name
+ * another host; only its mk is kept, so the receiver still plays from its own server.
+ */
+export function mediaKey(link: string, playlist: string): string | null {
+  const path = mediaPath(playlist);
+  if (!path || typeof link !== "string" || link.length > 2048) return null;
+  let url: URL;
+  try {
+    url = new URL(link, "http://broadwave.local");
+  } catch {
+    return null;
+  }
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.hash || url.username || url.password) return null;
+  if (url.pathname !== path) return null;
+  const keys = [...url.searchParams.keys()];
+  if (keys.length !== 1 || keys[0] !== "mk") return null;
+  const key = url.searchParams.get("mk") ?? "";
+  if (!/^[\x21-\x7e]{1,1024}$/.test(key)) return null;
+  return key;
 }
 
 /** The same WebSocket the web player opens. The token is the access_token query, when there is one. */
@@ -249,11 +274,15 @@ export function parseLoad(data: unknown): CastLoad | null {
     if (typeof row.token !== "string" || row.token.length > 256 || !/^[A-Za-z0-9_-]+$/.test(row.token)) return null;
     token = row.token;
   }
-  return { channelId, playlist, room, latency, token, title: clip(row.title), subtitle: clip(row.subtitle) };
+  // A link this receiver cannot read is dropped. The token still plays the channel.
+  const key = typeof row.media === "string" && row.media !== "" ? mediaKey(row.media, playlist) : null;
+  const load: CastLoad = { channelId, playlist, room, latency, token, title: clip(row.title), subtitle: clip(row.subtitle) };
+  if (key) load.mediaKey = key;
+  return load;
 }
 
-/** The sender's load. An empty token is left out. */
-export function castLoad(input: { channelId: number; playlist: string; room: string; latency: Latency; token?: string; title?: string; subtitle?: string }) {
+/** The sender's load. An empty token or media link is left out. */
+export function castLoad(input: { channelId: number; playlist: string; room: string; latency: Latency; token?: string; media?: string; title?: string; subtitle?: string }) {
   const message: Record<string, unknown> = {
     type: "load",
     channelId: input.channelId,
@@ -264,6 +293,7 @@ export function castLoad(input: { channelId: number; playlist: string; room: str
     subtitle: clip(input.subtitle),
   };
   if (input.token) message.token = input.token;
+  if (input.media) message.media = input.media;
   return message;
 }
 

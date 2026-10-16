@@ -304,6 +304,13 @@ html[data-layout="tv"] :focus-visible {
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+  max-width: 100%;
+}
+
+/* A long name gives way. The number and the 3.0 tag keep their width. */
+.ch-badge-num,
+.ch-badge .tag {
+  flex: none;
 }
 
 .ch-badge-num {
@@ -316,6 +323,7 @@ html[data-layout="tv"] :focus-visible {
 }
 
 .ch-badge-name {
+  min-width: 0;
   color: var(--color-text-secondary);
   font-weight: 600;
   overflow: hidden;

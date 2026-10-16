@@ -141,6 +141,7 @@ function accept(load: CastLoad) {
       room: load.room,
       latency: load.latency,
       token: load.token,
+      mediaKey: load.mediaKey,
       title: load.title,
       subtitle: load.subtitle,
       player,

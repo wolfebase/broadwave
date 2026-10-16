@@ -10,7 +10,9 @@ export function ChannelBadge({ channel, size = "md" }: { channel: Pick<Channel, 
   return (
     <span className={`ch-badge ch-badge-${size}`}>
       <span className="ch-badge-num">{channel.displayNumber}</span>
-      <span className="ch-badge-name">{channel.displayName}</span>
+      <span className="ch-badge-name" title={channel.displayName}>
+        {channel.displayName}
+      </span>
       {channel.standard === "atsc3" ? <Atsc3Tag /> : null}
     </span>
   );

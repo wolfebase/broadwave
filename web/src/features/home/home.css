@@ -67,8 +67,10 @@
   position: relative;
   z-index: 2;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   max-width: 760px;
+  min-width: 0;
 }
 
 .hero-meta {
@@ -103,6 +105,7 @@
   align-items: center;
   gap: 14px;
   max-width: 560px;
+  min-width: 0;
 }
 
 .hero-left {
