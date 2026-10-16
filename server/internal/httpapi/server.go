@@ -245,6 +245,13 @@ func (s *Server) Handler() http.Handler {
 	// /cast is the receiver page. /cast/receiver.js is a built asset and falls through to ui.
 	mux.HandleFunc("GET /cast", s.castPage)
 	mux.HandleFunc("GET /", s.ui)
+	// An API path nothing serves is a JSON 404, not the web app's page: a
+	// client parsing the error envelope got HTML and a 200.
+	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
+		mux.HandleFunc(method+" /api/", func(w http.ResponseWriter, r *http.Request) {
+			httpError(w, "No such API path.", http.StatusNotFound)
+		})
+	}
 	var handler http.Handler
 	if s.Dev {
 		handler = s.withDevCORS(s.withDeviceAuth(mux))
