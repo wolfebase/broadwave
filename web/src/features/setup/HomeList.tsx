@@ -72,7 +72,7 @@ export function HomeList({
   const [scanning, setScanning] = useState(false);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [seen, setSeen] = useState<string[]>([]);
+  const [seen, setSeen] = useState<string[]>(notices);
   const scanN = useRef(0);
 
   function load(fresh: boolean) {
@@ -100,9 +100,12 @@ export function HomeList({
   }, []);
 
   // The list says what is new now, so the notice that floats over the page can go.
+  const [heard, setHeard] = useState(notices);
+  if (heard !== notices) {
+    setHeard(notices);
+    if (notices.length > 0) setSeen((cur) => [...cur, ...notices]);
+  }
   useEffect(() => {
-    if (notices.length === 0) return;
-    setSeen((cur) => [...cur, ...notices]);
     for (let i = 0; i < notices.length; i++) dismissNotice();
   }, [notices, dismissNotice]);
 
