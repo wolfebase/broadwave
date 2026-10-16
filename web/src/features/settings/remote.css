@@ -192,6 +192,17 @@
   }
 }
 
+/* Without the domain the whole name is typed, so the field is full width. */
+.field .cf-name.whole {
+  width: 100%;
+}
+
+.field .cf-name.whole input {
+  flex: 1 1 auto;
+  field-sizing: fixed;
+  width: 100% !important;
+}
+
 /* The group draws the ring; the field inside it does not. */
 html:root .field .cf-name input:focus-visible {
   outline: none;
@@ -400,6 +411,11 @@ li[data-mark="now"] .cf-step-icon {
 
 .remote-advanced[open] > summary {
   margin-bottom: var(--space-2);
+}
+
+/* details does not lay out its content as a grid everywhere. */
+.remote-advanced > .hint {
+  margin: 0 0 var(--space-3);
 }
 
 .remote-advanced form {

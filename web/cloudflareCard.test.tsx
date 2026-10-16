@@ -151,6 +151,19 @@ test("a taken name offers to replace it", async () => {
   expect(api.setup).toHaveBeenCalledWith({ label: "tv", overwrite: true });
 });
 
+test("typing another name clears the taken warning", async () => {
+  api.get.mockResolvedValue(st({ state: "authorized", purpose: "setup", zone: { id: "z", name: "example.com" }, hostname: "tv.example.com", error: { code: "name_taken", message: "taken" } }));
+  await mount();
+  const input = host.querySelector<HTMLInputElement>(".cf-name input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "watch");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(host.textContent).not.toContain("already in use");
+  expect(host.textContent).toContain("https://watch.example.com");
+  expect(host.textContent).not.toContain("Replace it");
+});
+
 test("a domain the sign-in cannot read asks for the whole name", async () => {
   api.get.mockResolvedValue(st({ state: "authorized", purpose: "setup", zone: { id: "z" } }));
   await mount();

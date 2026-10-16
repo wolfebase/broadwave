@@ -220,6 +220,7 @@ export const settingsUiMessages = {
   "remote.cf.wholeName": "Type the whole name, on a domain in this Cloudflare account.",
   "remote.cf.preview": "Family will open {url}",
   "remote.cf.badName": "Use letters, numbers, and dashes, such as tv.",
+  "remote.cf.wholeNameHint": "Type the whole name, such as tv.example.com.",
   "remote.cf.turnOn": "Turn on",
   "remote.cf.settingUp": "Setting up {host}",
   "remote.cf.step.tunnel": "Creating the tunnel",
