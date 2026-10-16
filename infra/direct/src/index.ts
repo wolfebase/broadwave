@@ -41,6 +41,9 @@ const ttl = 300;
 const maxBody = 4096;
 // ACME record sets a day for one name: an issue and a few retries.
 const acmePerDay = 10;
+// Address updates an hour for one name. A server reports only on change, so
+// this is room for a flapping network, not a steady rate.
+const addressesPerHour = 20;
 
 const alphabet = "abcdefghijklmnopqrstuvwxyz234567";
 
@@ -115,6 +118,8 @@ async function register(req: Request, deps: Deps, path: string): Promise<Respons
       firstAcme: 0,
       acmeDay: "",
       acmeCount: 0,
+      addrHour: 0,
+      addrCount: 0,
       seen: now,
     };
     await deps.store.insert(reg);
@@ -132,6 +137,10 @@ async function addresses(req: Request, deps: Deps, reg: Registration, body: stri
   }
   const list = checkAddresses(parsed);
   if (typeof list === "string") return fail(400, list);
+  const hour = Math.floor(deps.now() / 3600);
+  const count = reg.addrHour === hour ? reg.addrCount : 0;
+  if (count >= addressesPerHour) return fail(429, "too many address changes this hour");
+  await deps.store.noteAddresses(reg.id, hour, count + 1);
   const name = lanName(reg.id, deps.base);
   await sync(deps.dns, name, "A", list.ipv4, ttl);
   await sync(deps.dns, name, "AAAA", list.ipv6, ttl);
