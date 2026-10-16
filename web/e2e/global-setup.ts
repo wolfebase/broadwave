@@ -137,8 +137,10 @@ async function storeTracks(base: string, id: number) {
     body: JSON.stringify({ rendition: session.rendition, boot: session.boot ?? "" }),
   });
   for (let i = 0; i < 60; i++) {
-    const tuners = (await (await fetch(`${base}/api/v1/tuners`)).json()) as { tuners: { ours?: boolean }[] };
-    if (!tuners.tuners.some((t) => t.ours)) return;
+    // A tuner stays ours a while after its viewers leave (the server's tuner
+    // linger); the warm-up is over once no viewer holds one.
+    const tuners = (await (await fetch(`${base}/api/v1/tuners`)).json()) as { tuners: { ours?: boolean; viewers?: number }[] };
+    if (!tuners.tuners.some((t) => t.ours && (t.viewers ?? 0) > 0)) return;
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
   throw new Error("the warm-up tune did not end");
