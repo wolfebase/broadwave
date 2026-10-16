@@ -158,6 +158,14 @@ type Hub struct {
 	// so flipping back to a channel is instant.
 	RenditionIdle time.Duration
 
+	// TunerLinger is how long a tune is kept after its last picture was
+	// watched, counted from the viewer leaving. The encode still stops after
+	// RenditionIdle; the tuner and its buffer stay, so a return within it
+	// starts on a locked frequency with the buffer behind it. A new tune
+	// takes a lingering tuner first. Zero gives the tuner back with the
+	// encode.
+	TunerLinger time.Duration
+
 	// FallbackWindow is how long a GPU encode has to fail before a death is a
 	// late failure (rebuild once) instead of an immediate software fallback.
 	// Zero means 8 seconds.
@@ -232,6 +240,8 @@ type Hub struct {
 	grabbers sync.WaitGroup
 	// failures are recent renditions given up on, by channel and key.
 	failures map[string]startFailure
+	// guessTune is the tune a guess opened without a picture.
+	guessTune *feed
 	// mutes are channels whose main sound sent no frame, until when their
 	// encodes start without it.
 	mutes map[int64]time.Time
@@ -303,9 +313,13 @@ type feed struct {
 	renditions map[string]*rendition
 	// moved names the key a rebuilt rendition runs under now, for viewers
 	// who joined it under its old one.
-	moved     map[string]string
-	recording *recording
-	tracks    []AudioTrack
+	moved map[string]string
+	// lingerUntil keeps a feed whose viewers left, with no encode, until
+	// then (TunerLinger); linger is the timer that lets it go.
+	lingerUntil time.Time
+	linger      *time.Timer
+	recording   *recording
+	tracks      []AudioTrack
 	// stored is the audio measured on the last tune, then on this one. It
 	// vouches for a track this tune has not measured yet.
 	stored []AudioTrack
@@ -480,6 +494,7 @@ func New(st *store.Store, dir, ffmpeg, encoder string) *Hub {
 		Store: st, Dir: dir, FFmpeg: ffmpeg, Encoder: encoder, HEVC: ProbeHEVC(ffmpeg, encoder),
 		DeintBroadcast: broadcast, DeintSmooth: smooth,
 		RenditionIdle: 20 * time.Second,
+		TunerLinger:   lingerFromEnv(90 * time.Second),
 		muxes:         map[int]*mux{}, channels: map[int64]*feed{}, mosaics: map[string]*mosaic{}, reserved: map[int]bool{},
 	}
 }
@@ -2176,6 +2191,7 @@ func (h *Hub) ReleaseAbandoned(maxAge time.Duration) {
 			}
 			r.viewers = 0
 			h.stopRenditionLocked(f, key)
+			h.lingerLocked(f, h.TunerLinger-h.RenditionIdle)
 		}
 		h.dropIfUnusedLocked(f)
 	}
@@ -2221,7 +2237,52 @@ func (h *Hub) idleStop(channelID int64, key string) {
 	if r := f.renditions[key]; r != nil && r.viewers == 0 && !r.ladderChild {
 		h.stopRenditionLocked(f, key)
 	}
+	h.lingerLocked(f, h.TunerLinger-h.RenditionIdle)
 	h.dropIfUnusedLocked(f)
+}
+
+// lingerLocked keeps a feed that has just lost its last encode tuned for d,
+// unless a recording is about to need a tuner.
+func (h *Hub) lingerLocked(f *feed, d time.Duration) {
+	m := muxOf(h, f)
+	if d <= 0 || len(f.renditions) > 0 || h.hold > 0 || m == nil || m.input != "" || h.channels[f.channel.ID] != f {
+		return
+	}
+	until := time.Now().Add(d)
+	if until.Before(f.lingerUntil) {
+		return
+	}
+	f.lingerUntil = until
+	stopTimer(&f.linger)
+	id := f.channel.ID
+	f.linger = time.AfterFunc(d, func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if h.channels[id] == f {
+			h.dropIfUnusedLocked(f)
+		}
+	})
+}
+
+// endLingerLocked gives back every tuner kept only by linger.
+func (h *Hub) endLingerLocked() {
+	for _, f := range h.feedsLocked() {
+		if f.lingerUntil.IsZero() {
+			continue
+		}
+		f.lingerUntil = time.Time{}
+		stopTimer(&f.linger)
+		h.dropIfUnusedLocked(f)
+	}
+}
+
+func lingerFromEnv(d time.Duration) time.Duration {
+	if raw := os.Getenv("BROADWAVE_TUNER_LINGER"); raw != "" {
+		if s, err := strconv.Atoi(raw); err == nil && s >= 0 {
+			return time.Duration(s) * time.Second
+		}
+	}
+	return d
 }
 
 func (h *Hub) Record(ctx context.Context, channelID int64, minutes int, title string) (store.Recording, error) {
@@ -2585,8 +2646,12 @@ func (h *Hub) SetHold(n int) {
 		n = 0
 	}
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.hold = n
-	h.mu.Unlock()
+	// A recording about to start may need a tuner held only for a return.
+	if n > 0 {
+		h.endLingerLocked()
+	}
 }
 
 func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
@@ -3372,13 +3437,14 @@ func (f *feed) tuneHeld() bool { return f.probing || f.probes > 0 }
 // dropIfUnusedLocked releases the feed, and the tuner with the last feed, once
 // nobody is watching or recording it.
 func (h *Hub) dropIfUnusedLocked(f *feed) {
-	if len(f.renditions) > 0 || f.recording != nil || f.tuneHeld() || f.heldOutside() {
+	if len(f.renditions) > 0 || f.recording != nil || f.tuneHeld() || f.heldOutside() || time.Now().Before(f.lingerUntil) {
 		return
 	}
 	h.stopFeedLocked(f)
 }
 
 func (h *Hub) stopFeedLocked(f *feed) {
+	stopTimer(&f.linger)
 	h.endMosaicsOnLocked(f)
 	for key := range f.renditions {
 		h.stopRenditionLocked(f, key)

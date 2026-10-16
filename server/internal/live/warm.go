@@ -30,6 +30,11 @@ func (h *Hub) Warm(ctx context.Context, channelID int64, want Rendition, alterna
 		h.mu.Unlock()
 		return false, nil
 	}
+	if untuned && !NeedFor(ch.VideoCodec, ch.AudioCodec, ch.ATSC3).ATSC3 {
+		h.mu.Unlock()
+		h.warmTune(ctx, ch)
+		return false, nil
+	}
 	// Only a picture sent as broadcast is cheap enough to start on a guess.
 	opener := untuned && want.Video == "copy"
 	if opener {
@@ -274,3 +279,56 @@ func (h *Hub) claimWarm3Locked(host string, tuners []Tuner, held map[int]bool) i
 	h.pending[pendingKey(host, i)] = true
 	return i
 }
+
+// warmTune tunes a 1.0 channel for a guess without starting its picture, so
+// a watch that follows skips the lock and finds its buffer filling. It tunes
+// only while two tuners are free (one stays free after it) and no recording
+// is about to start, and keeps one such tune at a time, for guessLinger.
+func (h *Hub) warmTune(ctx context.Context, ch store.SourceChannel) {
+	if h.TunerLinger <= 0 || ch.TunerCount == 0 || ch.BaseURL == "" || hlsStream(ch) {
+		return
+	}
+	raw, err := fetchTunerStatus(ctx, ch.BaseURL)
+	if err != nil {
+		return
+	}
+	tuners := make([]Tuner, len(raw))
+	for i, row := range raw {
+		tuners[i] = Tuner{Index: i, Guide: row.VctNumber, Target: row.TargetIP}
+	}
+	h.mu.Lock()
+	if h.hold > 0 || h.channels[ch.ID] != nil {
+		h.mu.Unlock()
+		return
+	}
+	// The last guess's tune is the first to go.
+	if g := h.guessTune; g != nil && h.channels[g.channel.ID] == g && len(g.renditions) == 0 && g.recording == nil && !g.tuneHeld() && !g.heldOutside() {
+		h.stopFeedLocked(g)
+	}
+	h.guessTune = nil
+	used := h.usedTunersLocked(hostOf(ch.BaseURL))
+	held := h.heldLocked(hostOf(ch.BaseURL), tuners)
+	free := 0
+	for _, t := range tuners {
+		if !used[t.Index] && !held[t.Index] && t.Target == "" && t.Guide == "" {
+			free++
+		}
+	}
+	h.mu.Unlock()
+	if free < 2 {
+		return
+	}
+	f, err := h.tuneFeed(ctx, ch, nil)
+	defer h.mu.Unlock()
+	if err != nil {
+		return
+	}
+	if len(f.renditions) == 0 {
+		h.lingerLocked(f, guessLinger)
+		h.guessTune = f
+		slog.Info("live: tuned " + ch.GuideNumber + " ahead of a channel change")
+	}
+}
+
+// guessLinger is how long a guessed tune nobody watched is kept.
+const guessLinger = 20 * time.Second
