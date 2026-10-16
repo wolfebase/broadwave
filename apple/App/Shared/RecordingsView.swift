@@ -39,6 +39,9 @@ struct RecordingsView: View {
     var body: some View {
         page
             .navigationTitle(show ?? "Recordings")
+        #if os(iOS)
+            .toolbar { libraryToolbar }
+        #endif
             .fullScreenCover(item: $playing) { recording in
                 RecordingCover {
                     RecordingPlayerScreen(recording: recording).environment(store)
@@ -174,31 +177,13 @@ struct RecordingsView: View {
                         .accessibilityIdentifier("library-select")
                 }
             #else
+                // The filters live in the bar's menu; the page keeps one line of what they show.
                 if !listed.isEmpty {
-                    Section {
-                        Picker("Show", selection: $unwatchedOnly) {
-                            Text("All").tag(false)
-                            Text("Unwatched").tag(true)
-                        }
-                        .pickerStyle(.segmented)
-                        if show == nil {
-                            Picker("Show only", selection: $kind) {
-                                ForEach(Library.Kind.allCases, id: \.self) { Text($0.label).tag($0) }
-                            }
-                            .accessibilityIdentifier("library-kind")
-                        }
-                        Picker("Sort", selection: Binding(get: { order }, set: { sort = $0 })) {
-                            ForEach(Library.Sort.allCases, id: \.self) { Text($0.label).tag($0) }
-                        }
-                        .accessibilityIdentifier("library-sort")
-                        if selecting || !choosable.isEmpty {
-                            Button(selecting ? "Done" : "Select") { selecting ? stopSelecting() : (selecting = true) }
-                                .disabled(busy)
-                                .accessibilityIdentifier("library-select")
-                        }
-                    } footer: {
-                        Text(Library.summary(listed))
-                    }
+                    Text(filterLine)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
+                        .accessibilityIdentifier("library-summary")
                 }
             #endif
             if selecting {
@@ -218,14 +203,16 @@ struct RecordingsView: View {
                     .accessibilityIdentifier("recordings-notice")
             }
             if shown.isEmpty {
-                ContentUnavailableView(
-                    listed.isEmpty ? "No recordings yet" : unwatchedOnly ? "All watched" : "Nothing here",
-                    systemImage: "record.circle",
-                    description: Text(listed.isEmpty ? "Record from the guide, or set a series to record every episode." : unwatchedOnly ? "Everything here has been watched." : "Nothing here matches.")
-                )
                 #if os(tvOS)
-                .focusable()
-                .focused($emptyRecordings)
+                    ContentUnavailableView(
+                        listed.isEmpty ? "No recordings yet" : unwatchedOnly ? "All watched" : "Nothing here",
+                        systemImage: "record.circle",
+                        description: Text(listed.isEmpty ? "Record from the guide, or set a series to record every episode." : unwatchedOnly ? "Everything here has been watched." : "Nothing here matches.")
+                    )
+                    .focusable()
+                    .focused($emptyRecordings)
+                #else
+                    emptyState
                 #endif
             }
             if !resume.isEmpty {
@@ -255,7 +242,22 @@ struct RecordingsView: View {
                     }
                 }
             } else {
-                ForEach(built.shows) { group in
+                #if os(iOS)
+                    // A show with one recording is a row under Recent, not a section whose
+                    // header repeats the row's own title.
+                    let singles = built.shows.filter { $0.items.count == 1 }.flatMap(\.items)
+                    if !singles.isEmpty {
+                        Section("Recent") {
+                            ForEach(singles) { rec in
+                                item(rec, titled: true)
+                            }
+                        }
+                    }
+                    let groups = built.shows.filter { $0.items.count > 1 }
+                #else
+                    let groups = built.shows
+                #endif
+                ForEach(groups) { group in
                     Section {
                         ForEach(group.items.prefix(Self.preview)) { rec in
                             item(rec)
@@ -307,7 +309,11 @@ struct RecordingsView: View {
         if rec.isRecording {
             parts.append("Recording")
         }
-        parts.append(rec.subtitle ?? rec.title)
+        // The show's title first: an episode name alone does not say what it is.
+        parts.append(rec.title)
+        if let sub = rec.subtitle, !sub.isEmpty, sub != rec.title {
+            parts.append(sub)
+        }
         parts.append(details(rec).replacingOccurrences(of: " · ", with: ", "))
         if let line = rec.signalLine {
             parts.append(line)
@@ -318,7 +324,7 @@ struct RecordingsView: View {
     private func libraryRow(_ channel: VirtualChannel) -> some View {
         let label = VStack(alignment: .leading, spacing: 4) {
             Text("\(channel.number) \(channel.name)").font(.headline).lineLimit(1)
-            Text("Plays \(channel.recordings.count) recordings in turn. Uses no tuner.")
+            Text(libraryLine(channel.recordings.count))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -333,6 +339,14 @@ struct RecordingsView: View {
         .accessibilityIdentifier("library-\(channel.id)")
     }
 
+    private func libraryLine(_ count: Int) -> String {
+        switch count {
+        case 0: String(localized: "No recordings on it yet. Uses no tuner.")
+        case 1: String(localized: "Plays 1 recording. Uses no tuner.")
+        default: String(localized: "Plays \(count) recordings in turn. Uses no tuner.")
+        }
+    }
+
     private func makeChannel(_ rec: Recording) {
         Task {
             do {
@@ -344,15 +358,15 @@ struct RecordingsView: View {
         }
     }
 
-    private func row(_ rec: Recording, focus: Int64) -> some View {
+    private func row(_ rec: Recording, focus: Int64, titled: Bool = false) -> some View {
         Group {
             if rec.isMissing {
                 // Nothing to play. Select offers to take it off the list.
-                Button { deleting = rec } label: { rowLabel(rec) }.rowInk()
+                Button { deleting = rec } label: { rowLabel(rec, titled: titled) }.rowInk()
             } else if recordingCovers {
-                Button { playing = rec } label: { rowLabel(rec) }.rowInk()
+                Button { playing = rec } label: { rowLabel(rec, titled: titled) }.rowInk()
             } else {
-                NavigationLink(value: rec) { rowLabel(rec) }
+                NavigationLink(value: rec) { rowLabel(rec, titled: titled) }
             }
         }
         .accessibilityLabel(recordingSpoken(rec))
@@ -380,7 +394,8 @@ struct RecordingsView: View {
         #endif
     }
 
-    private func rowLabel(_ rec: Recording) -> some View {
+    /// `titled` leads with the show's name: a row outside its show's section has no header to say it.
+    private func rowLabel(_ rec: Recording, titled: Bool = false) -> some View {
         HStack(spacing: 14) {
             RecordingPoster(recording: rec)
                 .frame(width: 120, height: 68)
@@ -390,7 +405,10 @@ struct RecordingsView: View {
                     if rec.isRecording {
                         LiveDot("Recording")
                     }
-                    Text(rec.subtitle ?? rec.title).font(.headline).lineLimit(1)
+                    Text(titled ? rec.title : rec.subtitle ?? rec.title).font(.headline).lineLimit(1)
+                }
+                if titled, let sub = rec.subtitle, !sub.isEmpty, sub != rec.title {
+                    Text(sub).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Text(details(rec)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 if let error = rec.error, !error.isEmpty {
@@ -485,6 +503,81 @@ struct RecordingsView: View {
         return parts.joined(separator: " · ")
     }
 
+    #if os(iOS)
+        @Environment(\.openURL) private var openURL
+
+        /// Unwatched, the kind, and the order in one menu, and Select beside it.
+        @ToolbarContentBuilder
+        private var libraryToolbar: some ToolbarContent {
+            if !listed.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("Show", selection: $unwatchedOnly) {
+                            Text("All").tag(false)
+                            Text("Unwatched").tag(true)
+                        }
+                        if show == nil {
+                            Picker("Show only", selection: $kind) {
+                                ForEach(Library.Kind.allCases, id: \.self) { Text($0.label).tag($0) }
+                            }
+                            .pickerStyle(.menu)
+                        }
+                        Picker("Sort", selection: Binding(get: { order }, set: { sort = $0 })) {
+                            ForEach(Library.Sort.allCases, id: \.self) { Text($0.label).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                    } label: {
+                        Label("Filter", systemImage: filtered ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    }
+                    .accessibilityIdentifier("library-filter")
+                }
+            }
+            if selecting || !choosable.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(selecting ? "Done" : "Select") { selecting ? stopSelecting() : (selecting = true) }
+                        .disabled(busy)
+                        .accessibilityIdentifier("library-select")
+                }
+            }
+        }
+
+        private var filtered: Bool {
+            unwatchedOnly || kind != .all
+        }
+
+        /// "10 recordings · 9.65 GB", with what the menu narrowed it to.
+        private var filterLine: String {
+            var parts: [String] = []
+            if unwatchedOnly {
+                parts.append(String(localized: "Unwatched"))
+            }
+            if show == nil, kind != .all {
+                parts.append(kind.label)
+            }
+            parts.append(Library.summary(listed))
+            return parts.joined(separator: " · ")
+        }
+
+        private var emptyState: some View {
+            ContentUnavailableView {
+                Label(listed.isEmpty ? "No recordings yet" : unwatchedOnly ? "All watched" : "Nothing here", systemImage: "record.circle")
+            } description: {
+                Text(listed.isEmpty ? "Record from the guide, or set a series to record every episode." : unwatchedOnly ? "Everything here has been watched." : "Nothing here matches.")
+            } actions: {
+                if listed.isEmpty, show == nil {
+                    Button("Open the guide") {
+                        if let url = URL(string: "broadwave://guide") {
+                            openURL(url)
+                        }
+                    }
+                    .buttonStyle(.glassProminent)
+                    .accessibilityIdentifier("recordings-open-guide")
+                }
+            }
+            .listRowBackground(Color.clear)
+        }
+    #endif
+
     private var isTV: Bool {
         #if os(tvOS)
             true
@@ -544,11 +637,11 @@ struct RecordingsView: View {
     /// A recording in Continue watching is also in its show, so its row there
     /// takes focus under the negated id.
     @ViewBuilder
-    private func item(_ rec: Recording, resume: Bool = false) -> some View {
+    private func item(_ rec: Recording, resume: Bool = false, titled: Bool = false) -> some View {
         if selecting {
             pickRow(rec)
         } else {
-            row(rec, focus: resume ? -rec.id : rec.id)
+            row(rec, focus: resume ? -rec.id : rec.id, titled: titled || resume)
         }
     }
 

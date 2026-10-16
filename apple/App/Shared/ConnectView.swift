@@ -41,24 +41,72 @@ struct ConnectView: View {
         #endif
     }
 
+    /// The first screen: what Broadwave is, why it asks for the local network, and the two ways in.
     private var explainer: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Find your server")
+        VStack(spacing: 18) {
+            Spacer(minLength: 24)
+            Image(systemName: "antenna.radiowaves.left.and.right")
+                .font(.system(size: 64, weight: .regular))
+                .foregroundStyle(Tokens.ColorToken.accent)
+                .symbolEffect(.variableColor.iterative, options: .repeat(.continuous))
+                .accessibilityHidden(true)
+            brandLine
+            Text("Your antenna, on every screen.")
                 .font(.largeTitle.weight(.heavy))
-            Text("Broadwave looks on your home network for the computer running it. This device will ask to allow this.")
+                .multilineTextAlignment(.center)
+            Text("Broadwave looks on your home network for the computer running it. This device will ask to allow this. Nothing leaves the house.")
                 .foregroundStyle(.secondary)
-            Text("Nothing leaves the house.")
-                .foregroundStyle(.secondary)
-            Button("Look for my server") {
+                .multilineTextAlignment(.center)
+            Spacer(minLength: 24)
+            Button {
                 UserDefaults.standard.set(true, forKey: "localNetworkExplained")
                 explained = true
+            } label: {
+                Text("Look for my server").frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)
+            .controlSize(.large)
+            .accessibilityIdentifier("connect-look")
+            Button {
+                Task { await tryDemo() }
+            } label: {
+                Text("Try the demo").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
+            .controlSize(.large)
+            .disabled(checking)
+            .accessibilityIdentifier("connect-demo")
+            if let problem {
+                Text(problem).font(.footnote).foregroundStyle(Tokens.ColorToken.tally)
+            }
         }
         .padding(24)
-        .frame(maxWidth: 640, alignment: .leading)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: 520)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Tokens.ColorToken.canvas.ignoresSafeArea())
+    }
+
+    private var brandLine: some View {
+        HStack(spacing: 10) {
+            Circle().fill(Tokens.ColorToken.tally).frame(width: 12, height: 12)
+                .shadow(color: Tokens.ColorToken.tally, radius: 8)
+            Text("Broadwave").font(.title2.weight(.heavy))
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Saved servers and the ones that answered, each once. A server that answers and is
+    /// also saved shows once, so signing out does not list it twice.
+    private var servers: [FoundServer] {
+        var seen = Set<String>()
+        var out: [FoundServer] = []
+        for server in discovery.servers + store.remembered where !server.isLoopback {
+            let key = server.id.isEmpty ? server.url.absoluteString : server.id
+            if seen.insert(key).inserted, seen.insert(server.url.absoluteString).inserted || server.id.isEmpty {
+                out.append(server)
+            }
+        }
+        return out
     }
 
     private var finder: some View {
@@ -66,50 +114,40 @@ struct ConnectView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            Circle().fill(Tokens.ColorToken.tally).frame(width: 12, height: 12)
-                                .shadow(color: Tokens.ColorToken.tally, radius: 8)
-                            Text("Broadwave").font(.title2.weight(.heavy))
-                        }
+                        brandLine
                         Text("Your antenna, on every screen.")
                             .font(.largeTitle.weight(.heavy))
                         Text("Pick your server. It's the computer running Broadwave next to your HDHomeRun.")
                             .foregroundStyle(.secondary)
                     }
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        Button("Try the demo") {
-                            Task { await tryDemo() }
-                        }
-                        .buttonStyle(.glassProminent)
-                        .disabled(checking)
-                        Text("Sample films on this device.")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if !store.remembered.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Saved").font(.headline)
-                            ForEach(store.remembered, id: \.url) { server in
-                                serverButton(server)
-                            }
-                        }
-                    }
-
+                    let list = servers
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("On your network").font(.headline)
-                            if discovery.searching, discovery.servers.isEmpty, !discovery.looked {
+                            if discovery.searching, !discovery.looked {
                                 ProgressView().padding(.leading, 6)
                             }
                         }
-                        if discovery.servers.isEmpty {
+                        if list.isEmpty {
                             Text(discovery.looked ? "No server answered on this network." : "Looking…")
                                 .foregroundStyle(.secondary)
                         }
-                        ForEach(discovery.servers) { server in
-                            serverButton(server)
+                        ForEach(Array(list.enumerated()), id: \.element.url) { index, server in
+                            serverButton(server, primary: index == 0)
                         }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button("Try the demo") {
+                            Task { await tryDemo() }
+                        }
+                        .buttonStyle(.glass)
+                        .disabled(checking)
+                        .accessibilityIdentifier("connect-demo")
+                        Text("Sample films on this device, if you don't have a server yet.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
 
                     addressSection
@@ -339,23 +377,40 @@ struct ConnectView: View {
         }
     }
 
-    private func serverButton(_ server: FoundServer) -> some View {
-        Button {
-            Task { await check(server.url, saved: server) }
-        } label: {
-            HStack {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                VStack(alignment: .leading) {
-                    Text(server.name).font(.headline).multilineTextAlignment(.leading)
-                    Text(server.url.host() ?? "").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+    /// The first server is the way in, drawn as the prominent button.
+    @ViewBuilder
+    private func serverButton(_ server: FoundServer, primary: Bool) -> some View {
+        let saved = store.remembered.contains { $0.url == server.url || (!server.id.isEmpty && $0.id == server.id) }
+        let label = HStack(spacing: 12) {
+            Image(systemName: "server.rack")
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(server.name).font(.headline).multilineTextAlignment(.leading)
+                Text([server.url.host() ?? "", saved ? String(localized: "Saved") : ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.caption)
+                    .opacity(0.8)
             }
-            .padding()
-            .frame(maxWidth: .infinity)
+            Spacer()
+            Image(systemName: "chevron.right").opacity(0.6)
         }
-        .buttonStyle(.glass)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
+        if primary {
+            Button {
+                Task { await check(server.url, saved: server) }
+            } label: { label }
+                .buttonStyle(.glassProminent)
+                .disabled(checking)
+                .accessibilityIdentifier("connect-server")
+        } else {
+            Button {
+                Task { await check(server.url, saved: server) }
+            } label: { label }
+                .buttonStyle(.glass)
+                .disabled(checking)
+                .accessibilityIdentifier("connect-server")
+        }
     }
 
     /// Bare addresses are the home network: http on port 8477. An https address keeps its own port.

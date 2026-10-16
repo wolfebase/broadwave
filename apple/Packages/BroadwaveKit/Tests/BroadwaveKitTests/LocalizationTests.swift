@@ -61,7 +61,8 @@ import Testing
         "That recording is not in the list.",
         "That screen isn't open right now.",
         "The demo films are not on this device.",
-        "The demo has no %@.",
+        "The demo can't do that.",
+        "This recording can't play in the demo.",
         "The demo plays samples. It does not record.",
     ]
     let missing = phrases.filter { !catalogHas($0, strings) }

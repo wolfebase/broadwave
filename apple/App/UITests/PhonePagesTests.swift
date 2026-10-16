@@ -9,7 +9,6 @@
     @MainActor
     final class PhonePagesTests: XCTestCase {
         override func setUp() {
-            continueAfterFailure = false
             XCUIDevice.shared.orientation = .portrait
         }
 
@@ -179,6 +178,112 @@
             app.swipeUp(velocity: .slow)
             pause(1)
             shot("home-scrolled2")
+        }
+
+        // MARK: Settings
+
+        /// iPhone: a list that separates this device from the server, then a page per topic.
+        func testPhoneSettingsListThenPage() throws {
+            try requirePhone()
+            let app = try launch(["-BroadwaveTab", "settings"])
+            let playback = app.buttons["settings-playback"]
+            XCTAssertTrue(playback.waitForExistence(timeout: 30), app.debugDescription)
+            XCTAssertTrue(app.staticTexts["THIS IPHONE"].exists || app.staticTexts["This iPhone"].exists, app.debugDescription)
+            pause(1)
+            shot("settings")
+            app.swipeUp(velocity: .slow)
+            pause(1)
+            shot("settings-scrolled")
+            let recording = app.descendants(matching: .any)["settings-recording"].firstMatch
+            XCTAssertTrue(recording.waitForExistence(timeout: 5), app.debugDescription)
+            recording.tap()
+            let autoplay = app.switches.matching(NSPredicate(format: "label CONTAINS 'next episode'")).firstMatch
+            XCTAssertTrue(autoplay.waitForExistence(timeout: 8), "Recording and Storage did not open\n\(app.navigationBars.allElementsBoundByIndex.map(\.identifier))")
+            let keep = app.staticTexts["Keep this much free"]
+            for _ in 0 ..< 4 where !keep.isHittable {
+                app.swipeUp(velocity: .slow)
+            }
+            XCTAssertTrue(app.textFields["keep-free"].exists, app.debugDescription)
+            XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'When space runs low'")).firstMatch.isEnabled, "the server's settings are greyed out")
+            shot("settings-recording")
+        }
+
+        /// iPad: the list on the left, the page on the right, both on screen.
+        func testPadSettingsSplit() throws {
+            try requirePad()
+            let app = try launch(["-BroadwaveTab", "settings"])
+            let playback = app.buttons["settings-playback"]
+            XCTAssertTrue(playback.waitForExistence(timeout: 30), app.debugDescription)
+            XCTAssertTrue(app.staticTexts["Quality"].waitForExistence(timeout: 8) || app.buttons["Quality"].exists, "no page beside the list")
+            pause(2)
+            shot("settings")
+            app.descendants(matching: .any)["settings-server"].firstMatch.tap()
+            pause(2)
+            shot("settings-server")
+        }
+
+        // MARK: First run and Recordings
+
+        /// The first screen says what Broadwave is and offers both ways in.
+        func testFirstRunWelcome() {
+            let app = XCUIApplication()
+            app.launchArguments = ["-ApplePersistenceIgnoreState", "YES", "-BroadwaveExplain", "YES"]
+            app.launch()
+            let look = app.buttons["connect-look"]
+            XCTAssertTrue(look.waitForExistence(timeout: 20), app.debugDescription)
+            XCTAssertTrue(app.buttons["connect-demo"].exists, app.debugDescription)
+            pause(1)
+            shot("first-run")
+        }
+
+        /// A server that answered or was saved is the first, prominent choice, listed once, above the demo.
+        func testFirstRunServerLeads() throws {
+            _ = try launch([])
+            let app = XCUIApplication()
+            app.terminate()
+            app.launchArguments = ["-ApplePersistenceIgnoreState", "YES", "-BroadwaveDiscover", "YES"]
+            app.launch()
+            let server = app.buttons["connect-server"].firstMatch
+            XCTAssertTrue(server.waitForExistence(timeout: 20), app.debugDescription)
+            pause(3)
+            shot("first-run-finder")
+            let demo = app.buttons["connect-demo"]
+            XCTAssertTrue(demo.exists, app.debugDescription)
+            XCTAssertLessThan(server.frame.minY, demo.frame.minY, "the demo is above the server")
+            let names = app.buttons.matching(identifier: "connect-server").allElementsBoundByIndex.map(\.label)
+            XCTAssertEqual(names.count, Set(names).count, "a server is listed twice: \(names)")
+        }
+
+        /// No recordings: the page says so and offers the guide.
+        func testRecordingsEmptyOffersTheGuide() throws {
+            let app = try launch(["-BroadwaveTab", "recordings"])
+            let open = app.buttons["recordings-open-guide"]
+            guard open.waitForExistence(timeout: 20) else {
+                throw XCTSkip("this server has recordings")
+            }
+            shot("recordings-empty")
+            open.tap()
+            XCTAssertTrue(app.buttons["guide-now"].waitForExistence(timeout: 10), "Open the guide did not open it")
+        }
+
+        /// With recordings: filters in one menu, no header that repeats its only row, and plain counts.
+        func testRecordingsPage() throws {
+            let app = try launch(["-BroadwaveTab", "recordings"])
+            let row = app.buttons["recording-row"].firstMatch
+            guard row.waitForExistence(timeout: 20) else {
+                throw XCTSkip("this server has no recordings")
+            }
+            XCTAssertTrue(app.buttons["library-filter"].exists, app.debugDescription)
+            XCTAssertFalse(app.staticTexts["Plays 0 recordings in turn. Uses no tuner."].exists)
+            XCTAssertTrue(row.label.contains(","), row.label)
+            pause(2)
+            shot("recordings")
+            app.swipeUp(velocity: .slow)
+            pause(1)
+            shot("recordings-scrolled")
+            app.buttons["library-filter"].tap()
+            pause(1)
+            shot("recordings-filter")
         }
 
         // MARK: Helpers

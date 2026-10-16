@@ -818,11 +818,10 @@ struct RootView: View {
                 }
                 if !phoneTabs {
                     Tab("Settings", systemImage: "gearshape.fill", value: AppTab.settings) {
-                        NavigationStack {
-                            SettingsView().safeAreaInset(edge: .top, spacing: 0) {
-                                if bannersInTabs {
-                                    banners
-                                }
+                        // Settings brings its own split view: the list on the left, a page on the right.
+                        SettingsView().safeAreaInset(edge: .top, spacing: 0) {
+                            if bannersInTabs {
+                                banners
                             }
                         }
                     }

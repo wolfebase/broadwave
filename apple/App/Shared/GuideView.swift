@@ -788,6 +788,18 @@ struct GuideGrid: View {
         }
     #endif
 
+    /// How far a long program runs past the right edge of the screen, so its picture
+    /// stays in view instead of sitting off screen at the program's far end. iPhone and iPad.
+    private func trailingInset(start: CGFloat, width: CGFloat, visible: CGFloat) -> CGFloat {
+        #if os(tvOS)
+            0
+        #else
+            let past = start + width - (offset.x + visible)
+            let lead = max(0, offset.x - start)
+            return max(0, min(past, width - lead - 180))
+        #endif
+    }
+
     private func x(_ date: Date) -> CGFloat {
         CGFloat(date.timeIntervalSince(origin) / 60) * perMinute
     }
@@ -850,7 +862,7 @@ struct GuideGrid: View {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             Color.clear.frame(height: headH)
                             ForEach(channels) { channel in
-                                row(channel, end: end, rowHeight: rowHeight)
+                                row(channel, end: end, rowHeight: rowHeight, visible: gridW)
                                     .frame(width: width, height: rowHeight, alignment: .leading)
                             }
                         }
@@ -1034,7 +1046,7 @@ struct GuideGrid: View {
         }
     #endif
 
-    private func row(_ channel: Channel, end: Date, rowHeight: CGFloat) -> some View {
+    private func row(_ channel: Channel, end: Date, rowHeight: CGFloat, visible: CGFloat) -> some View {
         let list = store.index.airings(channel.id).filter { $0.end > origin && $0.start < end }
         return ZStack(alignment: .leading) {
             ForEach(list) { airing in
@@ -1051,7 +1063,8 @@ struct GuideGrid: View {
                         art: ArtLayout.showsCellArt(slot: Int(w.rounded())) ? store.artURL(airing, width: 160) : nil,
                         showsText: w >= 44,
                         // A program that started off screen keeps its title at the visible edge.
-                        inset: max(0, min(offset.x - x(s), w - 120))
+                        inset: max(0, min(offset.x - x(s), w - 120)),
+                        trailing: trailingInset(start: x(s), width: w, visible: visible)
                     )
                     .frame(width: w, height: rowHeight - 10)
                 }
@@ -1102,6 +1115,8 @@ struct GuideCell: View {
     /// A sliver of a program (its last few minutes) keeps its color bar but not a lone ellipsis.
     var showsText = true
     var inset: CGFloat = 0
+    /// The part of the cell past the screen's right edge.
+    var trailing: CGFloat = 0
 
     var body: some View {
         let kind = airing.kind
@@ -1147,7 +1162,7 @@ struct GuideCell: View {
                     }
                 }
                 .padding(.leading, 12 + inset)
-                .padding(.trailing, 8)
+                .padding(.trailing, 8 + trailing)
             }
         }
         .opacity(airing.end <= now ? 0.45 : dim ? 0.3 : 1)
