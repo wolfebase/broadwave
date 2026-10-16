@@ -165,6 +165,14 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   border-left: 1px solid var(--color-line);
 }
 
+/* A half hour that has scrolled partly under the channel column keeps its
+   label in view instead of showing "30 AM". */
+.guide-slot-label {
+  position: sticky;
+  left: calc(var(--channel) + 10px);
+  white-space: nowrap;
+}
+
 /* The "now" pill says the time, so the half-hour label it would cover steps aside. */
 .guide-slot.under-now .guide-slot-label {
   visibility: hidden;
