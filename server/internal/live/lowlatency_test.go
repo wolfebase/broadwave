@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // packSplit runs the packager over fragments as a split encode writes them.
@@ -315,5 +316,49 @@ func TestSplitEncodeListsNoPartLongerThanTheTarget(t *testing.T) {
 		if strings.HasPrefix(line, "#EXT-X-PART:") && !strings.Contains(line, "DURATION=0.334") {
 			t.Fatalf("part over the target: %s", line)
 		}
+	}
+}
+
+// AVPlayer will not play low latency from a playlist without a date
+// (CoreMedia -15412 "Playlist does not have EXT-X-PROGRAM-DATE-TIME"), and
+// then holds back three target durations for the whole session. The open
+// segment's parts carry its date, the same one the segment gets on closing.
+func TestOpenPartsCarryTheirSegmentsDate(t *testing.T) {
+	dir := t.TempDir()
+	fixed := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
+	tl := NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	var p playlistStamper
+	open := []packedPart{
+		{name: "part00000.m4s", pts: 900000, dur: 30030, sync: true, timed: true},
+		{name: "part00001.m4s", pts: 930030, dur: 30030, timed: true},
+	}
+	if err := writePacked(dir, []byte("init"), nil, open, 0, true, false, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	first := string(p.stamp(dir, raw, tl))
+	lines := strings.Split(first, "\n")
+	at := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(l, "#EXT-X-PART:") })
+	if at < 1 || !strings.HasPrefix(lines[at-1], "#EXT-X-PROGRAM-DATE-TIME:") || strings.Count(first, "PROGRAM-DATE-TIME") != 1 {
+		t.Fatalf("a parts-only playlist needs its date before the first part:\n%s", first)
+	}
+	date := lines[at-1]
+	closed := []packedSeg{{name: "seg00000.m4s", pts: 900000, dur: 90090, timed: true, parts: []partRef{
+		{name: "part00000.m4s", dur: 30030, sync: true, pts: 900000, timed: true},
+		{name: "part00001.m4s", dur: 30030, pts: 930030, timed: true},
+		{name: "part00002.m4s", dur: 30030, pts: 960060, timed: true},
+	}}}
+	next := []packedPart{{name: "part00003.m4s", pts: 990090, dur: 30030, sync: true, timed: true}}
+	if err := writePacked(dir, []byte("init"), closed, next, 0, true, false, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	second := string(p.stamp(dir, raw, tl))
+	if !strings.Contains(second, date+"\n#EXTINF:1.001,\nseg00000.m4s") {
+		t.Fatalf("the closed segment keeps the date its parts had (%s):\n%s", date, second)
+	}
+	if !strings.Contains(second, "#EXT-X-PROGRAM-DATE-TIME:2026-10-16T11:59:57.001Z\n#EXT-X-PART:DURATION=0.334,INDEPENDENT=YES,URI=\"part00003.m4s\"") {
+		t.Fatalf("the next open segment is dated where the last one ended:\n%s", second)
 	}
 }
