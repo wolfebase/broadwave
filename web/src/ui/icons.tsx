@@ -15,10 +15,10 @@ export const HomeIcon = (p: P) => (
     <path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z" />
   </Base>
 );
+/** Rows of programs that start and end at different times: a guide, not a calendar. */
 export const GuideIcon = (p: P) => (
-  <Base {...p}>
-    <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
-    <path d="M3.5 9.5h17M9 9.5v10M14.5 14.5h6" />
+  <Base {...p} strokeWidth={2.4}>
+    <path d="M4 6.5h5.5M13 6.5h7M4 12h9M16.5 12h3.5M4 17.5h3M10.5 17.5h9.5" />
   </Base>
 );
 export const SportsIcon = (p: P) => (
@@ -134,5 +134,30 @@ export const CastIcon = (p: P) => (
     <circle cx="6" cy="17.5" r="0.8" fill="currentColor" stroke="none" />
     <path d="M6 14.2a3.3 3.3 0 0 1 3.3 3.3" />
     <path d="M6 11a6.5 6.5 0 0 1 6.5 6.5" />
+  </Base>
+);
+export const MoreIcon = (p: P) => (
+  <Base {...p} stroke="none">
+    <circle cx="5.5" cy="12" r="1.9" fill="currentColor" />
+    <circle cx="12" cy="12" r="1.9" fill="currentColor" />
+    <circle cx="18.5" cy="12" r="1.9" fill="currentColor" />
+  </Base>
+);
+export const SlidersIcon = (p: P) => (
+  <Base {...p}>
+    <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+    <circle cx="15" cy="7" r="2" />
+    <circle cx="9" cy="17" r="2" />
+  </Base>
+);
+export const ChevronDownIcon = (p: P) => (
+  <Base {...p}>
+    <path d="m5.5 9 6.5 6.5L18.5 9" />
+  </Base>
+);
+export const CaptionsIcon = (p: P) => (
+  <Base {...p}>
+    <rect x="3" y="5.5" width="18" height="13" rx="2.5" />
+    <path d="M10.5 10.3a2.2 2.2 0 1 0 0 3.4M17 10.3a2.2 2.2 0 1 0 0 3.4" />
   </Base>
 );
