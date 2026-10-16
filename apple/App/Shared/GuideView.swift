@@ -9,7 +9,7 @@ struct GuideView: View {
     @State private var filter: BroadwaveKit.Category?
     @State private var favoritesOnly = false
     @State private var selected: Selection?
-    @State private var jump: Date?
+    @State private var jump: GuideJump?
     @State private var scores: [String: String] = [:]
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
@@ -191,21 +191,21 @@ struct GuideView: View {
     private var dayJump: some View {
         guideRow {
             HStack(spacing: 8) {
-                Button("Now") { jump = store.now.addingTimeInterval(-15 * 60) }
+                Button("Now") { go(store.now.addingTimeInterval(-15 * 60)) }
                     .buttonStyle(.glass)
                     .accessibilityIdentifier("guide-now")
                 #if os(tvOS)
                     .focused($headerFocus, equals: .now)
                     .onMoveCommand { moveHeader($0, from: .now) }
                 #endif
-                Button("Tonight") { jump = primeTime(on: store.now, after: store.now) }
+                Button("Tonight") { go(primeTime(on: store.now, after: store.now)) }
                     .buttonStyle(.glass)
                 #if os(tvOS)
                     .focused($headerFocus, equals: .tonight)
                     .onMoveCommand { moveHeader($0, from: .tonight) }
                 #endif
                 ForEach(comingDays, id: \.timeIntervalSince1970) { day in
-                    Button(dayLabel(day)) { jump = primeTime(on: day, after: day) }
+                    Button(dayLabel(day)) { go(primeTime(on: day, after: day)) }
                         .buttonStyle(.glass)
                     #if os(tvOS)
                         .focused($headerFocus, equals: .later(day.timeIntervalSince1970))
@@ -218,10 +218,19 @@ struct GuideView: View {
         }
     }
 
+    /// Every press scrolls, the same day twice included.
+    private func go(_ date: Date) {
+        jump = GuideJump(to: date, serial: (jump?.serial ?? 0) + 1)
+    }
+
+    /// Tomorrow and the day after, while the listings reach that evening. A day with
+    /// nothing listed would scroll to an empty grid.
     private var comingDays: [Date] {
         let cal = Calendar.current
         let start = cal.startOfDay(for: store.now)
+        let listed = store.channels.compactMap { store.index.airings($0.id).last?.end }.max() ?? store.now
         return (1 ... 2).compactMap { cal.date(byAdding: .day, value: $0, to: start) }
+            .filter { primeTime(on: $0, after: $0) < listed }
     }
 
     private func dayLabel(_ day: Date) -> String {
@@ -407,12 +416,18 @@ struct GuideView: View {
 
 /// The time grid. The channel column and time header stay pinned while the grid
 /// scrolls both ways, and the tally-red line marks now.
+/// A place in the guide to scroll to. The serial makes a second press of the same day count.
+struct GuideJump: Equatable {
+    var to: Date
+    var serial: Int
+}
+
 struct GuideGrid: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
     let channels: [Channel]
     let highlight: BroadwaveKit.Category?
-    let jump: Date?
+    let jump: GuideJump?
     var scores: [String: String] = [:]
     #if os(tvOS)
         var channelFocus: FocusState<Int64?>.Binding
@@ -453,6 +468,44 @@ struct GuideGrid: View {
     private var origin: Date {
         guideOrigin(for: store.now)
     }
+
+    #if os(tvOS)
+        private let dayW: CGFloat = 200
+    #else
+        private let dayW: CGFloat = 110
+    #endif
+
+    /// Today, Tomorrow, or the date, for the left edge of the grid.
+    private func dayTitle(at scrollX: CGFloat) -> String {
+        let date = origin.addingTimeInterval(Double(scrollX / perMinute) * 60 + 60)
+        let cal = Calendar.current
+        if cal.isDateInToday(date) {
+            return "Today"
+        }
+        if cal.isDateInTomorrow(date) {
+            return "Tomorrow"
+        }
+        return date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    }
+
+    /// Where the grid sits when it shows now.
+    private var nowScrollX: CGFloat {
+        max(0, x(store.now.addingTimeInterval(-900)))
+    }
+
+    /// The grid shows another part of the day than now.
+    private var awayFromNow: Bool {
+        abs(offset.x - nowScrollX) > 600
+    }
+
+    #if os(tvOS)
+        private func backToNow(_ channel: Channel) {
+            withAnimation(.smooth(duration: 0.35)) {
+                scroll.scrollTo(point: CGPoint(x: nowScrollX, y: offset.y))
+            }
+            channelFocus.wrappedValue = channel.id
+        }
+    #endif
 
     private func x(_ date: Date) -> CGFloat {
         CGFloat(date.timeIntervalSince(origin) / 60) * perMinute
@@ -508,12 +561,6 @@ struct GuideGrid: View {
                             }
                         }
                         .frame(height: headH + CGFloat(channels.count) * rowHeight, alignment: .top)
-                        ForEach(0 ..< Int(hours), id: \.self) { hour in
-                            Color.clear
-                                .frame(width: 1, height: 1)
-                                .id(hour)
-                                .offset(x: CGFloat(hour * 60) * perMinute)
-                        }
                         // Now line
                         Rectangle()
                             .fill(Tokens.ColorToken.tally)
@@ -529,7 +576,8 @@ struct GuideGrid: View {
                                 let markX = x(t) + 8
                                 // The now pill sits over this row; a mark under it would show through.
                                 let underPill = markX > x(store.now) - 40 && markX < x(store.now) + nowPillW
-                                if markX >= scrollX, !underPill {
+                                // The day sits at the left edge of the header.
+                                if markX >= scrollX + dayW, !underPill {
                                     Text(t.formatted(date: .omitted, time: .shortened))
                                         .font(.footnote.weight(.semibold))
                                         .monospacedDigit()
@@ -548,6 +596,14 @@ struct GuideGrid: View {
                                     .shadow(color: Tokens.ColorToken.tally.opacity(0.6), radius: 8)
                                     .offset(x: nowX, y: 10)
                             }
+                            Text(dayTitle(at: scrollX))
+                                .font(.footnote.weight(.bold))
+                                .lineLimit(1)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 3)
+                                .background(.white.opacity(0.14), in: .capsule)
+                                .offset(x: scrollX + 8, y: 10)
+                                .accessibilityIdentifier("guide-day")
                         }
                         .offset(y: offset.y)
                         .zIndex(3)
@@ -565,10 +621,14 @@ struct GuideGrid: View {
                 .task {
                     proxy.scrollTo("guide-now", anchor: .leading)
                 }
-                .onChange(of: jump) { _, date in
-                    guard let date else { return }
-                    let hour = max(0, min(Int(hours) - 1, Int(date.timeIntervalSince(origin) / 3600)))
-                    proxy.scrollTo(hour, anchor: .leading)
+                .onChange(of: jump) { _, jump in
+                    guard let jump else { return }
+                    // The left edge lands on a half hour, so no program shows as a sliver there.
+                    let half = (jump.to.timeIntervalSince(origin) / 1800).rounded(.down) * 1800
+                    let target = max(0, min(width - gridW, x(origin.addingTimeInterval(half))))
+                    withAnimation(.smooth(duration: 0.35)) {
+                        scroll.scrollTo(point: CGPoint(x: target, y: offset.y))
+                    }
                 }
             }
         }
@@ -698,6 +758,8 @@ struct GuideGrid: View {
                     // landed on the leftmost cell: a program that had ended, whose panel
                     // offered only Record series.
                     .disabled(airing.end <= store.now)
+                    // Back from later in the day comes back to now, on this channel.
+                    .onExitCommand(perform: awayFromNow ? { backToNow(channel) } : nil)
                 #endif
                     .offset(x: x(s))
             }
