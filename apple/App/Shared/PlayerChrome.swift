@@ -962,6 +962,28 @@ struct TuneBackdrop: View {
             .animation(.bouncy, value: phase)
         }
 
+        private func syncScreens(_ sync: SyncEngine, words: Bool) -> some View {
+            Button("Sync screens", systemImage: "arrow.triangle.2.circlepath") { sync.syncScreens() }
+                .labelStyle(SyncLabel(words: words))
+                .lineLimit(1)
+                .fixedSize()
+                .buttonStyle(.glass)
+                .accessibilityLabel("Sync \(sync.members) screens")
+        }
+
+        private struct SyncLabel: LabelStyle {
+            let words: Bool
+
+            func makeBody(configuration: Configuration) -> some View {
+                HStack(spacing: 6) {
+                    configuration.icon
+                    if words {
+                        configuration.title
+                    }
+                }
+            }
+        }
+
         private var phase: String {
             guard let sync = nowPlaying.live.sync else { return "none" }
             return "\(sync.offByChoice) \(sync.detached) \(sync.state) \(sync.members)"
@@ -971,10 +993,11 @@ struct TuneBackdrop: View {
             if let sync = nowPlaying.live.sync, sync.offByChoice {
                 // Playing on its own; offer to line up only when someone else is on this channel.
                 if sync.members > 1 {
-                    Button("Sync screens", systemImage: "arrow.triangle.2.circlepath") { sync.syncScreens() }
-                        .labelStyle(.titleAndIcon)
-                        .buttonStyle(.glass)
-                        .accessibilityLabel("Sync \(sync.members) screens")
+                    // The words when they fit on one line; the symbol alone at large text sizes.
+                    ViewThatFits(in: .horizontal) {
+                        syncScreens(sync, words: true)
+                        syncScreens(sync, words: false)
+                    }
                 }
             } else if let sync = nowPlaying.live.sync, sync.detached {
                 Button("Back in sync", systemImage: "arrow.triangle.2.circlepath") { sync.rejoin() }
