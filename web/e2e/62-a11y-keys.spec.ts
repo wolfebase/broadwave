@@ -85,7 +85,8 @@ test("the guide sheet keeps Tab inside and returns focus", async ({ page }) => {
   await settle(page);
   const grid = page.getByRole("grid", { name: "TV guide" });
   await grid.focus();
-  await page.keyboard.press("Enter");
+  // On a TV, OK on a show that is on now tunes it. Info opens its details.
+  await page.keyboard.press("i");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   const inside = () => dialog.evaluate((node) => node.contains(document.activeElement));

@@ -92,12 +92,21 @@ export function Nav({ path, layout, inert, recordingCount, online, freshAt }: { 
           const on = isActive(p, path);
           return (
             <li key={p}>
-              <a href={p} className={on ? "tab on" : "tab"} aria-current={on ? "page" : undefined} onClick={(event) => followLink(event, p)} data-path={p}>
+              {/* The tab's name stays its name; how many are recording is its description. */}
+              <a
+                href={p}
+                className={on ? "tab on" : "tab"}
+                aria-current={on ? "page" : undefined}
+                aria-label={shell(label)}
+                aria-describedby={p === "/recordings" && recordingCount > 0 ? "nav-rec-count" : undefined}
+                onClick={(event) => followLink(event, p)}
+                data-path={p}
+              >
                 <Icon className="tab-icon" />
-                <span className="tab-label">{shell(label)}</span>
+                <span className="tab-label" aria-hidden="true">{shell(label)}</span>
                 {p === "/recordings" && recordingCount > 0 ? (
                   <span className="tab-rec">
-                    <span className="sr-only">{recordingCountLabel(recordingCount)}</span>
+                    <span id="nav-rec-count" className="sr-only">{recordingCountLabel(recordingCount)}</span>
                   </span>
                 ) : null}
               </a>

@@ -134,7 +134,8 @@ test("arrow keys, Enter, and Escape drive the TV layout", async ({ page }) => {
     await page.keyboard.press("ArrowDown");
   }
   await expect(page.locator(":focus")).toHaveAttribute("role", "grid");
-  await page.keyboard.press("Enter");
+  // OK on a show that is on now tunes it. Info opens its details.
+  await page.keyboard.press("i");
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
