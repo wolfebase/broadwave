@@ -408,3 +408,42 @@ func TestDeleteKeepsTheEpisodeWhenTheRowCannotBeRemoved(t *testing.T) {
 		t.Fatal("a delete that did not finish marked the episode dropped")
 	}
 }
+
+// A refresh that brings the same guide writes nothing: airing ids and a
+// linked game stay, and the guide does not count as changed.
+func TestApplyAiringsSkipsAnUnchangedGuide(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	start := time.Date(2026, 9, 27, 7, 0, 0, 0, time.UTC)
+	rows := []Airing{
+		{ChannelID: 1, Title: "News", GuideSource: "silicondust", Start: start, End: start.Add(30 * time.Minute)},
+		{ChannelID: 1, Title: "Game", Category: "Sports", GuideSource: "silicondust", Start: start.Add(30 * time.Minute), End: start.Add(3 * time.Hour)},
+	}
+	if n, err := st.ApplyAirings(ctx, []int64{1}, rows); err != nil || n != 2 {
+		t.Fatalf("first apply %d %v", n, err)
+	}
+	before, _ := st.Airings(ctx, start, start.Add(4*time.Hour))
+	if _, err := st.db.ExecContext(ctx, `UPDATE airings SET game_id = '401' WHERE title = 'Game'`); err != nil {
+		t.Fatal(err)
+	}
+	v1, _ := st.DataVersions(ctx)
+	if n, err := st.ApplyAirings(ctx, []int64{1}, rows); err != nil || n != 0 {
+		t.Fatalf("same guide wrote %d rows: %v", n, err)
+	}
+	v2, _ := st.DataVersions(ctx)
+	if v2.Guide != v1.Guide {
+		t.Fatalf("guide version %d -> %d on an unchanged refresh", v1.Guide, v2.Guide)
+	}
+	after, _ := st.Airings(ctx, start, start.Add(4*time.Hour))
+	if len(after) != 2 || after[0].ID != before[0].ID || after[1].GameID != "401" {
+		t.Fatalf("rows rewritten: %+v", after)
+	}
+	rows[0].Title = "Morning News"
+	if n, err := st.ApplyAirings(ctx, []int64{1}, rows[:1]); err != nil || n != 3 {
+		t.Fatalf("changed one and dropped one: %d %v", n, err)
+	}
+	after, _ = st.Airings(ctx, start, start.Add(4*time.Hour))
+	if len(after) != 1 || after[0].Title != "Morning News" {
+		t.Fatalf("airings %+v", after)
+	}
+}

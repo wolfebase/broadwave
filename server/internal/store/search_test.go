@@ -273,3 +273,23 @@ func TestAGameIdDoesNotRewriteSearch(t *testing.T) {
 		t.Fatalf("new title %+v %v", hits, err)
 	}
 }
+
+func TestSearchFoldsAccents(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := t.Context()
+	for _, title := range []string{"Pokémon Horizons", "Telenovela: Señora"} {
+		if _, err := s.CreateRecording(ctx, Recording{Title: title, Status: "complete", Path: title + ".ts", StartedAt: time.Now().Add(-time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for query, want := range map[string]string{"Pokémon": "Pokémon Horizons", "pokemon": "Pokémon Horizons", "señora": "Telenovela: Señora", "senora": "Telenovela: Señora"} {
+		_, recs, err := s.Search(ctx, query, time.Now(), 20)
+		if err != nil || len(recs) != 1 || recs[0].Title != want {
+			t.Errorf("%q: %v %+v", query, err, recs)
+		}
+	}
+}

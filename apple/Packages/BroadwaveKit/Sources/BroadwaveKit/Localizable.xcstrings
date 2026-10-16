@@ -12,6 +12,17 @@
         }
       }
     },
+    "Final" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Final"
+          }
+        }
+      }
+    },
     "score.line" : {
       "extractionState" : "manual",
       "localizations" : {

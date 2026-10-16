@@ -132,8 +132,8 @@ export interface paths {
         /**
          * @description WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
          *
-         *     Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
-         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `screen.remote` {action, from} (a remote pressed a button for this screen; see `/screens/{id}/remote`), `client.revoked` {id} (a paired device was revoked; the device with that id is signed out and should show the sign-in screen), `error` {code, message}.
+         *     Server to client: `hello` {serverTime, boot, versions} (boot names the server process; a new one means it restarted and every watch and room is gone; versions are the data counters {guide, channels, recordings, schedule, settings}, so a reconnecting app refetches only what moved), `clock` {t0, t1}, `activity` (Event),
+         *     `live.changed` (refetch tuners and sessions), `guide.changed`, `channels.changed`, `recordings.changed`, `schedule.changed`, `settings.changed` {version} (that data changed; refetch it; a burst of writes is one event), `sources.found` {found} (discovery found a different set of tuners or lineups; not sent when nothing changed), `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `screen.remote` {action, from} (a remote pressed a button for this screen; see `/screens/{id}/remote`), `client.revoked` {id} (a paired device was revoked; the device with that id is signed out and should show the sign-in screen), `error` {code, message}.
          *
          *     Client to server: `here` {id, name, kind, channelId} (names this screen; `id` is the app's own stable id, 1-64 letters, digits, or `-`; kind is iphone, ipad, appletv, or web; `channelId` is the channel it plays alone, sent again on each change, so a screen with sync off still shows what it watches in `/screens`), `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
          *     `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
@@ -258,7 +258,8 @@ export interface paths {
         delete: operations["removeDevice"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** @description Retire a tuner taken away on purpose, or bring it back. Its channels, passes, and recordings stay; it counts toward no recording plan and raises no "stopped answering" note. A retired tuner that answers discovery again is no longer retired. */
+        patch: operations["patchDevice"];
         trace?: never;
     };
     "/devices/health": {
@@ -458,9 +459,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Channels that already have a fresh preview.
+         * Channels that already have a fresh preview, and channels with no signal.
          * @description A channel is listed when its preview JPEG exists and is newer than 10 minutes.
          *     Nothing is tuned to make one. Cards ask for `/channels/{id}/frame` only for these ids.
+         *     `noSignal` lists the channels a tune found off the air in the last 10 minutes.
          */
         get: operations["listFrames"];
         put?: never;
@@ -496,6 +498,27 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listAirings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description What is on every guide channel: the listing on the air and the one after, in guide order, without
+         *     reading a guide window. Listings carry the grid fields only (as `/airings?fields=grid`). The answer
+         *     changes each minute and when the guide or channels change (`guide.changed`, `channels.changed`).
+         */
+        get: operations["nowNext"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1868,7 +1891,7 @@ export interface components {
         Error: {
             /**
              * @description Stable machine code. An unknown code is still a failure.
-             *     Known codes: bad_request, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, no_signal, no_source, not_found, pictures_full, rate_limited, recording_soon, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable.
+             *     Known codes: bad_request, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, no_signal, no_source, not_found, pictures_full, rate_limited, recording_soon, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable.
              */
             code: string;
             /** @description Short text safe to show a user. */
@@ -1991,8 +2014,10 @@ export interface components {
             priority?: number;
             lastSeen?: string;
             note?: string;
-            /** @description True when a tuner has missed three discovery rounds (15 minutes). Playlists use source health instead. */
+            /** @description True when a tuner has missed three discovery rounds (15 minutes). Playlists use source health instead. Never true for a retired tuner. */
             offline?: boolean;
+            /** @description The owner took this tuner away on purpose (PATCH /devices/{id}). It counts toward no recording plan and raises no note. Cleared when it answers again. Absent when false. */
+            retired?: boolean;
         };
         /** @description Live model, firmware version, and signal lock. Empty error means the tuner answered. */
         DeviceHealth: {
@@ -2125,6 +2150,12 @@ export interface components {
         /** @description Channel ids whose preview JPEG exists and is newer than 10 minutes. */
         FrameList: {
             channels: number[];
+            /**
+             * @description Channels whose last tune in the past 10 minutes found no signal. A watch of
+             *     one fails with `no_signal` after a short check (about 2 s) instead of the full
+             *     wait, and a tune of it that locks takes it off this list.
+             */
+            noSignal?: number[];
         };
         Airing: {
             /** Format: int64 */
@@ -2383,6 +2414,16 @@ export interface components {
             /** @description Names the server process that counted this viewer, as in the event socket's `hello`. Send it back with the stop. */
             boot?: string;
         };
+        NowChannel: {
+            /** Format: int64 */
+            channelId: number;
+            now?: components["schemas"]["Airing"];
+            next?: components["schemas"]["Airing"];
+            /** @description How far into now the answer's minute is. 0 when nothing is on. */
+            progress: number;
+            /** @description Path on this server of the picture for the row: the listing's when it has one, else the channel's. */
+            art: string;
+        };
         Recording: {
             /** Format: int64 */
             id: number;
@@ -2401,9 +2442,14 @@ export interface components {
              * @description The pass that started it; its keep and limit rules apply. Absent for one started by hand or found in a folder.
              */
             passId?: number;
-            /** @enum {string} */
-            status: "recording" | "complete" | "failed" | "stopped" | "imported";
+            /**
+             * @description `interrupted`: cut short when the server stopped; the file holds the show up to then, and the rest records as a second piece.
+             * @enum {string}
+             */
+            status: "recording" | "complete" | "failed" | "stopped" | "imported" | "interrupted";
             error?: string;
+            /** @description Holds only part of its airing: a piece before or after a restart, or a retry after a failure. It does not count as having the episode, so the next airing still records. Absent when false. */
+            partial?: boolean;
             /** Format: date-time */
             startedAt: string;
             /** Format: date-time */
@@ -3257,6 +3303,38 @@ export interface operations {
             409: components["responses"]["Error"];
         };
     };
+    patchDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    retired: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The devices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        devices: components["schemas"]["Device"][];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
     getDeviceHealth: {
         parameters: {
             query?: never;
@@ -3774,6 +3852,12 @@ export interface operations {
                  *     title that names a matchup (vs, at, @). A server that predates it returns every kind.
                  */
                 kind?: "sports";
+                /**
+                 * @description grid leaves out what a guide grid does not draw: description, cast, rating, originalAir,
+                 *     seriesId, programId, and guideSource. A listing's details come from a full request for its
+                 *     channel and time. A server that predates it returns every field.
+                 */
+                fields?: "grid";
             };
             header?: never;
             path?: never;
@@ -3802,6 +3886,41 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["Error"];
+        };
+    };
+    nowNext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Now and next per channel */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: date-time
+                         * @description The minute the answer is for.
+                         */
+                        at: string;
+                        channels: components["schemas"]["NowChannel"][];
+                    };
+                };
+            };
+            /** @description Not modified. No body. If-None-Match matched the ETag. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     refreshGuide: {
@@ -3966,7 +4085,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description `no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. `stream_down`: the channel's source (for example a playlist URL) answered with an error or not at all. `tuner_refused`: the tuner answered the stream request with an error, such as another app holding it. `tuner_silent`: no tuner answered at all. */
+            /** @description `no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. `stream_down`: the channel's source (for example a playlist URL) answered with an error or not at all. `tuner_refused`: the tuner answered the stream request with an error, such as another app holding it. `tuner_silent`: no tuner answered at all. `start_failed`: the picture wrote nothing to play before the wait ran out, or failed every restart; trying again usually works, and the server log says why. */
             503: {
                 headers: {
                     [name: string]: unknown;

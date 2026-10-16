@@ -134,6 +134,7 @@ func waitMosaicMedia(t *testing.T, h *Hub, key string) string {
 
 func TestMosaicRidesTheTunesAndLetsThemGo(t *testing.T) {
 	h, st := mosaicHub(t)
+	h.TunerLinger = 0
 	ctx := context.Background()
 	a, c := idOf(t, st, "4.1"), idOf(t, st, "5.1")
 

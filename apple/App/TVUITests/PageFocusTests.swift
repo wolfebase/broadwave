@@ -20,7 +20,7 @@ final class PageFocusTests: XCTestCase {
         shot(app, "tv-guide-launch")
         XCTAssertFalse(app.buttons["Guide"].exists, "a Guide tab is still on screen")
 
-        for (icon, page) in [("guide-go-settings", "home-scan"), ("guide-go-search", "search-field")] {
+        for (icon, page) in [("guide-go-settings", "settings-playback"), ("guide-go-search", "search-page")] {
             let button = app.buttons[icon]
             XCTAssertTrue(button.exists, "no \(icon)\n\(app.debugDescription)")
             var trail: [String] = []
@@ -34,21 +34,47 @@ final class PageFocusTests: XCTestCase {
             XCUIRemote.shared.press(.select)
             let target = app.descendants(matching: .any)[page]
             XCTAssertTrue(target.waitForExistence(timeout: 10), "\(icon) did not open its page\n\(app.debugDescription)")
-            XCTAssertTrue(until(6) { target.hasFocus }, "\(page) did not take focus: \(focused(app))")
+            XCTAssertTrue(until(6) { pageHasFocus(app, page) }, "\(page) did not take focus: \(focused(app))")
             shot(app, icon)
             XCUIRemote.shared.press(.menu)
-            // Back returns to the guide where the viewer was: on the icon.
-            XCTAssertTrue(until(8) { channel.isHittable && button.hasFocus }, "Back from \(icon) did not return to the guide: \(focused(app))")
+            // Back returns to the guide where the viewer was: on the icon. Leaving the
+            // system search keyboard lands on the channel instead (the guide owns that focus).
+            let back = icon == "guide-go-search" ? { channel.hasFocus || button.hasFocus } : { button.hasFocus }
+            XCTAssertTrue(until(8) { channel.isHittable && back() }, "Back from \(icon) did not return to the guide: \(focused(app))")
             XCTAssertEqual(app.state, .runningForeground)
         }
     }
 
+    /// Settings opens on its first row, not on a text field.
     func testSettingsTakesFocus() {
-        assertFocused("home-scan", "settings")
+        let app = XCUIApplication()
+        app.launchArguments = ["-BroadwaveFocus", "settings", "-ApplePersistenceIgnoreState", "YES", "-lastChannel", "0"]
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["settings-playback"].waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertTrue(until(6) { pageHasFocus(app, "settings-playback") }, "the first row should take focus: \(focused(app))")
+        pause(2)
+        XCTAssertTrue(pageHasFocus(app, "settings-playback"), "focus moved off the first row: \(focused(app))")
     }
 
+    /// Search opens with the keyboard focused, ready to type.
     func testSearchTakesFocus() {
-        assertFocused("search-field", "search")
+        let app = XCUIApplication()
+        app.launchArguments = ["-BroadwaveFocus", "search", "-ApplePersistenceIgnoreState", "YES", "-lastChannel", "0"]
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["search-page"].waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertTrue(until(6) { pageHasFocus(app, "search-page") }, "the keyboard should take focus: \(focused(app))")
+    }
+
+    /// Settings: its first row (the list cell has focus, not the link inside it).
+    /// Search: the keyboard.
+    private func pageHasFocus(_ app: XCUIApplication, _ page: String) -> Bool {
+        let element = app.descendants(matching: .any).element(matching: NSPredicate(format: "hasFocus == true"))
+        guard element.exists else { return false }
+        switch page {
+        case "search-page": return element.elementType == .keyboard || app.keyboards.firstMatch.hasFocus
+        case "settings-playback": return element.label.hasPrefix("Playback and Picture")
+        default: return element.identifier == page
+        }
     }
 
     /// Diagnostics is pushed from Settings; its first row takes focus.

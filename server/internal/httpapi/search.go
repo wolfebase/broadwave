@@ -22,7 +22,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	for i := range recordings {
 		recordings[i].Missing = fileGone(recordings[i])
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"query": query, "airings": airings, "recordings": recordings})
+	writeCachedJSON(w, r, map[string]any{"query": query, "airings": airings, "recordings": recordings})
 }
 
 // fileGone is a finished recording whose file was moved or deleted outside Broadwave.
