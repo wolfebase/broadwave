@@ -120,6 +120,8 @@ type Server struct {
 	Origin    string
 	cfOnce    sync.Once
 	vaultOnce sync.Once
+	// Direct is the secure name on the home network. Nil in tests.
+	Direct    Direct
 	remoteMu  sync.Mutex
 	remoteVal string
 	remoteAt  time.Time
@@ -194,6 +196,8 @@ func (s *Server) Handler() http.Handler {
 	api("POST /remote/cloudflare/login", s.cloudflareLogin)
 	api("DELETE /remote/cloudflare/login", s.cloudflareCancel)
 	api("POST /remote/cloudflare/setup", s.cloudflareSetup)
+	api("GET /direct", s.directStatus)
+	api("PUT /direct", s.putDirect)
 	api("POST /media/link", s.mediaLink)
 	api("GET /invites", s.listInvites)
 	api("POST /invites", s.createInvite)

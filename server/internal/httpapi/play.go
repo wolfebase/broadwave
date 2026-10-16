@@ -1041,7 +1041,7 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 			body = live.DeltaPlaylist(body)
 		}
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-		_, _ = w.Write(body)
+		_, _ = w.Write(preloadFor(r, body))
 		return
 	}
 	if name == "ladder.m3u8" {
@@ -1070,8 +1070,12 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-		_, _ = w.Write(body)
+		_, _ = w.Write(preloadFor(r, body))
 		return
+	}
+	// The part a playlist hinted is asked for before it is written.
+	if _, _, _, ok := live.PartNumber(name); ok {
+		live.WaitPart(r.Context(), filepath.Join(s.Hub.Dir, "live", parts[0], key), name, partWait)
 	}
 	if body, ok, err := s.Hub.ViewMedia(channelID, key, name); ok {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -1177,6 +1181,29 @@ func captionFile(name string) bool {
 func decodeJSON(r *http.Request, dest any) error {
 	defer r.Body.Close()
 	return json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(dest)
+}
+
+// partWait is the longest a request for a hinted part is held. A part is at
+// most a target duration, four seconds on a station with long groups.
+var partWait = 6 * time.Second
+
+// lowLatencyHints sends EXT-X-PRELOAD-HINT to HTTP/2 clients
+// (BROADWAVE_LL_HINTS=1). Off by default: the hint puts AVPlayer in
+// low-latency mode, and with this packager's parts (one keyframe group each,
+// about a second, so a segment is usually a single part and PART-TARGET is
+// near the target duration) AVPlayer often loads the first two seconds and
+// then waits at its live edge for good. Real low latency needs parts well
+// under a second, several to a segment.
+var lowLatencyHints = os.Getenv("BROADWAVE_LL_HINTS") == "1"
+
+// preloadFor keeps EXT-X-PRELOAD-HINT only for HTTP/2 clients, and only with
+// lowLatencyHints. AVPlayer's low-latency mode needs both; a browser on
+// HTTP/1.1 would spend one of its six connections holding each hinted part.
+func preloadFor(r *http.Request, body []byte) []byte {
+	if r.ProtoMajor >= 2 && lowLatencyHints {
+		return body
+	}
+	return live.StripPreloadHint(body)
 }
 
 // blockReload reads an LL-HLS blocking playlist request. A missing part waits

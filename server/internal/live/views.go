@@ -281,7 +281,7 @@ func viewPlaylist(body []byte, tag string, reports []string) []byte {
 		switch {
 		case strings.HasPrefix(line, "#EXT-X-MAP:"):
 			line = strings.Replace(line, `"init.mp4"`, `"init.`+tag+`.mp4"`, 1)
-		case strings.HasPrefix(line, "#EXT-X-PART:"):
+		case strings.HasPrefix(line, "#EXT-X-PART:"), strings.HasPrefix(line, "#EXT-X-PRELOAD-HINT:"):
 			line = strings.Replace(line, `.m4s"`, `.`+tag+`.m4s"`, 1)
 		case line != "" && !strings.HasPrefix(line, "#"):
 			if base, ok := strings.CutSuffix(line, ".m4s"); ok {

@@ -62,6 +62,11 @@ func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {
 			body["update"] = notice
 		}
 	}
+	if s.Direct != nil {
+		if u := s.Direct.URL(); u != "" {
+			body["secureUrl"] = u
+		}
+	}
 	if id := publishCastAppID(s.CastAppID); id != "" {
 		body["castAppId"] = id
 	}
