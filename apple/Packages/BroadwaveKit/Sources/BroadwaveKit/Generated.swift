@@ -240,8 +240,9 @@ public struct Device: Codable, Sendable, Hashable {
     public var lastSeen: String?
     public var note: String?
     public var offline: Bool?
+    public var retired: Bool?
 
-    public init(deviceId: String, friendlyName: String, modelNumber: String? = nil, firmwareName: String? = nil, firmwareVersion: String? = nil, upgradeAvailable: String? = nil, baseUrl: String, lineupUrl: String? = nil, tunerCount: Int, priority: Int? = nil, lastSeen: String? = nil, note: String? = nil, offline: Bool? = nil) {
+    public init(deviceId: String, friendlyName: String, modelNumber: String? = nil, firmwareName: String? = nil, firmwareVersion: String? = nil, upgradeAvailable: String? = nil, baseUrl: String, lineupUrl: String? = nil, tunerCount: Int, priority: Int? = nil, lastSeen: String? = nil, note: String? = nil, offline: Bool? = nil, retired: Bool? = nil) {
         self.deviceId = deviceId
         self.friendlyName = friendlyName
         self.modelNumber = modelNumber
@@ -255,6 +256,7 @@ public struct Device: Codable, Sendable, Hashable {
         self.lastSeen = lastSeen
         self.note = note
         self.offline = offline
+        self.retired = retired
     }
 }
 

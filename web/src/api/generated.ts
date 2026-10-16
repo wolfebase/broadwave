@@ -126,6 +126,7 @@ export type Device = {
   lastSeen?: string;
   note?: string;
   offline?: boolean;
+  retired?: boolean;
 };
 
 export type DeviceHealth = {
