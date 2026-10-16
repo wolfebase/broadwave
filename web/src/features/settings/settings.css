@@ -1261,6 +1261,16 @@ html[data-layout="tv"] .settings-menu-row:focus {
 html[data-layout="tv"] .settings-back {
   min-height: 56px;
   padding-inline: 12px 20px;
+  font-size: var(--type-title3-size);
+}
+
+html[data-layout="tv"] .settings-back svg {
+  width: 28px;
+  height: 28px;
+}
+
+html[data-layout="tv"] .set-group-head h3 {
+  font-size: var(--type-title3-size);
 }
 
 html[data-layout="tv"] .set-switch {

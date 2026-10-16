@@ -40,13 +40,17 @@
 # JS raised 2026-10-12: Home, the guide, and the shell look up their words in
 # an English catalog, with the plural helper. Measured entry gzip 97465, plus
 # 300 bytes of slack for lazy-chunk hashes.
+# JS raised 2026-10-16: the shell names the server it cannot reach (offline
+# line and stale guide), and Safari on iPhone gets a Home Screen hint whose
+# check runs before the app loads. Measured entry gzip 97989, plus 300 bytes
+# of slack for lazy-chunk hashes.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=97765
+JS_GZIP_MAX=98289
 CSS_GZIP_MAX=12157
 
 if [[ ! -f "$INDEX" ]]; then

@@ -40,7 +40,7 @@ test("a multiview added to other apps is one channel in the exports", async ({ p
   // mosaic takes two. Leave the multiview so its tiles let go first. A
   // tile whose watch was answered as the page left is only let go when
   // it has fetched nothing for 45 s.
-  await page.goto("/settings");
+  await page.goto("/settings/integrations");
   await expect
     .poll(async () => {
       const { tuners } = (await (await fetch(`${baseURL}/api/v1/tuners`)).json()) as { tuners: { viewers?: number }[] };
