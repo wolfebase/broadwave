@@ -1,385 +1,195 @@
-import { useEffect, useState } from "react";
-import type { CatalogBackup, Settings, StorageInfo, StorageShow } from "../../types";
-import { getEvents, getStorageShows, getTuners, listBackups, restoreBackup } from "../../api";
+import { useEffect, useId, useRef, useState } from "react";
+import type { CatalogBackup, ServerInfo, Settings, StorageInfo, StorageShow } from "../../types";
+import { getStorageShows, listBackups, restoreBackup } from "../../api";
 import { navigate } from "../../app/router";
 import { authHeaders } from "../../lib/deviceToken";
 import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
+import { settingsHubMessages } from "../../i18n/messages/settingsHub.ts";
 import { bind, formatDateTime } from "../../i18n/runtime.ts";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
-import { browserName, readLiveDelay, saveLiveDelay, type LiveDelay } from "../../lib/events";
-import { saveScreenName } from "./screenName";
-import { tunerLine as describeTuners } from "./deviceCard";
+import { appVersion } from "../../lib/compat";
+import { blenderCreditText } from "../../legal";
+import { readLiveDelay, saveLiveDelay, type LiveDelay } from "../../lib/events";
 import { settingTextCommit, settingTextDraft, shownSettingText } from "./field";
+import { Confirm } from "./Confirm";
+import { ChoiceRow, Group, Row, SelectRow, SwitchRow } from "./rows";
 
 const t = bind(settingsUiMessages);
+const h = bind(settingsHubMessages);
 
-export function SettingsScreen({
-  settings,
-  storage,
-  tunerCount,
-  onChange,
-}: {
-  settings: Settings;
-  storage: StorageInfo | null;
-  /** Every tuner the server knows, answering or not. */
-  tunerCount?: number;
-  onChange: (values: Partial<Settings>) => void;
-}) {
-  const [screenName, setScreenName] = useState(browserName);
-  const [encoder, setEncoder] = useState("");
+type Change = (values: Partial<Settings>) => void;
+
+const onOff = (value: string | undefined, fallback: "0" | "1") => (value === "0" || value === "1" ? value : fallback) === "1";
+
+export function PlaybackSection({ settings, onChange }: { settings: Settings; onChange: Change }) {
   const [delay, setDelay] = useState<LiveDelay>(readLiveDelay);
-  const [tunerFacts, setTunerFacts] = useState<{ busy: number; answering: number } | "down" | null>(null);
-  const [lastEvent, setLastEvent] = useState("");
-  useEffect(() => {
-    let stop = false;
-    void getTuners()
-      .then((res) => {
-        if (stop) return;
-        setEncoder(res.encoder || "");
-        const busy = (res.tuners ?? []).filter((tuner) => tuner.guide || tuner.target).length;
-        setTunerFacts({ busy, answering: (res.tuners ?? []).length });
-      })
-      .catch(() => {
-        if (!stop) setTunerFacts("down");
-      });
-    void getEvents()
-      .then((res) => {
-        if (!stop && res.events[0]) setLastEvent(res.events[0].message);
-      })
-      .catch(() => undefined);
-    return () => {
-      stop = true;
-    };
-  }, [tunerCount]);
-  const tunerLine =
-    tunerFacts == null ? t("settings.checkingTuners") : tunerFacts === "down" ? t("settings.tunersUnavailable") : describeTuners(tunerFacts.busy, tunerFacts.answering, tunerCount);
   return (
-    <section className="page">
-      <div className="page-head">
-        <h2>{copy.settings.title}</h2>
-      </div>
-      <h3 className="section-title">{t("settings.thisScreen")}</h3>
-      <label className="field">
-        {copy.settings.screenName}
-        <input
-          value={screenName}
-          maxLength={40}
-          spellCheck={false}
-          autoComplete="off"
-          onChange={(event) => setScreenName(event.target.value)}
-          onBlur={() => {
-            if (screenName !== browserName()) setScreenName(saveScreenName(screenName));
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            setScreenName(saveScreenName(screenName));
+    <>
+      <Group title={h("playback.picture")}>
+        <ChoiceRow
+          label={h("playback.motion")}
+          hint={t("settings.pictureHint")}
+          value={settings.pictureMode ?? "broadcast"}
+          options={[
+            { value: "broadcast", label: t("settings.broadcast") },
+            { value: "smooth", label: t("settings.smooth") },
+            { value: "film", label: t("settings.film") },
+          ]}
+          onChange={(pictureMode) => onChange({ pictureMode })}
+        />
+        <SwitchRow label={copy.settings.adaptive} hint={h("playback.adaptiveHint")} checked={settings.adaptive === "1"} onChange={(on) => onChange({ adaptive: on ? "1" : "0" })} />
+      </Group>
+      <Group title={h("playback.live")}>
+        <ChoiceRow
+          label={h("playback.delay")}
+          hint={copy.settings.liveDelayHint}
+          value={delay}
+          options={[
+            { value: "lowest", label: t("settings.lowest") },
+            { value: "balanced", label: t("settings.balanced") },
+            { value: "stable", label: t("settings.stable") },
+          ]}
+          onChange={(item) => {
+            setDelay(item);
+            saveLiveDelay(item);
           }}
         />
-        <span className="hint">{copy.settings.screenNameHint}</span>
-      </label>
-      <h3 className="section-title">{t("settings.picture")}</h3>
-      <article className="quiet-card wide">
-        <h3>{t("settings.thisServer")}</h3>
-        <p>{encoder ? t("settings.encoder", { name: encoder }) : t("settings.encoderPending")}</p>
-        <p>{tunerLine}</p>
-        {storage ? <p>{storageLine(storage)}</p> : null}
-        {lastEvent ? <p>{t("settings.latest", { event: lastEvent })}</p> : null}
-      </article>
-      <label className="field">
-        {copy.settings.profile}
-        <input value={t("settings.homeProfile")} readOnly />
-      </label>
-      <div className="field">
-        <span>{t("settings.picture")}</span>
-        <div className="segmented" role="group" aria-label={t("settings.pictureMotion")}>
-          {(["broadcast", "smooth", "film"] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={settings.pictureMode === item ? "seg on" : "seg"}
-              aria-pressed={settings.pictureMode === item}
-              onClick={() => onChange({ pictureMode: item })}
-            >
-              {item === "broadcast" ? t("settings.broadcast") : item === "smooth" ? t("settings.smooth") : t("settings.film")}
-            </button>
-          ))}
-        </div>
-        <span className="hint">{t("settings.pictureHint")}</span>
-      </div>
-      <label className="field">
-        {copy.settings.adaptive}
-        <select
-          value={settings.adaptive === "1" ? "1" : "0"}
-          onChange={(event) => onChange({ adaptive: event.target.value === "1" ? "1" : "0" })}
-        >
-          <option value="0">{t("settings.off")}</option>
-          <option value="1">{t("settings.on")}</option>
-        </select>
-        <span className="hint">{copy.settings.adaptiveHint}</span>
-      </label>
-      <div className="field">
-        <span>{copy.settings.liveDelay}</span>
-        <div className="segmented" role="group" aria-label={copy.settings.liveDelay}>
-          {(["lowest", "balanced", "stable"] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={delay === item ? "seg on" : "seg"}
-              aria-pressed={delay === item}
-              onClick={() => {
-                setDelay(item);
-                saveLiveDelay(item);
-              }}
-            >
-              {item === "lowest" ? t("settings.lowest") : item === "balanced" ? t("settings.balanced") : t("settings.stable")}
-            </button>
-          ))}
-        </div>
-        <span className="hint">{copy.settings.liveDelayHint}</span>
-      </div>
-      <h3 className="section-title">{t("settings.guide")}</h3>
-      <GuideText
-        label={copy.settings.guideAccount}
-        value={settings.sdUser ?? ""}
-        hint={copy.settings.guideAccountHint}
-        autoComplete="username"
-        onSave={(sdUser) => onChange({ sdUser })}
-      />
-      <label className="field">
-        {t("settings.password")}
-        <input
-          type="password"
-          autoComplete="current-password"
-          placeholder={settings.sdPasswordSet === "1" ? t("settings.saved") : ""}
-          onBlur={(event) => {
-            const value = event.target.value;
-            if (value) onChange({ sdPassword: value });
-            event.target.value = "";
-          }}
-        />
-      </label>
-      <GuideText
-        label={copy.settings.guideLineup}
-        value={settings.sdLineup ?? ""}
-        onSave={(sdLineup) => onChange({ sdLineup })}
-      />
-      <GuideText
-        label={copy.settings.guideAddress}
-        value={settings.guideUrl ?? ""}
-        hint={copy.settings.guideAddressHint}
-        placeholder={t("settings.guidePlaceholder")}
-        onSave={(guideUrl) => onChange({ guideUrl })}
-      />
-      <label className="field">
-        {copy.settings.movieArt}
-        <input
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder={settings.tmdbKeySet === "1" ? t("settings.saved") : ""}
-          onBlur={(event) => {
-            const value = event.target.value;
-            if (value) onChange({ tmdbKey: value });
-            event.target.value = "";
-          }}
-        />
-        <span className="hint">{copy.settings.movieArtHint}</span>
-      </label>
-      <h3 className="section-title">{t("settings.sports")}</h3>
-      <p className="hint">{settings.sportsdbKeySet === "1" ? copy.settings.scoresFromSportsDB : copy.settings.scoresFrom}</p>
-      <label className="field">
-        {copy.settings.liveScores}
-        <select value={settings.liveScores || "1"} onChange={(event) => onChange({ liveScores: event.target.value })}>
-          <option value="1">{t("settings.on")}</option>
-          <option value="0">{t("settings.off")}</option>
-        </select>
-        <span className="hint">{copy.settings.liveScoresHint}</span>
-      </label>
-      <label className="field">
-        {copy.settings.sportsdbKey}
-        <input
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder={settings.sportsdbKeySet === "1" ? t("settings.saved") : ""}
-          onBlur={(event) => {
-            const value = event.target.value;
-            if (value) onChange({ sportsdbKey: value });
-            event.target.value = "";
-          }}
-        />
-        <span className="hint">{copy.settings.sportsdbKeyHint}</span>
-      </label>
-      <label className="field">
-        {copy.settings.hideScores}
-        <select value={settings.hideScores || "0"} onChange={(event) => onChange({ hideScores: event.target.value })}>
-          <option value="0">{t("settings.show")}</option>
-          <option value="1">{t("settings.hide")}</option>
-        </select>
-        <span className="hint">{copy.settings.hideScoresHint}</span>
-      </label>
-      <label className="field">
-        {t("settings.gameAlerts")}
-        <select
-          value={settings.gameAlerts === "teams" || settings.gameAlerts === "off" ? settings.gameAlerts : "all"}
-          onChange={(event) => onChange({ gameAlerts: event.target.value as Settings["gameAlerts"] })}
-        >
-          <option value="all">{t("settings.alertsAll")}</option>
-          <option value="teams">{t("settings.alertsTeams")}</option>
-          <option value="off">{t("settings.off")}</option>
-        </select>
-        <span className="hint">{t("settings.alertsHint")}</span>
-      </label>
-      <h3 className="section-title">{t("settings.dvr")}</h3>
-      <label className="field">
-        {t("settings.autoplay")}
-        <select value={settings.autoplay || "1"} onChange={(event) => onChange({ autoplay: event.target.value })}>
-          <option value="1">{t("settings.on")}</option>
-          <option value="0">{t("settings.off")}</option>
-        </select>
-      </label>
-      <h3 className="section-title">{t("settings.storage")}</h3>
-      <label className="field">
-        {copy.settings.layout}
-        <select
-          value={settings.layout}
-          onChange={(event) => onChange({ layout: event.target.value as Settings["layout"] })}
-        >
-          <option value="auto">{t("settings.layoutAuto")}</option>
-          <option value="desktop">{t("settings.layoutDesktop")}</option>
-          <option value="tv">{t("settings.layoutTv")}</option>
-          <option value="phone">{t("settings.layoutPhone")}</option>
-        </select>
-        <span className="hint">{copy.settings.layoutHint}</span>
-      </label>
-      <label className="field">
-        {copy.settings.recordings}
-        <input value={storage?.path ?? ""} readOnly spellCheck={false} />
-        <span className="hint">{copy.settings.recordingsHint}</span>
-      </label>
-      <ShowSpace />
-      <label className="field">
-        {t("settings.folders")}
-        <select
-          value={settings.folderLayout === "flat" ? "flat" : "shows"}
-          onChange={(event) => onChange({ folderLayout: event.target.value === "flat" ? "flat" : "shows" })}
-        >
-          <option value="shows">{t("settings.foldersByShow")}</option>
-          <option value="flat">{t("settings.foldersFlat")}</option>
-        </select>
-        <span className="hint">{t("settings.foldersHint")}</span>
-      </label>
-      <label className="field">
-        {copy.settings.nfo}
-        <select
-          value={settings.writeNfo === "1" ? "1" : "0"}
-          onChange={(event) => onChange({ writeNfo: event.target.value === "1" ? "1" : "0" })}
-        >
-          <option value="0">{t("settings.off")}</option>
-          <option value="1">{t("settings.on")}</option>
-        </select>
-        <span className="hint">{copy.settings.nfoHint}</span>
-      </label>
-      <ReserveField value={settings.watermarkGB || "10"} storage={storage} onSave={(watermarkGB) => onChange({ watermarkGB })} />
-      <label className="field">
-        {t("settings.lowSpace")}
-        <select value={settings.makeRoom === "1" ? "1" : "0"} onChange={(event) => onChange({ makeRoom: event.target.value === "1" ? "1" : "0" })}>
-          <option value="0">{t("settings.skipNew")}</option>
-          <option value="1">{t("settings.deleteOldest")}</option>
-        </select>
-        <span className="hint">{t("settings.lowSpaceHint")}</span>
-      </label>
-      <label className="field">
-        {t("settings.deleteWatched")}
-        <select value={watchedDays(settings.deleteWatchedDays)} onChange={(event) => onChange({ deleteWatchedDays: event.target.value })}>
-          {watchedChoices(settings.deleteWatchedDays).map((days) => (
-            <option key={days} value={days}>
-              {t("settings.afterDays", Number(days))}
-            </option>
-          ))}
-        </select>
-        <span className="hint">{t("settings.deleteWatchedHint")}</span>
-      </label>
-      <label className="field">
-        {t("settings.favorites")}
-        <select
-          value={settings.protectFavorites === "1" ? "1" : "0"}
-          onChange={(event) => onChange({ protectFavorites: event.target.value === "1" ? "1" : "0" })}
-        >
-          <option value="0">{t("settings.favoritesCleanUp")}</option>
-          <option value="1">{t("settings.favoritesLeave")}</option>
-        </select>
-        <span className="hint">{t("settings.favoritesHint")}</span>
-      </label>
-      <label className="field">
-        {copy.settings.buffer}
-        <select
+        <SelectRow
+          label={h("playback.bufferLabel")}
+          hint={h("playback.bufferHint")}
           value={settings.bufferMinutes ?? "60"}
-          onChange={(event) => onChange({ bufferMinutes: event.target.value as Settings["bufferMinutes"] })}
-        >
-          <option value="0">{t("settings.off")}</option>
-          <option value="30">{t("settings.minutes30")}</option>
-          <option value="60">{t("settings.hour1")}</option>
-          <option value="120">{t("settings.hours2")}</option>
-          <option value="240">{t("settings.hours4")}</option>
-        </select>
-        <span className="hint">{copy.settings.bufferHint}</span>
-      </label>
-      <h3 className="section-title">{copy.settings.backups}</h3>
-      <BackupList />
-      <a className="btn" href="/api/v1/backup">
-        {copy.settings.backup}
-      </a>
-      <form
-        className="lookup"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const input = event.currentTarget.elements.namedItem("backup") as HTMLInputElement;
-          const file = input.files?.[0];
-          if (!file) return;
-          void fetch("/api/v1/backup", { method: "POST", body: file, headers: authHeaders() }).then((res) => {
-            if (!res.ok) throw new Error(t("settings.restoreError"));
-            window.location.reload();
-          });
-        }}
-      >
-        <label>
-          {t("settings.restoreCatalog")}
-          <input name="backup" type="file" accept=".db" />
-        </label>
-        <button type="submit" className="btn">{copy.settings.restore}</button>
-      </form>
-      <p className="hint">{copy.settings.backupHint}</p>
-      <h3 className="section-title">{t("settings.updates")}</h3>
-      <label className="field">
-        {copy.settings.updates}
-        <select
-          value={settings.checkUpdates === "0" ? "0" : "1"}
-          onChange={(event) => onChange({ checkUpdates: event.target.value })}
-        >
-          <option value="1">{t("settings.on")}</option>
-          <option value="0">{t("settings.off")}</option>
-        </select>
-        <span className="hint">{copy.settings.updatesHint}</span>
-      </label>
-      <h3 className="section-title">{t("settings.support")}</h3>
-      <a className="btn" href="/api/v1/support">
-        {copy.settings.support}
-      </a>
-      <p className="hint">{copy.settings.supportHint}</p>
-      <article className="quiet-card wide">
-        <h3>{copy.settings.passwordTitle}</h3>
-        <p>{copy.settings.passwordBody}</p>
-      </article>
-    </section>
+          options={[
+            { value: "0", label: t("settings.off") },
+            { value: "30", label: t("settings.minutes30") },
+            { value: "60", label: t("settings.hour1") },
+            { value: "120", label: t("settings.hours2") },
+            { value: "240", label: t("settings.hours4") },
+          ]}
+          onChange={(bufferMinutes) => onChange({ bufferMinutes: bufferMinutes as Settings["bufferMinutes"] })}
+        />
+      </Group>
+      <Group title={h("playback.recordings")}>
+        <SwitchRow label={t("settings.autoplay")} hint={h("playback.autoplayHint")} checked={onOff(settings.autoplay, "1")} onChange={(on) => onChange({ autoplay: on ? "1" : "0" })} />
+      </Group>
+    </>
+  );
+}
+
+export function GuideSection({ settings, onChange }: { settings: Settings; onChange: Change }) {
+  return (
+    <>
+      <Group title={h("guide.listings")} lede={h("guide.listingsLede")}>
+        <TextRow label={h("guide.sdUser")} hint={copy.settings.guideAccountHint} value={settings.sdUser ?? ""} autoComplete="username" onSave={(sdUser) => onChange({ sdUser })} />
+        <SecretRow label={h("guide.sdPassword")} saved={settings.sdPasswordSet === "1"} autoComplete="current-password" onSave={(sdPassword) => onChange({ sdPassword })} />
+        <TextRow label={copy.settings.guideLineup} value={settings.sdLineup ?? ""} onSave={(sdLineup) => onChange({ sdLineup })} />
+        <TextRow label={copy.settings.guideAddress} hint={copy.settings.guideAddressHint} value={settings.guideUrl ?? ""} placeholder={t("settings.guidePlaceholder")} onSave={(guideUrl) => onChange({ guideUrl })} />
+      </Group>
+      <Group title={h("guide.art")}>
+        <SecretRow label={h("guide.tmdb")} hint={copy.settings.movieArtHint} saved={settings.tmdbKeySet === "1"} onSave={(tmdbKey) => onChange({ tmdbKey })} />
+      </Group>
+      <Group title={h("guide.sports")} lede={settings.sportsdbKeySet === "1" ? copy.settings.scoresFromSportsDB : copy.settings.scoresFrom}>
+        <SwitchRow label={copy.settings.liveScores} hint={copy.settings.liveScoresHint} checked={onOff(settings.liveScores, "1")} onChange={(on) => onChange({ liveScores: on ? "1" : "0" })} />
+        <SwitchRow label={copy.settings.hideScores} hint={copy.settings.hideScoresHint} checked={onOff(settings.hideScores, "0")} onChange={(on) => onChange({ hideScores: on ? "1" : "0" })} />
+        <ChoiceRow
+          label={t("settings.gameAlerts")}
+          hint={t("settings.alertsHint")}
+          stack
+          value={settings.gameAlerts === "teams" || settings.gameAlerts === "off" ? settings.gameAlerts : "all"}
+          options={[
+            { value: "all", label: t("settings.alertsAll") },
+            { value: "teams", label: t("settings.alertsTeams") },
+            { value: "off", label: t("settings.off") },
+          ]}
+          onChange={(gameAlerts) => onChange({ gameAlerts: gameAlerts as Settings["gameAlerts"] })}
+        />
+        <SecretRow label={copy.settings.sportsdbKey} hint={copy.settings.sportsdbKeyHint} saved={settings.sportsdbKeySet === "1"} onSave={(sportsdbKey) => onChange({ sportsdbKey })} />
+      </Group>
+    </>
+  );
+}
+
+export function RecordingSection({ settings, storage, onChange }: { settings: Settings; storage: StorageInfo | null; onChange: Change }) {
+  return (
+    <>
+      <Group title={h("rec.space")}>
+        {storage ? <SpaceMeter storage={storage} /> : null}
+        <ReserveRow value={settings.watermarkGB || "10"} onSave={(watermarkGB) => onChange({ watermarkGB })} />
+      </Group>
+      <Group title={h("rec.cleanup")}>
+        <ChoiceRow
+          label={t("settings.lowSpace")}
+          hint={t("settings.lowSpaceHint")}
+          stack
+          value={settings.makeRoom === "1" ? "1" : "0"}
+          options={[
+            { value: "0", label: t("settings.skipNew") },
+            { value: "1", label: t("settings.deleteOldest") },
+          ]}
+          onChange={(makeRoom) => onChange({ makeRoom })}
+        />
+        <SelectRow
+          label={t("settings.deleteWatched")}
+          hint={t("settings.deleteWatchedHint")}
+          value={watchedDays(settings.deleteWatchedDays)}
+          options={watchedChoices(settings.deleteWatchedDays).map((days) => ({ value: days, label: t("settings.afterDays", Number(days)) }))}
+          onChange={(deleteWatchedDays) => onChange({ deleteWatchedDays })}
+        />
+        <ChoiceRow
+          label={t("settings.favorites")}
+          hint={t("settings.favoritesHint")}
+          stack
+          value={settings.protectFavorites === "1" ? "1" : "0"}
+          options={[
+            { value: "0", label: t("settings.favoritesCleanUp") },
+            { value: "1", label: t("settings.favoritesLeave") },
+          ]}
+          onChange={(protectFavorites) => onChange({ protectFavorites })}
+        />
+      </Group>
+      <Group title={h("rec.files")}>
+        <Row label={h("rec.folder")} hint={copy.settings.recordingsHint} stack>
+          <code className="set-path">{storage?.path || "—"}</code>
+        </Row>
+        <ChoiceRow
+          label={t("settings.folders")}
+          hint={t("settings.foldersHint")}
+          stack
+          value={settings.folderLayout === "flat" ? "flat" : "shows"}
+          options={[
+            { value: "shows", label: t("settings.foldersByShow") },
+            { value: "flat", label: t("settings.foldersFlat") },
+          ]}
+          onChange={(folderLayout) => onChange({ folderLayout })}
+        />
+        <SwitchRow label={copy.settings.nfo} hint={copy.settings.nfoHint} checked={settings.writeNfo === "1"} onChange={(on) => onChange({ writeNfo: on ? "1" : "0" })} />
+      </Group>
+      <ShowSpace />
+    </>
+  );
+}
+
+function SpaceMeter({ storage }: { storage: StorageInfo }) {
+  const used = storage.totalBytes > 0 ? Math.min(1, Math.max(0, 1 - storage.freeBytes / storage.totalBytes)) : 0;
+  const reserve = storage.totalBytes > 0 ? Math.min(1, (storage.watermarkGB * 1e9) / storage.totalBytes) : 0;
+  return (
+    <div className="set-row stack">
+      <div className="set-row-text">
+        <span className="set-row-label">{h("rec.free", { free: formatBytes(storage.freeBytes), total: formatBytes(storage.totalBytes) })}</span>
+        <span className="set-row-hint">{storage.watermarkGB === 0 ? t("settings.reserveOff") : t("settings.reserveStop", { gb: storage.watermarkGB })}</span>
+      </div>
+      <div className="set-meter" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(used * 100)} aria-label={h("rec.space")}>
+        <span className="set-meter-fill" style={{ width: `${used * 100}%` }} />
+        {reserve > 0 ? <span className="set-meter-reserve" style={{ width: `${reserve * 100}%` }} /> : null}
+      </div>
+    </div>
   );
 }
 
 function ShowSpace() {
   const [rows, setRows] = useState<StorageShow[] | null>(null);
   const [error, setError] = useState("");
+  const [all, setAll] = useState(false);
   useEffect(() => {
     let stop = false;
     void getStorageShows()
@@ -393,52 +203,63 @@ function ShowSpace() {
       stop = true;
     };
   }, []);
+  const limit = 8;
+  const shown = rows ? (all ? rows : rows.slice(0, limit)) : [];
   return (
-    <section aria-label={copy.settings.byShow}>
-      <h3 className="section-title">{copy.settings.byShow}</h3>
+    <Group title={h("rec.byShow")}>
       {error ? (
-        <p className="error" role="alert">
+        <p className="set-note error" role="alert">
           {error}
         </p>
       ) : null}
-      {rows && rows.length === 0 ? <p className="hint">{copy.settings.byShowEmpty}</p> : null}
-      {rows && rows.length > 0 ? (
-        <ul className="source-list">
-          {rows.map((row) => {
-            const href = `/recordings?show=${encodeURIComponent(row.title)}`;
-            const count = t("settings.recordingsCount", row.count);
-            return (
-              <li key={row.title} className="source-row">
-                <a
-                  href={href}
-                  onClick={(event) => {
-                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-                    event.preventDefault();
-                    navigate(href);
-                  }}
-                >
-                  {row.title}
-                </a>
-                <span>{count}</span>
-                <span className="hint">{formatBytes(row.bytes)}</span>
-              </li>
-            );
-          })}
-        </ul>
+      {rows && rows.length === 0 ? <p className="set-note">{copy.settings.byShowEmpty}</p> : null}
+      {shown.map((row) => {
+        const href = `/recordings?show=${encodeURIComponent(row.title)}`;
+        return (
+          <div key={row.title} className="set-row">
+            <div className="set-row-text">
+              <a
+                className="set-row-label"
+                href={href}
+                onClick={(event) => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                  event.preventDefault();
+                  navigate(href);
+                }}
+              >
+                {row.title}
+              </a>
+              <span className="set-row-hint">{t("settings.recordingsCount", row.count)}</span>
+            </div>
+            <span className="set-row-value">{formatBytes(row.bytes)}</span>
+          </div>
+        );
+      })}
+      {rows && rows.length > limit ? (
+        <div className="set-row more">
+          <button type="button" className="btn small ghost" aria-expanded={all} onClick={() => setAll((v) => !v)}>
+            {all ? h("backups.fewer") : h("rec.byShowMore", rows.length - limit)}
+          </button>
+        </div>
       ) : null}
-    </section>
+    </Group>
   );
 }
 
-function BackupList() {
+export function BackupsSection() {
   const [rows, setRows] = useState<CatalogBackup[] | null>(null);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState("");
+  const [all, setAll] = useState(false);
+  const [asking, setAsking] = useState<CatalogBackup | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const fileId = useId();
   useEffect(() => {
     let stop = false;
     void listBackups()
       .then((res) => {
-        if (!stop) setRows(res.backups ?? []);
+        if (!stop) setRows([...(res.backups ?? [])].sort((a, b) => Date.parse(b.takenAt) - Date.parse(a.takenAt)));
       })
       .catch(() => {
         if (!stop) setError(copy.settings.backupFailed);
@@ -448,56 +269,190 @@ function BackupList() {
     };
   }, []);
   async function restore(row: CatalogBackup) {
-    if (!window.confirm(copy.settings.restoreConfirm)) return;
-    setBusy(row.name);
+    setBusy(true);
     setError("");
     try {
       await restoreBackup(row.name);
       window.location.reload();
     } catch {
       setError(copy.settings.restoreFailed);
-      setBusy("");
+      setBusy(false);
+      setAsking(null);
     }
   }
+  async function restoreFile(chosen: File) {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch("/api/v1/backup", { method: "POST", body: chosen, headers: authHeaders() });
+      if (!res.ok) throw new Error(t("settings.restoreError"));
+      window.location.reload();
+    } catch {
+      setError(copy.settings.restoreFailed);
+      setBusy(false);
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+  const limit = 4;
+  const shown = rows ? (all ? rows : rows.slice(0, limit)) : [];
   return (
     <>
-      {error ? (
-        <p className="error" role="alert">
-          {error}
+      <Group>
+        <Row label={h("backups.now")} hint={h("backups.nowHint")}>
+          <a className="btn primary" href="/api/v1/backup" download>
+            {copy.settings.backup}
+          </a>
+        </Row>
+      </Group>
+      <Group title={h("backups.recent")} lede={copy.settings.backupHint}>
+        {error ? (
+          <p className="set-note error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {rows && rows.length === 0 ? <p className="set-note">{copy.settings.backupEmpty}</p> : null}
+        {shown.length > 0 ? (
+          <ul className="set-list backup-list">
+            {shown.map((row) => {
+              const when = backupWhen(row.takenAt);
+              const kind = backupKind(row.kind);
+              return (
+                <li key={row.name} className="set-row backup-row">
+                  <div className="set-row-text">
+                    <span className="set-row-label">{when}</span>
+                    <span className="set-row-hint">
+                      {kind} · {formatBytes(row.bytes)}
+                    </span>
+                  </div>
+                  <div className="set-row-control backup-actions">
+                    <a className="btn small" href={`/api/v1/backups/${encodeURIComponent(row.name)}`} download aria-label={h("backups.downloadAria", { kind, when })}>
+                      {h("backups.download")}
+                    </a>
+                    <button type="button" className="btn small ghost" disabled={busy} aria-label={h("backups.restoreAria", { kind, when })} onClick={() => setAsking(row)}>
+                      {h("backups.restore")}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+        {rows && rows.length > limit ? (
+          <div className="set-row more">
+            <button type="button" className="btn small ghost" aria-expanded={all} onClick={() => setAll((v) => !v)}>
+              {all ? h("backups.fewer") : h("backups.older", rows.length - limit)}
+            </button>
+          </div>
+        ) : null}
+      </Group>
+      <Group>
+        <Row label={h("backups.fromFile")} hint={h("backups.fromFileHint")} labelFor={fileId}>
+          <label className="btn small ghost set-file">
+            {h("backups.chooseFile")}
+            <input
+              ref={fileRef}
+              id={fileId}
+              type="file"
+              accept=".db"
+              className="sr-only"
+              onChange={(event) => {
+                const chosen = event.target.files?.[0];
+                if (chosen) setFile(chosen);
+              }}
+            />
+          </label>
+        </Row>
+      </Group>
+      {asking ? (
+        <Confirm
+          title={h("backups.restoreTitle")}
+          body={<p>{h("backups.restoreBody", { when: backupWhen(asking.takenAt) })}</p>}
+          confirm={busy ? h("backups.restoring") : h("backups.restoreConfirm")}
+          cancel={h("backups.cancel")}
+          busy={busy}
+          onConfirm={() => void restore(asking)}
+          onCancel={() => setAsking(null)}
+        />
+      ) : null}
+      {file ? (
+        <Confirm
+          title={h("backups.fileTitle", { file: file.name })}
+          body={<p>{h("backups.fileBody")}</p>}
+          confirm={busy ? h("backups.restoring") : h("backups.restoreConfirm")}
+          cancel={h("backups.cancel")}
+          busy={busy}
+          onConfirm={() => void restoreFile(file)}
+          onCancel={() => {
+            setFile(null);
+            if (fileRef.current) fileRef.current.value = "";
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+const docsURL = "https://github.com/wolfebase/broadwave/tree/main/docs/guide";
+const sourceURL = "https://github.com/wolfebase/broadwave";
+
+export function AboutSection({ server, settings, onChange }: { server: ServerInfo | null; settings: Settings; onChange: Change }) {
+  const notes = server?.update?.notesUrl && /^https:\/\/github\.com\/wolfebase\/broadwave\//.test(server.update.notesUrl) ? server.update.notesUrl : "";
+  const encoder = server?.encoder ? server.encoder.replace(/^h264_/, "").toUpperCase() : "";
+  return (
+    <>
+      <Group title={h("about.server")}>
+        <Row label={h("about.name")}>
+          <span className="set-row-value">{server?.name ?? "—"}</span>
+        </Row>
+        <Row label={h("about.version")} hint={server?.update?.message}>
+          <span className="set-row-value">{server?.version ?? "—"}</span>
+        </Row>
+        <Row label={h("about.encoder")}>
+          <span className="set-row-value">{encoder || h("about.encoderSoftware")}</span>
+        </Row>
+        <Row label={h("about.app")}>
+          <span className="set-row-value">{appVersion}</span>
+        </Row>
+        <SwitchRow label={copy.settings.updates} hint={copy.settings.updatesHint} checked={settings.checkUpdates !== "0"} onChange={(on) => onChange({ checkUpdates: on ? "1" : "0" })} />
+      </Group>
+      <Group title={h("about.help")}>
+        <Row label={h("tuners.diagnostics")} hint={h("about.diagnosticsHint")}>
+          <button type="button" className="btn small" onClick={() => navigate("/diagnostics")}>
+            {h("tuners.diagnostics")}
+          </button>
+        </Row>
+        <Row label={h("about.support")} hint={h("about.supportHint")}>
+          <a className="btn small" href="/api/v1/support" download>
+            {copy.settings.backupDownload}
+          </a>
+        </Row>
+        <Row label={h("about.setup")} hint={h("about.setupHint")}>
+          <button type="button" className="btn small" onClick={() => navigate("/setup")}>
+            {h("tuners.setupAgain")}
+          </button>
+        </Row>
+        <div className="set-row links">
+          <a href={docsURL} target="_blank" rel="noreferrer">
+            {h("about.docs")}
+          </a>
+          {notes ? (
+            <a href={notes} target="_blank" rel="noreferrer">
+              {h("about.notes")}
+            </a>
+          ) : null}
+          <a href={sourceURL} target="_blank" rel="noreferrer">
+            {h("about.source")}
+          </a>
+        </div>
+      </Group>
+      <Group title={h("about.licenses")}>
+        <p className="set-note">{h("about.license")}</p>
+        <p className="set-note">{blenderCreditText()}</p>
+        <p className="set-note">
+          <strong>{copy.settings.passwordTitle}.</strong> {copy.settings.passwordBody}
         </p>
-      ) : null}
-      {rows && rows.length === 0 ? <p className="hint">{copy.settings.backupEmpty}</p> : null}
-      {rows && rows.length > 0 ? (
-        <ul className="source-list">
-          {rows.map((row) => {
-            const when = backupWhen(row.takenAt);
-            const kind = backupKind(row.kind);
-            return (
-              <li key={row.name} className="source-row">
-                <span>{kind}</span>
-                <span>{when}</span>
-                <span className="hint">{formatBytes(row.bytes)}</span>
-                <a
-                  className="btn small"
-                  href={`/api/v1/backups/${encodeURIComponent(row.name)}`}
-                  aria-label={`${copy.settings.backupDownload} ${kind} ${when}`}
-                >
-                  {copy.settings.backupDownload}
-                </a>
-                <button
-                  type="button"
-                  className="btn small"
-                  disabled={busy !== ""}
-                  aria-label={`${copy.settings.restore} ${kind} ${when}`}
-                  onClick={() => void restore(row)}
-                >
-                  {copy.settings.restore}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+      </Group>
     </>
   );
 }
@@ -511,10 +466,11 @@ function backupKind(kind: string) {
 function backupWhen(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return formatDateTime(date);
+  return formatDateTime(date, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function GuideText({
+/** A text setting saved when the field is left. A save that echoes old text does not erase what was typed. */
+export function TextRow({
   label,
   value,
   hint,
@@ -529,15 +485,17 @@ function GuideText({
   placeholder?: string;
   onSave: (value: string) => void;
 }) {
+  const id = useId();
   const [typed, setTyped] = useState<string | null>(null);
   const draft = settingTextDraft(value, typed);
   if (draft !== typed) setTyped(draft);
   return (
-    <label className="field">
-      {label}
+    <Row label={label} hint={hint} labelFor={id} stack>
       <input
+        id={id}
+        className="set-input"
         value={shownSettingText(value, draft)}
-        autoComplete={autoComplete}
+        autoComplete={autoComplete ?? "off"}
         spellCheck={false}
         placeholder={placeholder}
         onChange={(event) => setTyped(event.target.value)}
@@ -546,42 +504,65 @@ function GuideText({
           if (commit != null) onSave(commit);
         }}
       />
-      {hint ? <span className="hint">{hint}</span> : null}
-    </label>
+    </Row>
   );
 }
 
-function ReserveField({ value, storage, onSave }: { value: string; storage: StorageInfo | null; onSave: (value: string) => void }) {
+/** A key or password. It is never shown again; a saved one says Saved. */
+function SecretRow({ label, hint, saved, autoComplete, onSave }: { label: string; hint?: string; saved: boolean; autoComplete?: string; onSave: (value: string) => void }) {
+  const id = useId();
+  return (
+    <Row label={label} hint={hint} labelFor={id} stack>
+      <input
+        id={id}
+        className="set-input"
+        type="password"
+        autoComplete={autoComplete ?? "off"}
+        spellCheck={false}
+        placeholder={saved ? t("settings.saved") : ""}
+        onBlur={(event) => {
+          const value = event.target.value;
+          if (value) onSave(value);
+          event.target.value = "";
+        }}
+      />
+    </Row>
+  );
+}
+
+function ReserveRow({ value, onSave }: { value: string; onSave: (value: string) => void }) {
+  const id = useId();
   const [typed, setTyped] = useState<string | null>(null);
   const draft = settingTextDraft(value, typed);
   if (draft !== typed) setTyped(draft);
   const text = shownSettingText(value, draft);
   return (
-    <label className="field">
-      {copy.settings.reserve}
-      <input
-        type="number"
-        min={0}
-        max={1000000}
-        aria-label={t("settings.reserveAria")}
-        value={text}
-        onChange={(event) => setTyped(event.target.value)}
-        onBlur={() => {
-          const next = Math.round(Number(text));
-          if (!Number.isFinite(next) || next < 0 || next > 1000000) {
-            setTyped(null);
-            return;
-          }
-          const rounded = String(next);
-          setTyped(rounded);
-          if (rounded !== value) onSave(rounded);
-        }}
-      />
-      <span className="hint">
-        {storage ? `${storageLine(storage)} ` : ""}
-        {copy.settings.reserveHint}
+    <Row label={copy.settings.reserve} hint={copy.settings.reserveHint} labelFor={id}>
+      <span className="set-unit">
+        <input
+          id={id}
+          className="set-input num"
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={1000000}
+          aria-label={t("settings.reserveAria")}
+          value={text}
+          onChange={(event) => setTyped(event.target.value)}
+          onBlur={() => {
+            const next = Math.round(Number(text));
+            if (!Number.isFinite(next) || next < 0 || next > 1000000) {
+              setTyped(null);
+              return;
+            }
+            const rounded = String(next);
+            setTyped(rounded);
+            if (rounded !== value) onSave(rounded);
+          }}
+        />
+        <span aria-hidden="true">{h("rec.reserveUnit")}</span>
       </span>
-    </label>
+    </Row>
   );
 }
 
@@ -595,9 +576,4 @@ function watchedChoices(raw: string | undefined) {
   const choices = ["0", "1", "3", "7", "14", "30", "60", "90"];
   const now = watchedDays(raw);
   return choices.includes(now) ? choices : [...choices, now].sort((a, b) => Number(a) - Number(b));
-}
-
-function storageLine(storage: StorageInfo) {
-  const reserve = storage.watermarkGB === 0 ? t("settings.reserveOff") : t("settings.reserveStop", { gb: storage.watermarkGB });
-  return `${t("settings.storageFree", { free: formatBytes(storage.freeBytes), total: formatBytes(storage.totalBytes) })} ${reserve}`;
 }

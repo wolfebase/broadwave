@@ -8,6 +8,7 @@ import { isForbidden, isUnauthorized } from "../../lib/deviceToken";
 import { canEditSignIn, formatPairCode, kindLabel, normalizePairCode, scopeLabel, scopesForAccess } from "./pairCode";
 import { lastSeenPhrase } from "../../time";
 import type { ClientDevice } from "../../types";
+import { ChoiceRow, Group, SwitchRow } from "./rows";
 
 const t = bind(settingsUiMessages);
 
@@ -131,89 +132,85 @@ export function PairedDevices({
   }
 
   return (
-    <section>
-      <h3 className="section-title">{t("devices.title")}</h3>
-      <p className="hint">{t("devices.lead")}</p>
+    <>
+      <Group title={t("devices.title")} lede={t("devices.lead")}>
+        {canEdit ? (
+          <SwitchRow label={t("devices.require")} hint={on ? t("devices.closedHint") : t("devices.openHint")} checked={on} onChange={(next) => void changeAuth(next ? "1" : "0")} />
+        ) : (
+          <p className="set-note">{on ? t("devices.closedHint") : t("devices.adminOnly")}</p>
+        )}
+        {error ? (
+          <p className="set-note error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {note ? (
+          <p className="set-note" role="status">
+            {note}
+          </p>
+        ) : null}
+        {canEdit && devices && devices.length === 0 ? <p className="set-note">{t("devices.none")}</p> : null}
+        {canEdit && devices && devices.length > 0 ? (
+          <ul className="set-list">
+            {devices.map((device) => {
+              const seen = lastSeenPhrase(device.lastSeenAt);
+              return (
+                <li key={device.id} className="set-row">
+                  <div className="set-row-text">
+                    <span className="set-row-label">{device.name}</span>
+                    <span className="set-row-hint">{[kindLabel(device.kind), scopeLabel(device.scopes ?? []), seen || t("devices.notSeen")].filter(Boolean).join(" · ")}</span>
+                  </div>
+                  <button type="button" className="btn small ghost" aria-label={t("devices.revokeNamed", { name: device.name })} disabled={busy} onClick={() => void revoke(device)}>
+                    {t("devices.revoke")}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+      </Group>
       {canEdit ? (
-        <label className="field">
-          {t("devices.require")}
-          <select value={on ? "1" : "0"} onChange={(event) => void changeAuth(event.target.value)}>
-            <option value="0">{t("settings.off")}</option>
-            <option value="1">{t("settings.on")}</option>
-          </select>
-          <span className="hint">{on ? t("devices.closedHint") : t("devices.openHint")}</span>
-        </label>
-      ) : (
-        <p className="hint">{on ? t("devices.closedHint") : t("devices.adminOnly")}</p>
-      )}
-      {error ? (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {note ? (
-        <p className="hint" role="status">
-          {note}
-        </p>
-      ) : null}
-      {canEdit && devices && devices.length === 0 ? <p className="empty">{t("devices.none")}</p> : null}
-      {canEdit && devices && devices.length > 0 ? (
-        <ul className="source-list">
-          {devices.map((device) => {
-            const seen = lastSeenPhrase(device.lastSeenAt);
-            return (
-              <li key={device.id} className="source-row">
-                <span>{device.name}</span>
-                <span>{kindLabel(device.kind)}</span>
-                <span>{scopeLabel(device.scopes ?? [])}</span>
-                <span className="hint">{seen || t("devices.notSeen")}</span>
-                <button type="button" className="btn" aria-label={t("devices.revokeNamed", { name: device.name })} disabled={busy} onClick={() => void revoke(device)}>
-                  {t("devices.revoke")}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-      {canEdit ? (
-        <>
-          <label className="field">
-            {t("devices.codeAllows")}
-            <select value={access} onChange={(event) => setAccess(event.target.value as Access)}>
-              <option value="watch">{t("devices.watch")}</option>
-              <option value="record">{t("devices.record")}</option>
-              <option value="admin">{t("devices.admin")}</option>
-            </select>
-          </label>
-          <button type="button" className="btn" disabled={busy} onClick={() => void issue()}>
-            {t("devices.pair")}
-          </button>
-          <button type="button" className="btn" onClick={() => navigate("/pair")}>
-            {t("devices.pairBrowser")}
-          </button>
-          {issued ? (
-            <>
-              <p className="pair-code">{formatPairCode(issued)}</p>
-              <p className="hint">{t("devices.codeHint")}</p>
-            </>
-          ) : null}
-          <form onSubmit={(event) => void approve(event)}>
-            <label className="field">
-              {t("devices.approveCode")}
-              <input
-                value={code}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                spellCheck={false}
-                onChange={(event) => setCode(event.target.value)}
-              />
-            </label>
-            <button type="submit" className="btn" disabled={busy}>
-              {t("devices.approve")}
-            </button>
+        <Group title={t("devices.pair")}>
+          <ChoiceRow
+            label={t("devices.codeAllows")}
+            value={access}
+            options={[
+              { value: "watch", label: t("devices.watch") },
+              { value: "record", label: t("devices.record") },
+              { value: "admin", label: t("devices.admin") },
+            ]}
+            onChange={setAccess}
+          />
+          <div className="set-row">
+            <div className="set-row-text">
+              <span className="set-row-label">{t("devices.pair")}</span>
+              <span className="set-row-hint">{issued ? t("devices.codeHint") : t("devices.lead")}</span>
+            </div>
+            <div className="set-row-control set-buttons">
+              <button type="button" className="btn small" disabled={busy} onClick={() => void issue()}>
+                {t("devices.pair")}
+              </button>
+              <button type="button" className="btn small ghost" onClick={() => navigate("/pair")}>
+                {t("devices.pairBrowser")}
+              </button>
+            </div>
+          </div>
+          {issued ? <p className="pair-code set-code">{formatPairCode(issued)}</p> : null}
+          <form className="set-row stack" onSubmit={(event) => void approve(event)}>
+            <div className="set-row-text">
+              <label className="set-row-label" htmlFor="approve-code">
+                {t("devices.approveCode")}
+              </label>
+            </div>
+            <div className="set-inline">
+              <input id="approve-code" className="set-input code" value={code} inputMode="numeric" autoComplete="one-time-code" spellCheck={false} onChange={(event) => setCode(event.target.value)} />
+              <button type="submit" className="btn" disabled={busy}>
+                {t("devices.approve")}
+              </button>
+            </div>
           </form>
-        </>
+        </Group>
       ) : null}
-    </section>
+    </>
   );
 }

@@ -1,31 +1,292 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
 import { getServer } from "../../api";
 import { pagesMessages } from "../../i18n/messages/pagesCopy.ts";
+import { settingsHubMessages } from "../../i18n/messages/settingsHub.ts";
+import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { useData } from "../../app/data";
+import { useLayout } from "../../app/layout";
+import { focusRing } from "../../app/remote";
 import { copy } from "../../strings";
 import { gateFeature } from "../../lib/compat";
-import { navigate } from "../../app/router";
+import { formatBytes } from "../../lib/format";
+import { isTextField } from "../../lib/textField";
+import { inAppDepth, navigate, useRoute } from "../../app/router";
+import { readAccent, readTheme } from "../../theme/look";
+import { readLiveDelay } from "../../lib/events";
 import type { ServerInfo } from "../../types";
-import { HomeList } from "../setup/HomeList";
-import { Appearance } from "./Appearance";
-import { PairedDevices } from "./PairedDevices";
-import { RemoteAccess } from "./RemoteAccess";
-import { SettingsScreen } from "./Settings";
+import { Appearance, accentName } from "./Appearance";
+import { DevicesSection } from "./Devices";
+import { AboutSection, BackupsSection, GuideSection, PlaybackSection, RecordingSection } from "./Settings";
 import { ShareLinks } from "./ShareLinks";
 import { tunerAddress } from "./tunerShare";
 import { Sources } from "./Sources";
+import { Group, SwitchRow } from "./rows";
+import { sectionFromPath, sectionIds, sectionPath, type SectionId } from "./sections";
+import { AboutIcon, AntennaIcon, AppearanceIcon, BackupIcon, ChevronLeft, ChevronRight, DevicesIcon, DiskIcon, GuideDataIcon, LinkIcon, PlaybackIcon } from "./icons";
+import "../manage.css";
+import "./settings.css";
 
 const t = bind(pagesMessages);
+const h = bind(settingsHubMessages);
+const ui = bind(settingsUiMessages);
+
+const icons: Record<SectionId, ComponentType<SVGProps<SVGSVGElement>>> = {
+  appearance: AppearanceIcon,
+  tuners: AntennaIcon,
+  playback: PlaybackIcon,
+  guide: GuideDataIcon,
+  recording: DiskIcon,
+  devices: DevicesIcon,
+  integrations: LinkIcon,
+  backups: BackupIcon,
+  about: AboutIcon,
+};
+
+// Set when a row of the Settings list opened the section, so Back returns to the list.
+let fromList = false;
+
+function open(id: SectionId, viaList: boolean) {
+  fromList = viaList;
+  navigate(sectionPath(id));
+}
+
+function backToList() {
+  if (fromList && inAppDepth() > 0) {
+    fromList = false;
+    window.history.back();
+    return;
+  }
+  navigate("/settings", true);
+}
+
+function linkClick(event: React.MouseEvent<HTMLAnchorElement>, go: () => void) {
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  event.preventDefault();
+  go();
+}
 
 export function SettingsPage() {
-  const { settings, storage, saveSettings, devices, channels, allChannels, error, rediscover, forgetDevice, editChannel, server: known } = useData();
-  const [busy, setBusy] = useState(false);
+  const data = useData();
+  const { settings, storage, devices, allChannels, server: known } = data;
+  const { path } = useRoute();
+  const layout = useLayout();
   const [fetched, setFetched] = useState<ServerInfo | null>(null);
   const server = fetched ?? known;
   useEffect(() => {
     void getServer().then(setFetched).catch(() => undefined);
   }, []);
+  const picked = sectionFromPath(path, typeof window === "undefined" ? "" : window.location.hash);
+  // A desktop or tablet window shows the list beside the section. Phone and TV go one level at a time.
+  const split = layout === "desktop";
+  const id: SectionId | null = picked ?? (split ? "appearance" : null);
+  const detailRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const lastId = useRef<SectionId | null>(null);
+
+  // Old addresses (/sources, /settings#sources, /about) land on their section's own address.
+  useEffect(() => {
+    if (!picked) return;
+    const want = sectionPath(picked);
+    if (path !== want) window.history.replaceState(window.history.state, "", want);
+  }, [picked, path]);
+
+  // On a TV, focus starts on the section's first control, or on the row a viewer came back from.
+  useEffect(() => {
+    if (layout !== "tv") return;
+    const frame = window.requestAnimationFrame(() => {
+      if (id) {
+        const first = detailRef.current?.querySelector<HTMLElement>(".settings-body button:not([disabled]), .settings-body a[href], .settings-body input:not([disabled]), .settings-body select");
+        focusRing(first ?? detailRef.current?.querySelector<HTMLElement>(".settings-back"));
+      } else {
+        const back = lastId.current ? listRef.current?.querySelector<HTMLElement>(`[data-section="${lastId.current}"]`) : null;
+        focusRing(back ?? listRef.current?.querySelector<HTMLElement>("a"));
+      }
+    });
+    lastId.current = id;
+    return () => window.cancelAnimationFrame(frame);
+  }, [id, layout]);
+
+  // A section opened from a link has nothing behind it in this tab. Back goes to the list, not out of the app.
+  useEffect(() => {
+    if (split || !picked) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (event.key !== "Escape" && event.key !== "Backspace")) return;
+      if (isTextField(event.target instanceof HTMLElement ? event.target : null)) return;
+      if (document.querySelector("[role='dialog']")) return;
+      if (inAppDepth() > 0 && fromList) return;
+      event.preventDefault();
+      backToList();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [split, picked]);
+
+  const titles: Record<SectionId, string> = {
+    appearance: h("section.appearance"),
+    tuners: h("section.tuners"),
+    playback: h("section.playback"),
+    guide: h("section.guide"),
+    recording: h("section.recording"),
+    devices: h("section.devices"),
+    integrations: h("section.integrations"),
+    backups: h("section.backups"),
+    about: h("section.about"),
+  };
+  const offline = devices.filter((device) => device.offline).length;
+  const summaries: Record<SectionId, string> = {
+    appearance: h("sum.appearance", { theme: themeWord(), accent: accentName(readAccent()) }),
+    tuners: [h("sum.tuners", devices.length), offline ? h("sum.tunersOffline", offline) : "", h("sum.channels", allChannels.filter((c) => c.present && !c.sameAs).length)].filter(Boolean).join(" · "),
+    playback: h("sum.playback", { motion: motionWord(settings.pictureMode), delay: delayWord() }),
+    guide: settings.sdUser ? h("sum.guideSd") : settings.guideUrl ? h("sum.guideXmltv") : h("sum.guideTuner"),
+    recording: storage ? h("sum.recording", { free: formatBytes(storage.freeBytes) }) : h("sum.recordingUnknown"),
+    devices: settings.deviceAuth === "1" ? h("sum.devicesOn") : h("sum.devicesOff"),
+    integrations: settings.hdhrEmulate === "1" ? h("sum.integrationsOn") : h("sum.integrationsOff"),
+    backups: h("sum.backups"),
+    about: server?.version ? h("sum.about", { version: server.version }) : h("sum.aboutUnknown"),
+  };
+
+  const serverLine = server ? h("hub.server", { name: server.name, version: server.version }) : "";
+
+  if (!id) {
+    return (
+      <div className="page-wrap settings-hub list">
+        <header className="page-header">
+          <h1>{copy.settings.title}</h1>
+          {serverLine ? <p className="page-sub">{serverLine}</p> : null}
+        </header>
+        <nav aria-label={h("hub.nav")}>
+          <ul ref={listRef} className="settings-menu">
+            {sectionIds.map((item) => {
+              const Icon = icons[item];
+              return (
+                <li key={item}>
+                  <a href={sectionPath(item)} data-section={item} className="settings-menu-row" onClick={(event) => linkClick(event, () => open(item, true))}>
+                    <span className={`settings-menu-icon ${item}`} aria-hidden="true">
+                      <Icon />
+                    </span>
+                    <span className="settings-menu-text">
+                      <span className="settings-menu-title">{titles[item]}</span>
+                      <span className="settings-menu-sum">{summaries[item]}</span>
+                    </span>
+                    <ChevronRight className="settings-menu-chev" />
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      </div>
+    );
+  }
+
+  const lede = id === "about" ? serverLine : h(`lede.${id}` as "lede.appearance");
+  const body = <SectionBody id={id} server={server} />;
+
+  if (!split) {
+    return (
+      <div ref={detailRef} className="page-wrap settings-hub detail">
+        <header className="settings-detail-head">
+          <button type="button" className="settings-back" aria-label={h("hub.backAria")} onClick={backToList}>
+            <ChevronLeft />
+            <span>{h("hub.back")}</span>
+          </button>
+          <h1>{titles[id]}</h1>
+          {lede ? <p className="settings-lede">{lede}</p> : null}
+        </header>
+        <div className="settings-body">{body}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-wrap settings-hub split">
+      <header className="page-header">
+        <h1>{copy.settings.title}</h1>
+        {serverLine ? <p className="page-sub">{serverLine}</p> : null}
+      </header>
+      <div className="settings-split">
+        <nav className="settings-nav" aria-label={h("hub.nav")}>
+          <ul>
+            {sectionIds.map((item) => {
+              const Icon = icons[item];
+              return (
+                <li key={item}>
+                  <a href={sectionPath(item)} aria-current={item === id ? "page" : undefined} className={item === id ? "settings-nav-link on" : "settings-nav-link"} onClick={(event) => linkClick(event, () => open(item, false))}>
+                    <span className={`settings-menu-icon ${item}`} aria-hidden="true">
+                      <Icon />
+                    </span>
+                    <span>{titles[item]}</span>
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+        <section ref={detailRef} className="settings-detail" aria-labelledby="settings-section-title">
+          <header className="settings-detail-head">
+            <h2 id="settings-section-title">{titles[id]}</h2>
+            {lede ? <p className="settings-lede">{lede}</p> : null}
+          </header>
+          <div className="settings-body" key={id}>
+            {body}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function SectionBody({ id, server }: { id: SectionId; server: ServerInfo | null }): ReactNode {
+  const { settings, storage, saveSettings, devices, channels, allChannels, error, rediscover, forgetDevice, editChannel, refresh } = useData();
+  const [busy, setBusy] = useState(false);
+  const change = (values: Parameters<typeof saveSettings>[0]) => void saveSettings(values);
+  switch (id) {
+    case "appearance":
+      return <Appearance settings={settings} onChange={change} />;
+    case "tuners":
+      return (
+        <Sources
+          devices={devices}
+          channels={allChannels}
+          busy={busy}
+          error={error}
+          server={server}
+          onDiscover={() => {
+            setBusy(true);
+            void rediscover().finally(() => setBusy(false));
+          }}
+          onLookup={(ip) => {
+            setBusy(true);
+            void rediscover(ip).finally(() => setBusy(false));
+          }}
+          onPatch={(c, patch) => void editChannel(c, patch)}
+          onRemove={(deviceId) => {
+            setBusy(true);
+            void forgetDevice(deviceId).finally(() => setBusy(false));
+          }}
+          onRefresh={() => refresh(["devices", "channels"])}
+        />
+      );
+    case "playback":
+      return <PlaybackSection settings={settings} onChange={change} />;
+    case "guide":
+      return <GuideSection settings={settings} onChange={change} />;
+    case "recording":
+      return <RecordingSection settings={settings} storage={storage} onChange={change} />;
+    case "devices":
+      return <DevicesSection settings={settings} onChange={saveSettings} />;
+    case "integrations":
+      return <Integrations server={server} channels={channels} allChannels={allChannels} />;
+    case "backups":
+      return <BackupsSection />;
+    case "about":
+      return <AboutSection server={server} settings={settings} onChange={change} />;
+  }
+}
+
+function Integrations({ server, channels, allChannels }: { server: ServerInfo | null; channels: { id: number }[]; allChannels: { id: number; displayName: string }[] }) {
+  const { settings, saveSettings } = useData();
   const hdhrNote = gateFeature(server, "hdhrEmulation");
   const address = tunerAddress(window.location.href);
   const mosaics = (settings.exportMosaics ?? "").split(",");
@@ -41,97 +302,56 @@ export function SettingsPage() {
     return next.join(",");
   };
   return (
-    <div className="page-wrap settings-page">
-      <header className="page-header">
-        <h1>{copy.settings.title}</h1>
-        {server ? (
-          <p className="page-sub">
-            {t("pages.serverVersion", { name: server.name, version: server.version })}
-            {server.encoder ? ` · ${t("pages.encoding", { encoder: server.encoder.replace("h264_", "").toUpperCase() })}` : ""}
-          </p>
-        ) : null}
-      </header>
-      <div className="setup-row" style={{ marginBottom: 8 }}>
-        <button type="button" className="btn" onClick={() => navigate("/diagnostics")}>
-          {t("pages.diagnostics")}
-        </button>
-        <button type="button" className="btn" onClick={() => navigate("/setup")}>
-          {t("pages.setupAgain")}
-        </button>
-        <button type="button" className="btn" onClick={() => navigate("/about")} aria-label={t("pages.aboutAria")}>
-          {t("pages.about")}
-        </button>
-      </div>
-      <Appearance />
-      <section className="settings-section">
-        <HomeList heading="h2" />
-      </section>
-      <section id="sources" className="settings-section">
-        <h2>{t("pages.tuners")}</h2>
-        <Sources
-          devices={devices}
-          channels={allChannels}
-          busy={busy}
-          error={error}
-          onDiscover={() => {
-            setBusy(true);
-            void rediscover().finally(() => setBusy(false));
-          }}
-          onLookup={(ip) => {
-            setBusy(true);
-            void rediscover(ip).finally(() => setBusy(false));
-          }}
-          onPatch={(c, patch) => void editChannel(c, patch)}
-          onRemove={(id) => {
-            setBusy(true);
-            void forgetDevice(id).finally(() => setBusy(false));
-          }}
-        />
-      </section>
-      <section className="settings-section">
-        <h2>{t("pages.playback")}</h2>
-        <SettingsScreen settings={settings} storage={storage} tunerCount={server?.tunerCount} onChange={(v) => void saveSettings(v)} />
-      </section>
-      <section className="settings-section">
-        <PairedDevices deviceAuth={settings.deviceAuth ?? "0"} onChange={saveSettings} />
-      </section>
-      <section className="settings-section">
-        <RemoteAccess onChange={saveSettings} />
-      </section>
-      <section className="settings-section">
-        <h2>{t("pages.share")}</h2>
-        <p className="dim">{t("pages.shareLead")}</p>
+    <>
+      <Group>
         {hdhrNote ? (
-          <p className="hint" role="status">{hdhrNote}</p>
+          <p className="set-note" role="status">
+            {hdhrNote}
+          </p>
         ) : (
-          <label className="switch-row">
-            <input type="checkbox" checked={settings.hdhrEmulate === "1"} onChange={(e) => void saveSettings({ hdhrEmulate: e.target.checked ? "1" : "0" })} />
-            <span>{t("pages.hdhr", { address })}</span>
-          </label>
+          <SwitchRow
+            label={h("share.sharing")}
+            hint={h("share.sharingHint", { address })}
+            checked={settings.hdhrEmulate === "1"}
+            onChange={(on) => void saveSettings({ hdhrEmulate: on ? "1" : "0" })}
+          />
         )}
-        {hdhrNote ? null : <p className="hint">{t("pages.hdhrHint")}</p>}
-        <ShareLinks pageURL={window.location.href} sharing={settings.hdhrEmulate === "1"} hdhr={!hdhrNote} />
-        <h3 className="section-title">{t("pages.mosaics")}</h3>
-        {mosaics.some(Boolean) ? (
-          <ul className="share-mosaics">
-            {mosaics.map((key, i) =>
-              key ? (
-                <li key={key}>
-                  <span>
-                    {t("pages.mosaicLine", { slot: i + 1, name: mosaicName(key) })}
-                    {listed(key) ? null : <span className="hint">{t("pages.mosaicHidden")}</span>}
-                  </span>
-                  <button type="button" className="btn small" aria-label={t("pages.removeMosaic", { name: mosaicName(key) })} onClick={() => void saveSettings({ exportMosaics: removeMosaic(mosaics, key) })}>
-                    {t("pages.remove")}
-                  </button>
-                </li>
-              ) : null,
-            )}
-          </ul>
-        ) : (
-          <p className="hint">{t("pages.mosaicEmpty")}</p>
+        <div className="set-row stack">
+          <ShareLinks pageURL={window.location.href} sharing={settings.hdhrEmulate === "1"} hdhr={!hdhrNote} />
+        </div>
+      </Group>
+      <Group title={t("pages.mosaics")}>
+        {mosaics.map((key, i) =>
+          key ? (
+            <div key={key} className="set-row">
+              <div className="set-row-text">
+                <span className="set-row-label">{t("pages.mosaicLine", { slot: i + 1, name: mosaicName(key) })}</span>
+                {listed(key) ? null : <span className="set-row-hint">{t("pages.mosaicHidden")}</span>}
+              </div>
+              <button type="button" className="btn small ghost" aria-label={t("pages.removeMosaic", { name: mosaicName(key) })} onClick={() => void saveSettings({ exportMosaics: removeMosaic(mosaics, key) })}>
+                {t("pages.remove")}
+              </button>
+            </div>
+          ) : null,
         )}
-      </section>
-    </div>
+        {mosaics.some(Boolean) ? null : <p className="set-note">{t("pages.mosaicEmpty")}</p>}
+      </Group>
+    </>
   );
+}
+
+function themeWord() {
+  const theme = readTheme();
+  return theme === "system" ? h("sum.themeSystem") : theme === "light" ? h("sum.themeLight") : h("sum.themeDark");
+}
+
+function motionWord(mode: string | undefined) {
+  if (mode === "smooth") return ui("settings.smooth");
+  if (mode === "film") return ui("settings.film");
+  return ui("settings.broadcast");
+}
+
+function delayWord() {
+  const delay = readLiveDelay();
+  return delay === "lowest" ? ui("settings.lowest") : delay === "stable" ? ui("settings.stable") : ui("settings.balanced");
 }
