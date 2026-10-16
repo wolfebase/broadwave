@@ -122,6 +122,7 @@ func (s *Store) EnableDeviceAuth(ctx context.Context, values map[string]string, 
 		return "", err
 	}
 	cleaned[SettingDeviceAuth] = "1"
+	defer s.forgetSettings()
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return "", err
@@ -154,14 +155,19 @@ ON CONFLICT(key) DO UPDATE SET value=excluded.value`, k, v); err != nil {
 	return token, nil
 }
 
-// DeviceAuthOn reads only the sign-in switch. Every request asks.
+// DeviceAuthOn reads the sign-in switch from the settings kept in memory.
+// Every request asks.
 func (s *Store) DeviceAuthOn(ctx context.Context) (bool, error) {
-	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, SettingDeviceAuth).Scan(&v)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
+	if s.settings == nil {
+		loaded, err := s.loadSettings(ctx)
+		if err != nil {
+			return false, err
+		}
+		s.settings = loaded
 	}
-	return v == "1", err
+	return s.settings[SettingDeviceAuth] == "1", nil
 }
 
 // ClientByToken finds the device for a raw bearer token.

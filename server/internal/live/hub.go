@@ -2147,7 +2147,14 @@ func (h *Hub) Shutdown() {
 	}
 	for _, f := range h.feedsLocked() {
 		if f.recording != nil {
-			h.finishRecordingLocked(f, "complete", "")
+			// A show still on is cut short, not finished: the next start
+			// records the rest (dvr.Recover), and neither piece counts as
+			// the episode.
+			status, note := "complete", ""
+			if time.Until(f.recording.ends) > 30*time.Second {
+				status, note = "interrupted", "Stopped when the server restarted."
+			}
+			h.finishRecordingLocked(f, status, note)
 		}
 		h.stopFeedLocked(f)
 	}
@@ -3178,7 +3185,9 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	if saved, err := h.Store.Recording(context.Background(), rec.id); err == nil {
 		writeSidecar(saved)
 		message := fmt.Sprintf("Saved %s on %s", saved.Title, saved.GuideNumber)
-		if status != "complete" {
+		if status == "interrupted" {
+			message = fmt.Sprintf("Paused %s on %s for a restart", saved.Title, saved.GuideNumber)
+		} else if status != "complete" {
 			message = fmt.Sprintf("Recording %s on %s ended %s", saved.Title, saved.GuideNumber, status)
 		}
 		_ = h.Store.AddEvent(context.Background(), "recording", message)

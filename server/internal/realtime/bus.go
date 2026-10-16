@@ -38,6 +38,9 @@ type Bus struct {
 	// Boot names this server process in every hello. A client that sees a
 	// new one knows the server restarted: every watch and room it had is gone.
 	Boot string
+	// Versions reports the data versions for hello, so a reconnecting app can
+	// skip a refetch of what it already has. Nil leaves them out.
+	Versions func() any
 
 	mu      sync.Mutex
 	clients map[*client]struct{}
@@ -57,12 +60,32 @@ type Presence struct {
 }
 
 type client struct {
-	send  chan []byte
-	rooms map[string]bool
-	here  Presence
+	send chan []byte
+	// behind closes when send was full: the client fell behind and is
+	// dropped, so it reconnects and catches up from hello's versions
+	// instead of silently missing a change.
+	behind   chan struct{}
+	dropOnce sync.Once
+	rooms    map[string]bool
+	here     Presence
 	// said is the channel the screen says it plays, for a screen that joins no
 	// room (sync off). A room it is in wins.
 	said int64
+}
+
+// offer queues msg without blocking. A full queue drops the client rather
+// than the message: a screen that missed guide.changed would show the old
+// guide until it happened to reload.
+func (c *client) offer(msg []byte) bool {
+	select {
+	case c.send <- msg:
+		return true
+	default:
+		if c.behind != nil {
+			c.dropOnce.Do(func() { close(c.behind) })
+		}
+		return false
+	}
 }
 
 func NewBus() *Bus {
@@ -95,10 +118,7 @@ func (b *Bus) Publish(kind string, v any) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for c := range b.clients {
-		select {
-		case c.send <- msg:
-		default:
-		}
+		c.offer(msg)
 	}
 }
 
@@ -182,10 +202,7 @@ func (b *Bus) publishRoomLocked(st RoomState) {
 	msg := frame("sync.state", st)
 	for c := range b.clients {
 		if c.rooms[st.Room] {
-			select {
-			case c.send <- msg:
-			default:
-			}
+			c.offer(msg)
 		}
 	}
 }
@@ -294,10 +311,8 @@ func (b *Bus) SendTo(id, kind string, v any) int {
 		if c.here.ID != id || c.here.Kind == "" {
 			continue
 		}
-		select {
-		case c.send <- msg:
+		if c.offer(msg) {
 			n++
-		default:
 		}
 	}
 	return n
@@ -323,7 +338,7 @@ func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.CloseNow()
-	c := &client{send: make(chan []byte, 64), rooms: map[string]bool{}, here: Presence{Addr: hostOnly(r.RemoteAddr)}}
+	c := &client{send: make(chan []byte, 64), behind: make(chan struct{}), rooms: map[string]bool{}, here: Presence{Addr: hostOnly(r.RemoteAddr)}}
 	b.mu.Lock()
 	if len(b.clients) >= maxClients {
 		b.mu.Unlock()
@@ -351,6 +366,9 @@ func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			select {
 			case <-ctx.Done():
 				return
+			case <-c.behind:
+				_ = conn.Close(websocket.StatusTryAgainLater, "fell behind; reconnect")
+				return
 			case msg := <-c.send:
 				wctx, wcancel := context.WithTimeout(ctx, 5*time.Second)
 				err := conn.Write(wctx, websocket.MessageText, msg)
@@ -368,7 +386,13 @@ func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	c.send <- frame("hello", map[string]any{"serverTime": unixMS(b.now()), "boot": b.Boot})
+	hello := map[string]any{"serverTime": unixMS(b.now()), "boot": b.Boot}
+	if b.Versions != nil {
+		if v := b.Versions(); v != nil {
+			hello["versions"] = v
+		}
+	}
+	c.send <- frame("hello", hello)
 	for {
 		_, raw, err := conn.Read(ctx)
 		if err != nil {
@@ -383,10 +407,7 @@ func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *Bus) reply(c *client, kind string, v any) {
-	select {
-	case c.send <- frame(kind, v):
-	default:
-	}
+	c.offer(frame(kind, v))
 }
 
 func (b *Bus) handle(c *client, m Message) {
@@ -526,7 +547,7 @@ func (b *Bus) handle(c *client, m Message) {
 			b.reply(c, "error", map[string]string{"code": "sync", "message": err.Error()})
 		}
 	default:
-		slog.Info(fmt.Sprintf("realtime: unknown message %q", m.Type))
+		slog.Debug(fmt.Sprintf("realtime: unknown message %q", m.Type))
 	}
 }
 
