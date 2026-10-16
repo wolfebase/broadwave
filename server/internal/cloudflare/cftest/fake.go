@@ -31,6 +31,9 @@ type Fake struct {
 	ConfigRefused bool
 	// DNSRefused refuses DNS record reads, so a removed name stays.
 	DNSRefused bool
+	// TunnelsRefused refuses making tunnels, as a sign-in for a zone in an
+	// account the owner may not change.
+	TunnelsRefused bool
 	// LoginDown answers the login poll with 503.
 	LoginDown bool
 	// Hold is how long a poll waits before 404. Zero answers at once.
@@ -271,6 +274,10 @@ func (f *Fake) api(w http.ResponseWriter, r *http.Request, path string) {
 				}
 			}
 			ok(w, list)
+			return
+		}
+		if f.TunnelsRefused {
+			fail(w, http.StatusForbidden, 10000, "Authentication error")
 			return
 		}
 		var body struct {
