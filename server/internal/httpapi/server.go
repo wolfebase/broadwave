@@ -117,6 +117,11 @@ type Server struct {
 
 	// bodies caches the encoded guide, channel, and schedule answers.
 	bodies bodyCache
+
+	probeMu      sync.Mutex
+	probing      map[int64]bool
+	probeJobs    []probeJob
+	probeRunning bool
 }
 
 func (s *Server) Handler() http.Handler {
