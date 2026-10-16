@@ -252,6 +252,13 @@ export function getAirings(window?: { from?: string; to?: string; channels?: str
   return request<{ airings: Airing[] }>(`/api/v1/airings${s ? `?${s}` : ""}`);
 }
 
+export type NowChannel = { channelId: number; now?: Airing; next?: Airing; progress: number; art: string };
+
+/** What is on every guide channel and what is next, without reading a guide window. */
+export function getNow() {
+  return request<{ at: string; channels: NowChannel[] }>("/api/v1/now");
+}
+
 export function refreshGuide() {
   return request<{ airings: number }>("/api/v1/guide/refresh", { method: "POST", body: "{}" });
 }
