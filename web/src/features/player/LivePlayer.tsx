@@ -5,7 +5,7 @@ import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
 import { actionName } from "../../lib/actionName";
 import { isTextField } from "../../lib/dialogFocus";
-import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
+import { airingAt, categoryOf, minutesLeft, nextAfter, progress, timeLabel } from "../../lib/guide";
 import { channelNumberContinues, typedChannel } from "../../lib/remote";
 import { canonicalKey } from "../../lib/tvKey";
 import type { SyncStatus } from "../../lib/sync";
@@ -35,6 +35,9 @@ import { recordingHoldingStart, scrubHold, startOverChoice } from "./startOver";
 import { Stage } from "./Stage";
 import { groupRoom, peopleSentence, personLabel, useGroup } from "./together";
 import { useLiveStream } from "./useLiveStream";
+import { neighbourIds } from "./warmPlan";
+import { noteHandoff } from "../multiview/handoff";
+import { readCaptionStyle, saveCaptionStyle, type CaptionStyle } from "./captionStyle";
 
 const t = bind(playerUiMessages);
 
@@ -87,6 +90,12 @@ export function LivePlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const rootRef = useRef<HTMLElement>(null);
   const [opts, setOpts] = useState<Options>(readOptions);
+  const [cc, setCc] = useState<CaptionStyle>(readCaptionStyle);
+  function styleCaptions(next: Partial<CaptionStyle>) {
+    const style = { ...cc, ...next };
+    setCc(style);
+    saveCaptionStyle(style);
+  }
   // Pause and seek drop sync for this visit only. The checkbox stays in opts.
   const [detached, setDetached] = useState(false);
   const [picturePick, setPicturePick] = useState<PictureMode | null>(null);
@@ -122,6 +131,18 @@ export function LivePlayer({
   }, [channel.id]);
   const session = stream.session;
   const error = stream.error;
+  // Side by side takes over the screen. Its tile for this channel joins the
+  // rendition playing here, so the picture does not start over cold.
+  const handing = useRef({ id: channel.id, rendition: "" });
+  useEffect(() => {
+    handing.current = { id: channel.id, rendition: session?.rendition ?? "" };
+  });
+  useEffect(
+    () => () => {
+      if (window.location.pathname === "/multiview") noteHandoff(handing.current.id, handing.current.rendition);
+    },
+    [],
+  );
   const sync: SyncStatus = stream.syncStatus;
   const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync" | "help" | "move">("none");
   const moveButton = useRef<HTMLButtonElement>(null);
@@ -136,6 +157,8 @@ export function LivePlayer({
   if (listing.id !== channel.id) setListing({ id: channel.id, checks: 0, checking: false });
   const playback = usePlaybackStats(videoRef, panel === "info");
   const [behind, setBehind] = useState(0);
+  // The broadcast's own clock at the playhead (Unix ms), for the scrubber's time.
+  const [programAt, setProgramAt] = useState<number | null>(null);
   // The broadcast time the live window starts at, for Start over.
   const [windowFrom, setWindowFrom] = useState<number | null>(null);
   const [span, setSpan] = useState({ at: 0, len: 1 });
@@ -181,8 +204,38 @@ export function LivePlayer({
   }, [channel.id, channels]);
 
   const airing = airingAt(index, channel.id, now);
+  const [flash, setFlash] = useState<{ id: number; dir: 1 | -1; n: number } | null>(null);
+  useEffect(() => {
+    if (!flash) return;
+    const timer = window.setTimeout(() => setFlash(null), 1600);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
+
+  // The window names the channel, so a tab or a task switcher says what is on.
+  useEffect(() => {
+    if (mode !== "full") return;
+    const show = airing?.title && airing.title !== channel.displayName ? ` · ${airing.title}` : "";
+    document.title = `${channel.displayNumber} ${channel.displayName}${show} · Broadwave`;
+  }, [mode, channel.displayNumber, channel.displayName, airing?.title]);
   // A master switches sound without a new picture.
   const tuning = useFirstFrame(videoRef, `${channel.id}:${opts.quality}:${opts.audio}:${stream.sounds ? "" : opts.track}:${opts.even}:${picture}`);
+  // Once the picture moves, start the likely next change (channel up, then the
+  // last channel) and fetch their art, so the change that follows is instant.
+  const warmNext = stream.warm;
+  useEffect(() => {
+    if (tuning || mode !== "full") return;
+    const neighbours = neighbourIds(channels.map((c) => c.id), channel.id, previous.current?.id);
+    if (neighbours.length === 0) return;
+    const timer = window.setTimeout(() => {
+      warmNext(neighbours[0]);
+      for (const id of neighbours) {
+        const a = airingAt(index, id, Date.now());
+        if (a?.imageUrl) new Image().src = `/media/art/airing/${a.id}?w=960`;
+      }
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [tuning, mode, channels, channel.id, warmNext, index]);
+
   // Who sent this channel here. Its 6 s start once the picture moves; a cold tune would use them up.
   const [sent, setSent] = useState<SentNote | null>(null);
   useEffect(() => onSentHere(setSent), []);
@@ -227,6 +280,7 @@ export function LivePlayer({
       setBehind(Math.max(0, end - video.currentTime));
       setSpan({ at, len: Math.max(1, end - start) });
       const media = mediaNow();
+      setProgramAt(media ?? (video.seekable.length ? Date.now() - Math.max(0, end - video.currentTime) * 1000 : null));
       setWindowFrom(media === null || !video.seekable.length ? null : Math.round((media - (video.currentTime - start) * 1000) / 1000) * 1000);
       // A timeupdate while the seek is still behind keeps the drag. Arriving drops it.
       holdScrub(scrubHold(scrubAtRef.current, at));
@@ -390,10 +444,16 @@ export function LivePlayer({
     void video.play();
   }
 
-  function step(dir: number) {
+  function stepTarget(dir: number): Channel | undefined {
     const i = channels.findIndex((c) => c.id === channel.id);
-    const next = channels[(i + dir + channels.length) % channels.length];
-    if (next) onChannel(next);
+    return channels[(i + dir + channels.length) % channels.length];
+  }
+
+  function step(dir: number) {
+    const next = stepTarget(dir);
+    if (!next) return;
+    setFlash({ id: next.id, dir: dir > 0 ? 1 : -1, n: (flash?.n ?? 0) + 1 });
+    onChannel(next);
   }
 
   async function toggleRecord() {
@@ -508,8 +568,9 @@ export function LivePlayer({
       " ": togglePlay,
       ArrowLeft: () => jump(-15),
       ArrowRight: () => jump(30),
-      ArrowUp: () => step(-1),
-      ArrowDown: () => step(1),
+      // Channel up is the next number, as on a remote.
+      ArrowUp: () => step(1),
+      ArrowDown: () => step(-1),
       g: openGuide,
       m: () => {
         const stored = localStorage.getItem("broadwave-mv-layout");
@@ -571,6 +632,25 @@ export function LivePlayer({
   }, [mode]);
 
   const liveLabel = livePillLabel(syncing && sync.state !== "off", behind);
+  const atLive = liveLabel === t("player.live");
+  const flashChannel = flash ? channels.find((c) => c.id === flash.id) : undefined;
+  const upNext = airing ? nextAfter(index, channel.id, Date.parse(airing.end)) : undefined;
+  // The scrubber reads the broadcast's clock: 9:12 PM · 14s behind, and a way back to live.
+  const liveTime = programAt ? (
+    <span className="live-time">
+      <span>{t("player.programAt", { time: timeLabel(programAt), state: liveLabel })}</span>
+      {atLive ? null : (
+        <button type="button" className="go-live" onClick={goLive}>
+          {t("player.goLiveShort")}
+        </button>
+      )}
+    </span>
+  ) : undefined;
+
+  function warmStep(dir: number) {
+    const target = stepTarget(dir);
+    if (target && target.id !== channel.id) warmNext(target.id);
+  }
   const title = airing?.title || channel.displayName;
   const eyebrow = useMemo(
     () => (
@@ -631,6 +711,56 @@ export function LivePlayer({
         video.currentTime = video.seekable.start(0) + value;
       }}
       onJump={jump}
+      onSwipe={step}
+      timeText={liveTime}
+      valueText={programAt ? t("player.programAt", { time: timeLabel(programAt), state: liveLabel }) : undefined}
+      // The tuning card already names the channel; the note is for a change that is instant.
+      flash={flashChannel && !tuning ? (
+        <p className="channel-flash" role="status" aria-label={t(flash!.dir > 0 ? "player.flashUp" : "player.flashDown", { channel: `${flashChannel.displayNumber} ${flashChannel.displayName}` })}>
+          <span aria-hidden="true">{flash!.dir > 0 ? "▲" : "▼"}</span>
+          <strong>{flashChannel.displayNumber}</strong>
+          <span>{airingAt(index, flashChannel.id, now)?.title ?? flashChannel.displayName}</span>
+        </p>
+      ) : null}
+      below={
+        <>
+          <section className="pb-now" aria-label={title}>
+            <p className="pb-eyebrow">{eyebrow}</p>
+            <h2 className="pb-title">{title}</h2>
+            {airing?.subtitle ? <p className="pb-sub">{airing.subtitle}</p> : null}
+            {airing ? <Progress value={progress(airing, now)} category={categoryOf(airing)} /> : null}
+            {upNext ? (
+              <p className="pb-next">
+                {t("player.nextAt", { time: timeLabel(upNext.start) })} · <strong>{upNext.title}</strong>
+              </p>
+            ) : null}
+          </section>
+          <h3 className="pb-head">{t("player.channels")}</h3>
+          <ul className="pb-list">
+            {channels.map((c) => {
+              const a = airingAt(index, c.id, now);
+              return (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    className={c.id === channel.id ? "pb-row current" : "pb-row"}
+                    aria-current={c.id === channel.id ? "true" : undefined}
+                    onPointerDown={() => c.id !== channel.id && warmNext(c.id)}
+                    onClick={() => c.id !== channel.id && onChannel(c)}
+                  >
+                    <span className="pb-num">{c.displayNumber}</span>
+                    <span className="pb-body">
+                      <span className="pb-name">{c.displayName}</span>
+                      <span className="pb-show">{a?.title ?? t("player.noListingShort")}</span>
+                      <Progress value={progress(a, now)} category={categoryOf(a)} />
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      }
       onTogglePlay={togglePlay}
       onSound={() => {
         const video = videoRef.current;
@@ -680,10 +810,10 @@ export function LivePlayer({
           <CastButton appId={server?.castAppId ?? ""} channelId={channel.id} playlist={stream.session?.playlist ?? ""} room={room} title={airing?.title || channel.displayName} subtitle={channel.displayName} />
           {layout === "phone" ? (
             <span className="channel-step">
-              <button type="button" className="glass-icon" aria-label={t("player.prevChannel")} onClick={() => step(-1)}>
+              <button type="button" className="glass-icon" aria-label={t("player.nextChannel")} onPointerDown={() => warmStep(1)} onClick={() => step(1)}>
                 <ChevronIcon style={{ transform: "rotate(-90deg)" }} />
               </button>
-              <button type="button" className="glass-icon" aria-label={t("player.nextChannel")} onClick={() => step(1)}>
+              <button type="button" className="glass-icon" aria-label={t("player.prevChannel")} onPointerDown={() => warmStep(-1)} onClick={() => step(-1)}>
                 <ChevronIcon style={{ transform: "rotate(90deg)" }} />
               </button>
             </span>
@@ -739,6 +869,13 @@ export function LivePlayer({
               labels={{ off: t("player.off"), on: t("player.on") }}
               onChange={(v) => setOpts((o) => ({ ...o, captions: v === "on" }))}
             />
+          ) : null}
+          {stream.canCaption && opts.captions ? (
+            <>
+              <OptionRow label={t("player.ccSize")} value={cc.size} options={["small", "medium", "large"]} labels={{ small: t("player.ccSmall"), medium: t("player.ccMedium"), large: t("player.ccLarge") }} onChange={(size) => styleCaptions({ size })} />
+              <OptionRow label={t("player.ccBack")} value={cc.back} options={["none", "box", "solid"]} labels={{ none: t("player.ccNone"), box: t("player.ccBox"), solid: t("player.ccSolid") }} onChange={(back) => styleCaptions({ back })} />
+              <OptionRow label={t("player.ccColor")} value={cc.color} options={["white", "yellow"]} labels={{ white: t("player.ccWhite"), yellow: t("player.ccYellow") }} onChange={(color) => styleCaptions({ color })} />
+            </>
           ) : null}
           <OptionRow label={t("player.evenVolume")} value={opts.even ? "on" : "off"} options={["off", "on"]} labels={{ off: t("player.off"), on: t("player.on") }} onChange={(v) => setOpts((o) => ({ ...o, even: v === "on" }))} />
           <OptionRow

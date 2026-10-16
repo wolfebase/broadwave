@@ -26,10 +26,11 @@ test("captions and audio are labelled and a remote can change them", async ({ pa
   const stage = page.getByRole("region", { name: "Player" });
   await expect(stage).toBeVisible();
   await stage.evaluate((el: HTMLElement) => el.focus({ focusVisible: true } as FocusOptions));
+  // The picture takes the keys, and draws no ring around the whole screen.
   await expect.poll(() =>
     stage.evaluate((el) => {
       const style = getComputedStyle(el);
-      return el.matches(":focus-visible") && style.outlineStyle === "solid" && Number.parseFloat(style.outlineWidth) >= 4 && Number.parseFloat(style.outlineOffset) < 0;
+      return document.activeElement === el && style.outlineStyle === "none" && style.boxShadow === "none";
     }),
   ).toBe(true);
   const video = page.locator("video.stage-video");

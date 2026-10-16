@@ -241,13 +241,22 @@ export function search(q: string) {
   return request<{ query: string; airings: SearchAiring[]; recordings: Recording[] }>(`/api/v1/search?q=${encodeURIComponent(q)}`);
 }
 
-export function getAirings(window?: { from?: string; to?: string; channels?: string }) {
+/** fields "grid" leaves out the description, cast, and the other details a grid does not draw. */
+export function getAirings(window?: { from?: string; to?: string; channels?: string; fields?: "grid" }) {
   const q = new URLSearchParams();
   if (window?.from) q.set("from", window.from);
   if (window?.to) q.set("to", window.to);
   if (window?.channels) q.set("channels", window.channels);
+  if (window?.fields) q.set("fields", window.fields);
   const s = q.toString();
   return request<{ airings: Airing[] }>(`/api/v1/airings${s ? `?${s}` : ""}`);
+}
+
+export type NowChannel = { channelId: number; now?: Airing; next?: Airing; progress: number; art: string };
+
+/** What is on every guide channel and what is next, without reading a guide window. */
+export function getNow() {
+  return request<{ at: string; channels: NowChannel[] }>("/api/v1/now");
 }
 
 export function refreshGuide() {

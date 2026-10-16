@@ -2,14 +2,13 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Guide } from "../features/guide/Guide";
 import { Home } from "../features/home/Home";
 import { gateApp } from "../lib/compat";
-import { recordingCountLabel } from "../lib/guide";
 import { events } from "../lib/events";
 import { shellMessages } from "../i18n/messages/shell";
 import { bind } from "../i18n/runtime";
-import { formatClock } from "../time";
-import { GuideIcon, HomeIcon, RecordingsIcon, ScheduleIcon, SearchIcon, SettingsIcon, SportsIcon } from "../ui/icons";
 import { DataProvider, useData } from "./data";
 import { useLayout } from "./layout";
+import { Nav, routeTitle } from "./Nav";
+import { NotFound } from "./NotFound";
 import { PlayerProvider, usePlayer } from "./player";
 import { focusRing, installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
@@ -54,14 +53,7 @@ function PlayClaim() {
   return null;
 }
 
-const tabs = [
-  { path: "/", label: "nav.home", Icon: HomeIcon },
-  { path: "/guide", label: "nav.guide", Icon: GuideIcon },
-  { path: "/search", label: "nav.search", Icon: SearchIcon },
-  { path: "/sports", label: "nav.sports", Icon: SportsIcon },
-  { path: "/recordings", label: "nav.recordings", Icon: RecordingsIcon },
-  { path: "/schedule", label: "nav.schedule", Icon: ScheduleIcon },
-] as const;
+const knownPaths = new Set(["/", "/index.html", "/guide", "/search", "/sports", "/recordings", "/library", "/schedule", "/settings", "/sources", "/about", "/play", "/watch", "/multiview", "/setup", "/diagnostics", "/pair"]);
 
 function notesHref(url: string | undefined): string {
   if (!url) return "";
@@ -104,7 +96,9 @@ function Shell() {
 
   useEffect(() => {
     if (layout !== "tv" || booting) return;
-    const frame = window.requestAnimationFrame(() => {
+    let frame = 0;
+    let tries = 0;
+    const place = () => {
       // Leaving the player leaves focus on the docked mini player, which no key reaches and no ring shows.
       const active = document.activeElement;
       const lost = !(active instanceof HTMLElement) || active === document.body || active === document.documentElement || active.matches(".stage.mini") || Boolean(active.closest("[inert]"));
@@ -121,12 +115,19 @@ function Shell() {
         pick(".stage:not(.mini) .transport-play") ||
         pick(".stage:not(.mini) button:not([disabled])") ||
         pick(".stage:not(.mini)") ||
-        pick(".has-mini .guide-canvas") ||
-        pick(".tabs [role='tab'][aria-selected='true']") ||
-        pick("main button:not([disabled]), main a[href], main [tabindex='0']");
-      focusRing(target);
-    });
-    return () => window.cancelAnimationFrame(frame);
+        // The page's content first: the bar is one press up.
+        pick("main .guide-canvas") ||
+        pick("main .hero-actions .btn") ||
+        pick("main button:not([disabled]):not(.skip-link), main a[href]:not(.skip-link), main input, main [tabindex='0']");
+      // A page still loading has no content yet. Wait a moment for it before settling for the bar.
+      if (!target && tries++ < 12) {
+        frame = window.setTimeout(place, 100);
+        return;
+      }
+      focusRing(target ?? pick(".tabs [aria-current='page']"));
+    };
+    frame = window.setTimeout(place, 16);
+    return () => window.clearTimeout(frame);
   }, [path, layout, booting, fullPlayer]);
 
   useEffect(() => {
@@ -147,6 +148,13 @@ function Shell() {
     };
   }, []);
 
+  const known = knownPaths.has(path);
+  useEffect(() => {
+    // The player names its channel; every other page names itself.
+    if (path === "/watch" && player.channel) return;
+    document.title = routeTitle(path, known);
+  }, [path, known, player.channel]);
+
   const incompatible = gateApp(server);
   if (incompatible) {
     return (
@@ -161,7 +169,6 @@ function Shell() {
     );
   }
 
-  const active = (p: string) => (p === "/" ? path === "/" : path.startsWith(p));
   let page: React.ReactNode;
   if (needsPair || path === "/pair") page = <PairScreen onPaired={() => { notePaired(); navigate("/"); }} />;
   else if (path === "/diagnostics") page = <DiagnosticsPage />;
@@ -176,42 +183,25 @@ function Shell() {
   else if (path === "/play") page = <PlayPage />;
   else if (path === "/watch" && params.has("virtual")) page = <VirtualPage />;
   else if (path === "/watch" || path === "/multiview") page = path === "/multiview" ? <Multiview /> : null;
-  else page = <Home />;
+  else if (known) page = <Home />;
+  else page = <NotFound tv={layout === "tv"} />;
 
   return (
     <div className={`shell layout-${layout}${fullPlayer || immersive ? " immersive" : ""}${player.channel && !fullPlayer && path !== "/multiview" ? " has-mini" : ""}`}>
       {!immersive ? (
-        <nav className="topbar glass" aria-label={shell("nav.primary")} inert={fullPlayer ? true : undefined}>
-          <button type="button" className="brand" onClick={() => navigate("/")} aria-label={shell("nav.homeAria")}>
-            <span className="brand-tally" aria-hidden="true" />
-            <span className="brand-word">{shell("shell.brand")}</span>
-          </button>
-          <div className="tabs" role="tablist">
-            {tabs.map(({ path: p, label, Icon }) => (
-              <button key={p} type="button" role="tab" aria-selected={active(p)} className={active(p) ? "tab on" : "tab"} onClick={() => navigate(p)}>
-                <Icon className="tab-icon" />
-                <span className="tab-label">{shell(label)}</span>
-                {p === "/recordings" && recordingCount > 0 ? (
-                  <span className="tab-rec">
-                    <span className="sr-only">{recordingCountLabel(recordingCount)}</span>
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
-          <div className="topbar-right">
-            {!online ? (
-              <span className="offline" role="status">
-                {freshAt ? shell("shell.offlineSaved", { time: formatClock(new Date(freshAt)) }) : shell("shell.offline")}
-              </span>
-            ) : null}
-            <button type="button" className={active("/settings") ? "glass-icon on" : "glass-icon"} onClick={() => navigate("/settings")} aria-label={shell("nav.settings")}>
-              <SettingsIcon />
-            </button>
-          </div>
-        </nav>
+        <a className="skip-link" href="#main" onClick={(event) => {
+          event.preventDefault();
+          const main = document.getElementById("main");
+          main?.focus();
+          main?.scrollIntoView({ block: "start" });
+        }}>
+          {shell("nav.skip")}
+        </a>
       ) : null}
-      <main className="content" aria-busy={booting} data-ready={ready ? "1" : "0"} inert={fullPlayer ? true : undefined}>
+      {!immersive ? (
+        <Nav path={path} layout={layout} inert={fullPlayer} recordingCount={recordingCount} online={online} freshAt={freshAt} />
+      ) : null}
+      <main id="main" tabIndex={-1} className="content" aria-busy={booting} data-ready={ready ? "1" : "0"} inert={fullPlayer ? true : undefined}>
         {booting ? <div className="boot"><span className="brand-tally" /> {shell("shell.booting")}</div> : null}
         {!booting && error ? <p className="banner-error" role="alert">{error}</p> : null}
         {!booting && notice?.message ? (

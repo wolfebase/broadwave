@@ -75,6 +75,7 @@ export function useLiveStream(
     captions,
     fits,
     alternates,
+    rendition,
   }: {
     channelId: number;
     quality?: Prefs["quality"];
@@ -96,9 +97,13 @@ export function useLiveStream(
     fits?: boolean;
     // Ask for a master with every sound track when the channel carries more than one.
     alternates?: boolean;
+    // Join this rendition on the first watch: the picture another player on this
+    // page was just playing, still running on the server.
+    rendition?: string;
   },
 ) {
   const syncRef = useRef<SyncEngine | null>(null);
+  const joinFirst = useRef(rendition ?? "");
   const hlsRef = useRef<Hls | null>(null);
   const audibleRef = useRef(audible);
   const [session, setSession] = useState<WatchSession | null>(null);
@@ -332,7 +337,9 @@ export function useLiveStream(
         const askAlternates = !!alternates && Hls.isSupported();
         // Only hls.js starts on the room's frame (startOnRoom below).
         const joining = Hls.isSupported() && syncing.current && !holdSync.current ? (roomRef.current ?? "") : "";
-        const next = await watchChannel(id, webCaps(askAlternates), { quality, audio, picture, track, even }, "", allow, ctrl.signal, joining);
+        const handed = joinFirst.current;
+        joinFirst.current = "";
+        const next = await watchChannel(id, webCaps(askAlternates), { quality, audio, picture, track, even }, handed, allow, ctrl.signal, joining);
         if (!dead) order?.answered(id);
         joined = next.rendition;
         boot = next.boot ?? "";

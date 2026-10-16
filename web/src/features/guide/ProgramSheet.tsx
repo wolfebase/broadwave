@@ -6,15 +6,17 @@ import { usePlayer } from "../../app/player";
 import { useDialogFocus } from "../../ui/useDialogFocus";
 import { navigate } from "../../app/router";
 import { actionName } from "../../lib/actionName";
-import { categoryLabel, categoryOf, guideSourceLine, isRecording, liveChannel, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
+import { categoryLabel, categoryOf, isRecording, liveChannel, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
 import { CloseIcon, PlayIcon, RecordIcon, StarIcon } from "../../ui/icons";
 import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, LiveDot, Progress } from "../../ui/primitives";
+import { useAiringDetails } from "./useAiringDetails";
 
 const t = bind(guideUiMessages);
 
-export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: Channel; airing?: Airing; onClose: () => void; onWatch: (c: Channel) => void }) {
+export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { channel: Channel; airing?: Airing; onClose: () => void; onWatch: (c: Channel) => void }) {
+  const airing = useAiringDetails(listed);
   const { now, planned, recordings, passes, record, recordSeries, recordOnce, removePass, favorite, stopRecord, allChannels } = useData();
   const shown = liveChannel(allChannels, channel);
   const player = usePlayer();
@@ -40,12 +42,21 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
           <button type="button" className="glass-icon ps-close" onClick={onClose} aria-label={t("guideUi.close")}>
             <CloseIcon />
           </button>
-          <div className="ps-art-meta">
-            <ChannelBadge channel={channel} size="lg" />
-            {onNow && airing ? <LiveDot /> : null}
-          </div>
+          {/* Over a picture the badge covered the art. It moves under it. */}
+          {airing?.imageUrl ? null : (
+            <div className="ps-art-meta">
+              <ChannelBadge channel={channel} size="lg" />
+              {onNow && airing ? <LiveDot /> : null}
+            </div>
+          )}
         </div>
         <div className="ps-body">
+          {airing?.imageUrl ? (
+            <div className="ps-channel">
+              <ChannelBadge channel={channel} />
+              {onNow ? <LiveDot /> : null}
+            </div>
+          ) : null}
           <p className="ps-eyebrow">
             {airing ? `${categoryLabel[cat]} · ${dayLabel(airing.start, now)} · ${spanLabel(airing)}` : t("guideUi.noListing")}
           </p>
@@ -64,13 +75,11 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
             {airing?.finale ? <span className="tag">{t("guideUi.finale")}</span> : null}
             {airing?.rating ? <span className="tag">{airing.rating}</span> : null}
             {airing?.episodeLabel ? <span className="tag">{airing.episodeLabel}</span> : null}
-            {channel.hd ? <span className="tag">{t("guideUi.hd")}</span> : null}
             {rec === "recording" ? <span className="tag rec">{t("guideUi.recording")}</span> : rec === "scheduled" ? <span className="tag rec">{t("guideUi.willRecord")}</span> : null}
           </div>
           {airing?.originalAir ? <p className="ps-sub">{t("guideUi.firstAired", { date: airing.originalAir })}</p> : null}
           {airing?.cast ? <p className="ps-sub">{airing.cast}</p> : null}
-          {airing?.description ? <p className="ps-desc">{airing.description}</p> : null}
-          {guideSourceLine(airing?.guideSource) ? <p className="ps-sub">{guideSourceLine(airing?.guideSource)}</p> : null}
+          {airing?.description && airing.description.trim() !== airing.subtitle?.trim() ? <p className="ps-desc">{airing.description}</p> : null}
           <div className="ps-actions">
             {onNow ? (
               <button type="button" className="btn primary" onClick={() => onWatch(shown)}>
@@ -109,7 +118,7 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
                   <RecordIcon className="tally" /> {t("guideUi.dontRecord")}
                 </button>
               ) : rec !== "scheduled" ? (
-                <button type="button" className="btn" aria-label={named(t("guideUi.record"))} onClick={() => void recordOnce(airing, channel)}>
+                <button type="button" className="btn primary" aria-label={named(t("guideUi.record"))} onClick={() => void recordOnce(airing, channel)}>
                   <RecordIcon className="tally" /> {t("guideUi.record")}
                 </button>
               ) : null
@@ -119,8 +128,9 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
                 {hasPass ? t("guideUi.seriesRecording") : cat === "sports" ? t("guideUi.recordEvery") : t("guideUi.recordSeries")}
               </button>
             ) : null}
-            <button type="button" className="btn ghost" onClick={() => void favorite(shown)} aria-pressed={shown.favorite} aria-label={actionName(shown.favorite ? t("guideUi.favorite") : t("guideUi.addFavorite"), shown.displayName)}>
-              <StarIcon filled={shown.favorite} /> {shown.favorite ? t("guideUi.favorite") : t("guideUi.addFavorite")}
+            {/* The star is the channel's, not the show's, so it says so. */}
+            <button type="button" className="btn ghost" onClick={() => void favorite(shown)} aria-pressed={shown.favorite} aria-label={t("guideUi.favoriteChannel", { channel: shown.displayName })}>
+              <StarIcon filled={shown.favorite} /> {t("guideUi.favoriteChannel", { channel: shown.displayName })}
             </button>
           </div>
         </div>
