@@ -58,63 +58,84 @@ func listedSegments(t *testing.T, playlist string) []listedSeg {
 	return out
 }
 
-// A split encode sends a keyframe fragment and then fragments of a third of a
-// second inside the group. Each group is one segment of three parts, the first
-// independent, and the playlist advertises the short part target.
-func TestSplitEncodePublishesPartsInsideAGroup(t *testing.T) {
-	const key, inter = 0, 0x10000
-	var frags [][]byte
-	pts := int64(900000)
-	for range 4 {
-		for i := range 3 {
-			flags := uint32(inter)
+// pictures is a split encode's output: a fragment per picture, each group of
+// pictures starting on a keyframe. groups are the pictures in each group.
+func pictures(pts int64, frame uint32, groups ...int) [][]byte {
+	var out [][]byte
+	for _, n := range groups {
+		for i := range n {
+			flags := uint32(0x10000)
 			if i == 0 {
-				flags = key
+				flags = 0
 			}
-			frags = append(frags, fragmentAt(pts, 30030, flags, 0))
-			pts += 30030
+			out = append(out, fragmentAt(pts, frame, flags, 0))
+			pts += int64(frame)
 		}
 	}
-	text := packSplit(t, t.TempDir(), frags...)
-	for _, tag := range []string{"PART-TARGET=0.375", "PART-HOLD-BACK=1.125", "HOLD-BACK=6.000", "#EXT-X-TARGETDURATION:2\n"} {
+	return out
+}
+
+// assertParts checks what AVPlayer checks: no part over PART-TARGET, no part
+// but a segment's last under 85% of it, and every segment starting on an
+// independent part.
+func assertParts(t *testing.T, text string) []listedSeg {
+	t.Helper()
+	dur := regexp.MustCompile(`DURATION=([0-9.]+)`)
+	segs := listedSegments(t, text)
+	for i, s := range segs {
+		for j, p := range s.parts {
+			d, _ := strconv.ParseFloat(dur.FindStringSubmatch(p)[1], 64)
+			if d > 0.390 || (j < len(s.parts)-1 && d < 0.3315) {
+				t.Fatalf("segment %d part %d is %.3f s:\n%s", i, j, d, text)
+			}
+			if j == 0 && !strings.Contains(p, "INDEPENDENT=YES") {
+				t.Fatalf("segment %d starts on a part that is not independent:\n%s", i, text)
+			}
+		}
+	}
+	return segs
+}
+
+// One-second groups at 29.97 make three parts of ten pictures each once the
+// packager has seen a group; the playlist advertises the short part target.
+func TestSplitEncodePublishesPartsInsideAGroup(t *testing.T) {
+	text := packSplit(t, t.TempDir(), pictures(900000, 3003, 30, 30, 30, 30, 1)...)
+	for _, tag := range []string{"PART-TARGET=0.390", "PART-HOLD-BACK=1.170", "HOLD-BACK=6.000", "#EXT-X-TARGETDURATION:2\n"} {
 		if !strings.Contains(text, tag) {
 			t.Fatalf("missing %s:\n%s", tag, text)
 		}
 	}
-	segs := listedSegments(t, text)
-	if len(segs) != 4 {
-		t.Fatalf("want four one-group segments:\n%s", text)
+	segs := assertParts(t, text)
+	if len(segs) != 5 {
+		t.Fatalf("want one segment per group:\n%s", text)
 	}
-	for i, s := range segs {
+	for i, s := range segs[:4] {
 		if s.dur != 1.001 || len(s.parts) != 3 {
 			t.Fatalf("segment %d: %.3f s, %d parts:\n%s", i, s.dur, len(s.parts), text)
 		}
-		for j, p := range s.parts {
-			if strings.Contains(p, "INDEPENDENT=YES") != (j == 0) {
-				t.Fatalf("segment %d part %d: %s", i, j, p)
-			}
+		if i > 0 && strings.Count(strings.Join(s.parts, "\n"), "DURATION=0.334") != 3 {
+			t.Fatalf("segment %d is not three even parts:\n%s", i, text)
 		}
 	}
 }
 
-// A keyframe fragment long enough for a segment must not close one on its
-// own in a split encode: the fragment after it is cut inside the same group,
-// and a segment that starts there cannot be decoded alone.
-func TestSplitEncodeClosesSegmentsOnlyOnKeyframes(t *testing.T) {
-	text := packSplit(t, t.TempDir(),
-		fragmentAt(900000, 50000, 0, 0),
-		fragmentAt(950000, 30000, 0x10000, 0),
-		fragmentAt(980000, 30000, 0, 0),
-		fragmentAt(1010000, 30000, 0x10000, 0),
-	)
-	segs := listedSegments(t, text)
-	if len(segs) != 2 || len(segs[0].parts) != 2 || len(segs[1].parts) != 2 {
-		t.Fatalf("segments must start on the keyframes:\n%s", text)
+// Broadcast groups are not even: a splice sends a 0.3 s group, a 3.0 station
+// keys at 0.17 s now and then. A group under half a second shares a segment
+// with the next, and no short part may be left inside it.
+func TestSplitEncodeKeepsPartsLegalOnUnevenGroups(t *testing.T) {
+	cases := map[string][]int{
+		"short group":        {60, 18, 60, 60, 1},
+		"very short group":   {60, 10, 60, 1},
+		"group of 0.8 s":     {48, 48, 48, 1},
+		"0.45 s group":       {60, 27, 60, 1},
+		"field-doubled keys": {1, 60, 1, 60, 1},
+		"long group":         {150, 60, 1},
 	}
-	for _, s := range segs {
-		if !strings.Contains(s.parts[0], "INDEPENDENT=YES") {
-			t.Fatalf("a segment starts on a part that is not a keyframe:\n%s", text)
-		}
+	for name, groups := range cases {
+		t.Run(name, func(t *testing.T) {
+			text := packSplit(t, t.TempDir(), pictures(900000, 1501, groups...)...)
+			assertParts(t, text)
+		})
 	}
 }
 
@@ -135,9 +156,8 @@ func TestLiveEncodesSplitTheirFragments(t *testing.T) {
 }
 
 // The real thing: ffmpeg's fragments of a copied one-second group, packed.
-// Every segment starts on a keyframe part, holds several parts no longer than
-// the target, and keeps the group's length, so a copy and a transcode still
-// share each cut.
+// Every segment starts on a keyframe part, holds three legal parts, and keeps
+// the group's length, so a copy and a transcode still share each cut.
 func TestSplitCopyRenditionKeepsKeyframeSegments(t *testing.T) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
@@ -189,22 +209,13 @@ func TestSplitCopyRenditionKeepsKeyframeSegments(t *testing.T) {
 	if len(segs) < 4 {
 		t.Fatalf("too few segments:\n%s", text)
 	}
-	dur := regexp.MustCompile(`DURATION=([0-9.]+)`)
+	assertParts(t, text)
 	for i, s := range segs[:len(segs)-1] {
 		if s.dur < 0.95 || s.dur > 1.05 {
 			t.Fatalf("segment %d is %.3f s, not one group:\n%s", i, s.dur, text)
 		}
-		if len(s.parts) == 0 {
-			continue // listed only near the live edge
-		}
-		if len(s.parts) < 3 || !strings.Contains(s.parts[0], "INDEPENDENT=YES") {
+		if len(s.parts) > 0 && len(s.parts) != 3 {
 			t.Fatalf("segment %d parts %v", i, s.parts)
-		}
-		for _, p := range s.parts {
-			d, _ := strconv.ParseFloat(dur.FindStringSubmatch(p)[1], 64)
-			if d > 0.375 {
-				t.Fatalf("part longer than the target: %s", p)
-			}
 		}
 	}
 	// Every segment file starts on a keyframe.
@@ -275,5 +286,34 @@ func TestSplitEncodeKeepsSoundWithoutAPicture(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(dir, "seg00001.m4s"))
 	if init, _ := os.ReadFile(filepath.Join(dir, "init.mp4")); len(init) == 0 || !fragmentIndependent(b, 1) {
 		t.Fatal("the second segment must start on its keyframe")
+	}
+}
+
+// An encode's first fragment can be a whole group or more (sound that starts
+// late holds it). A part longer than PART-TARGET makes AVPlayer reject the
+// playlist, so that segment lists no parts, and the open segment no hint.
+func TestSplitEncodeListsNoPartLongerThanTheTarget(t *testing.T) {
+	dir := t.TempDir()
+	long := packSplit(t, dir,
+		fragmentAt(900000, 90090, 0, 0),
+	)
+	if strings.Contains(long, "#EXT-X-PART:") {
+		t.Fatalf("a part over the target was listed:\n%s", long)
+	}
+	text := packSplit(t, t.TempDir(),
+		fragmentAt(900000, 90090, 0, 0),
+		fragmentAt(990090, 30030, 0, 0),
+		fragmentAt(1020120, 30030, 0x10000, 0),
+		fragmentAt(1050150, 30030, 0x10000, 0),
+		fragmentAt(1080180, 30030, 0, 0),
+	)
+	segs := listedSegments(t, text)
+	if len(segs) < 2 || len(segs[0].parts) != 0 || len(segs[1].parts) != 3 {
+		t.Fatalf("the long segment lists no parts, the next lists its own:\n%s", text)
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, "#EXT-X-PART:") && !strings.Contains(line, "DURATION=0.334") {
+			t.Fatalf("part over the target: %s", line)
+		}
 	}
 }

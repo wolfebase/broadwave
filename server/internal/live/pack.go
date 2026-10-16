@@ -48,19 +48,25 @@ const (
 	// maxBox is the largest incomplete fMP4 box kept in the read buffer.
 	// A size field that asks for more is corrupt.
 	maxBox = 32 << 20
-	// splitPartTicks is PART-TARGET for an encode that cuts its fragments
-	// every fragMicros inside a group of pictures (playlistGate.split). A
-	// fragment is that long plus at most a frame: 0.334 s at 24, 30 and 60
-	// fps, 0.36 s at 25 and 50, and a one-field keyframe in front adds 17 ms.
-	// Every part but a segment's last stays above 85% of the target, as
-	// LL-HLS asks, and AVPlayer plays about three parts from the live edge.
-	splitPartTicks = 33750 // 0.375s
+	// splitPartTicks is PART-TARGET for an encode that writes a fragment per
+	// picture (playlistGate.split). The packager gathers pictures into parts
+	// of 0.33 to 0.39 s; a segment's last part can be shorter. AVPlayer plays
+	// about three parts from the live edge.
+	splitPartTicks = 35100 // 0.39s
+	// splitMinTicks is 85% of it, the shortest part LL-HLS allows inside a
+	// segment. Twenty pictures at 59.94 (0.334 s) clear it.
+	splitMinTicks = (splitPartTicks*85 + 99) / 100
+	// splitGoalTicks is the part length a group is divided toward.
+	splitGoalTicks = 32400 // 0.36s
 )
 
-// fragMicros is ffmpeg's -frag_duration for live encodes. ffmpeg still
-// starts a fragment on every keyframe (frag_keyframe), so a keyframe always
-// opens a fragment and the packager closes segments only there.
-const fragMicros = "333333"
+// fragMicros is ffmpeg's -frag_duration for live encodes: short enough that
+// every picture is its own fragment, with the sound that came with it. ffmpeg
+// still starts a fragment on every keyframe (frag_keyframe), and the packager
+// closes segments only there. ffmpeg's own cuts a third of a second apart
+// could not make even parts: a short group left a part under 85% of the
+// target inside a segment, and AVPlayer dropped the stream.
+const fragMicros = "10000"
 
 // splitFragments reports an encode whose fragments are cut inside a group of
 // pictures, so its parts are shorter than its segments.
@@ -894,26 +900,114 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		fresh, handover = f, h
 		return err
 	}
-	// soundOnly is fragments with no picture, from a split encode while the
-	// picture stalls. They go out in front of the next fragment that is not
-	// a keyframe; a segment must start on its keyframe's own fragment.
-	var soundOnly []byte
+	// gathered is the part a split encode is building from its fragments,
+	// a picture each, with the encode marks its first fragment came with.
+	type gathered struct {
+		body            []byte
+		pts, dur        int64
+		sync            bool
+		fresh, handover bool
+	}
+	var acc *gathered
+	// goal is the part length for the current group of pictures: the last
+	// group split evenly, so a one-second group is three equal parts.
+	goal := int64(splitGoalTicks)
+	var lastKey int64
+	haveKey := false
+	placeAcc := func() error {
+		if acc == nil {
+			return nil
+		}
+		a := acc
+		acc = nil
+		f, h := fresh, handover
+		fresh, handover = a.fresh, a.handover
+		err := place(a.body, a.pts, a.dur, a.sync)
+		fresh, handover = f, h
+		return err
+	}
+	// gather adds one fragment of a split encode to the part being built.
+	// A part is published when the next picture arrives and either a
+	// keyframe starts a group, or the part has reached its goal and is at
+	// least 85% of PART-TARGET. AVPlayer rejects a playlist with a shorter
+	// part inside a segment (-12642), or with one longer than the target.
+	// closes reports whether a keyframe at pts closes the open segment, as
+	// place does: once the segment has half a second.
+	closes := func(pts int64) bool {
+		start := acc.pts
+		if len(open) > 0 {
+			start = open[0].pts
+		}
+		return ptsDiff(pts, start) >= int64(partTicks)
+	}
+	gather := func(frag []byte) error {
+		pts, ok := fragmentStart(frag, track, scale)
+		if !ok {
+			// Sound with no picture belongs to the part being built. Before
+			// the first picture it is lead-in, and dropped.
+			if acc != nil && len(acc.body)+len(frag) <= maxOpenBytes {
+				acc.body = append(acc.body, frag...)
+			}
+			return nil
+		}
+		dur := int64(0)
+		if d, known := fragmentDuration(frag, track, scale); known {
+			dur = d
+		}
+		sync := fragmentIndependent(frag, track)
+		if acc != nil {
+			d := ptsDiff(pts, acc.pts+acc.dur)
+			merge := false
+			switch {
+			case fresh || handover || d < -int64(partTicks) || d > int64(jumpTicks) || len(acc.body)+len(frag) > maxOpenBytes:
+			case sync && acc.dur < splitMinTicks && (acc.sync || !closes(pts)):
+				// A field-rate transcode keys the first field and then the
+				// frame: one part, and the group starts on the first. A
+				// keyframe that does not close the segment (a group under
+				// half a second) would leave this short part inside it.
+				merge = true
+			case sync:
+			case acc.dur >= splitMinTicks && (acc.dur+dur > splitPartTicks || 2*acc.dur+dur >= 2*goal):
+			case acc.dur+dur > splitPartTicks:
+			default:
+				merge = true
+			}
+			if merge {
+				// A part starts at its earliest picture, as a whole group's
+				// fragment did: a picture shown before the keyframe comes after
+				// it in the stream.
+				acc.body = append(acc.body, frag...)
+				acc.dur += dur
+				if ptsDiff(pts, acc.pts) < 0 {
+					acc.pts = pts
+				}
+				return nil
+			}
+			if err := placeAcc(); err != nil {
+				return err
+			}
+		}
+		if sync {
+			if group := ptsDiff(pts, lastKey); haveKey && group > 0 && group < int64(jumpTicks) {
+				n := max(1, (group+splitGoalTicks/2)/splitGoalTicks)
+				goal = min(max(group/n, splitMinTicks), splitPartTicks)
+			}
+			lastKey, haveKey = pts, true
+		}
+		acc = &gathered{body: frag, pts: pts, dur: dur, sync: sync, fresh: fresh, handover: handover}
+		fresh, handover = false, false
+		return nil
+	}
 	take := func(frag []byte) error {
 		if !haveInit {
 			return nil
 		}
+		if split {
+			return gather(frag)
+		}
 		pts, ok := fragmentStart(frag, track, scale)
 		if !ok {
-			if haveLast && !handover && !fresh && len(soundOnly)+len(frag) <= maxOpenBytes {
-				soundOnly = append(soundOnly, frag...)
-			}
 			return nil
-		}
-		if len(soundOnly) > 0 {
-			if !fragmentIndependent(frag, track) && !fresh && !handover {
-				frag = append(soundOnly, frag...)
-			}
-			soundOnly = nil
 		}
 		dur := int64(0)
 		if d, known := fragmentDuration(frag, track, scale); known {
@@ -1048,6 +1142,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if err != nil {
 			if err == io.EOF {
 				if err := placeShort(); err != nil {
+					return err
+				}
+				if err := placeAcc(); err != nil {
 					return err
 				}
 				if len(open) > 0 {
@@ -1217,12 +1314,40 @@ func writePackedOpen(dir string, init []byte, closed []packedSeg, open []packedP
 		}
 		b = append(b, line+",URI=\""+name+"\"\n"...)
 	}
+	// A part longer than PART-TARGET is a playlist parse error for AVPlayer
+	// (-12642), and it drops the stream. An encode's first fragment can be
+	// several groups long (sound that starts late), so such a segment lists
+	// no parts at all: a part list has to start with the segment's first.
+	fits := func(durs func(yield func(int64) bool)) bool {
+		for d := range durs {
+			if d > int64(partTarget) {
+				return false
+			}
+		}
+		return true
+	}
+	closedFits := func(s packedSeg) bool {
+		return fits(func(yield func(int64) bool) {
+			for _, p := range s.parts {
+				if !yield(p.dur) {
+					return
+				}
+			}
+		})
+	}
+	openFits := fits(func(yield func(int64) bool) {
+		for _, p := range open {
+			if !yield(p.dur) {
+				return
+			}
+		}
+	})
 	for i, s := range closed {
 		if s.gap {
 			b = append(b, "#EXT-X-DISCONTINUITY\n"...)
 			b = appendCont(b, s.cont, s.step)
 		}
-		if listed, _ := partsKept(fromEnd[i], target); listed {
+		if listed, _ := partsKept(fromEnd[i], target); listed && closedFits(s) {
 			for _, p := range s.parts {
 				b = appendPackedPTS(b, p.name, p.pts, p.timed)
 				partLine(p.name, p.dur, p.sync)
@@ -1235,15 +1360,19 @@ func writePackedOpen(dir string, init []byte, closed []packedSeg, open []packedP
 		b = append(b, "#EXT-X-DISCONTINUITY\n"...)
 		b = appendCont(b, brk.cont, brk.step)
 	}
-	for _, p := range open {
-		b = appendPackedPTS(b, p.name, p.pts, p.timed)
-		partLine(p.name, p.dur, p.sync)
+	listedOpen := 0
+	if openFits {
+		listedOpen = len(open)
+		for _, p := range open {
+			b = appendPackedPTS(b, p.name, p.pts, p.timed)
+			partLine(p.name, p.dur, p.sync)
+		}
 	}
 	// The part being written now. AVPlayer plays low latency only with this
 	// hint; it asks for the part early and the server holds the request until
 	// the part is on disk (WaitPart). Answers leave it out unless the client
 	// is on HTTP/2 and BROADWAVE_LL_HINTS=1 (httpapi preloadFor).
-	if brk.hint != "" {
+	if brk.hint != "" && openFits {
 		b = append(b, "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\""+brk.hint+"\"\n"...)
 	}
 	tmp := filepath.Join(dir, "index.m3u8.tmp")
@@ -1257,9 +1386,13 @@ func writePackedOpen(dir string, init []byte, closed []packedSeg, open []packedP
 		gate.target.Store(int64(targetSec) * int64(time.Second))
 		recent := make([]int, 0, 4)
 		for _, c := range closed[max(0, len(closed)-4):] {
-			recent = append(recent, len(c.parts))
+			n := len(c.parts)
+			if !closedFits(c) {
+				n = 0
+			}
+			recent = append(recent, n)
 		}
-		gate.publish(origin, origin+len(closed), len(open), recent...)
+		gate.publish(origin, origin+len(closed), listedOpen, recent...)
 	}
 	return nil
 }
