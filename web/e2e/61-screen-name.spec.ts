@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
 test("renaming this screen shows up for the others", async ({ page }) => {
   mkdirSync(shotDir, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/settings");
+  await page.goto("/settings/devices");
   await settle(page);
   const field = page.getByRole("textbox", { name: "Name this screen" });
   await expect(field).toBeVisible();

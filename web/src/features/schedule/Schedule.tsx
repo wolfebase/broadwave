@@ -1,16 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import type { Pass, PlannedAiring, Recording } from "../../types";
+import type { PlannedAiring, Pass, Recording } from "../../types";
 import { fixSchedule, getEvents, getSchedule, stopRecording } from "../../api";
+import { useData } from "../../app/data";
+import { focusRing } from "../../app/remote";
+import { navigate } from "../../app/router";
 import { scheduleMessages } from "../../i18n/messages/schedule.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { actionName } from "../../lib/actionName";
-import { copy } from "../../strings";
+import { dismissesLayer, pageCovered } from "../../lib/dialogFocus";
 import { formatClock } from "../../time";
 import { Passes } from "./Passes";
 import { takeScheduleRead, takeScheduleWrite } from "./plan";
+import { activityRows, dayOf } from "./view";
+import "../manage.css";
 import "./schedule.css";
 
 const t = bind(scheduleMessages);
+
+// Activity can run to hundreds of lines. The first screenful is what anyone reads.
+const firstActivity = 12;
+
+type Event = { id: number; at: string; kind: string; message: string };
 
 export function Schedule({
   recordings,
@@ -23,10 +33,13 @@ export function Schedule({
   onStop: () => void;
   onPasses: () => void;
 }) {
+  const { channels } = useData();
   const active = recordings.filter((rec) => rec.status === "recording");
   const [items, setItems] = useState<PlannedAiring[]>([]);
   const [tunerCount, setTunerCount] = useState(2);
-  const [events, setEvents] = useState<{ id: number; at: string; message: string }[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [everything, setEverything] = useState(false);
+  const [more, setMore] = useState(false);
   const [fixing, setFixing] = useState("");
   const [note, setNote] = useState("");
   const planN = useRef(0);
@@ -91,92 +104,216 @@ export function Schedule({
       if (mine === writeN.current) setFixing("");
     }
   }
+  const number = (item: PlannedAiring) => item.airing.guideNumber || channels.find((ch) => ch.id === item.airing.channelId)?.displayNumber || "";
+  const { rows: activity, hidden } = activityRows(events, everything);
+  const listed = more ? activity : activity.slice(0, firstActivity);
+  const now = new Date();
   return (
-    <section className="page">
-      <div className="page-head">
-        <h2>{copy.schedule.title}</h2>
-      </div>
-      <h3 className="section-title">{t("schedule.comingUp")}</h3>
-      {items.length === 0 ? (
-        <p className="empty">{t("schedule.noMatch")}</p>
-      ) : (
-        <ul className="source-list">
-          {items.map((item) => {
-            return (
-              <li key={`${item.passId}-${item.airing.id}`} className="source-row">
-                <span className="ch-num">{formatDay(new Date(item.airing.start))}</span>
-                <span>{item.airing.title}</span>
-                <span className="codec">{item.skipped ? item.reason || t("schedule.lowerPriority", tunerCount) : t("schedule.willRecord", { start: formatClock(recordWindow(item).start), end: formatClock(recordWindow(item).end) })}</span>
-                {item.suggestion ? (
-                  <span className="schedule-suggest">
-                    <span>
-                      {item.suggestion.guideNumber
-                        ? t("schedule.laterOnChannel", { when: formatDay(new Date(item.suggestion.start)), number: item.suggestion.guideNumber })
-                        : t("schedule.laterOn", { when: formatDay(new Date(item.suggestion.start)) })}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn small schedule-fix"
-                      disabled={fixing !== ""}
-                      aria-label={actionName(t("schedule.recordLater"), item.airing.title)}
-                      onClick={() => void recordLater(item)}
-                    >
-                      {t("schedule.recordLater")}
-                    </button>
+    <section className="page schedule">
+      <section className="sched-section" aria-labelledby="sched-coming">
+        <h2 id="sched-coming" className="section-title">
+          {t("schedule.comingUp")}
+        </h2>
+        {items.length === 0 && active.length === 0 ? (
+          <div className="sched-empty">
+            <p>{passes.length === 0 ? t("schedule.nothingSet") : t("schedule.noMatch")}</p>
+            <button type="button" className="btn small" onClick={() => navigate("/guide")}>
+              {t("schedule.openGuide")}
+            </button>
+          </div>
+        ) : (
+          <ul className="sched-list">
+            {active.map((rec) => (
+              <LiveRow key={`rec-${rec.id}`} rec={rec} onStop={onStop} />
+            ))}
+            {items.map((item) => {
+              const start = new Date(item.airing.start);
+              const window = recordWindow(item);
+              const ch = number(item);
+              return (
+                <li key={`${item.passId}-${item.airing.id}`} className={item.skipped ? "sched-row skipped" : "sched-row"}>
+                  <span className="sched-when">
+                    <span className="sched-day">{dayName(start, now)}</span>
+                    <span className="sched-clock">{formatClock(start)}</span>
                   </span>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {note ? <p className="hint" role="alert">{note}</p> : null}
-      {items.some((item) => item.conflict) ? (
-        <p className="hint">{t("schedule.conflictHint")}</p>
-      ) : null}
+                  <span className="sched-main">
+                    <span className="sched-title">{item.airing.title}</span>
+                    <span className="sched-sub">
+                      {item.skipped ? (
+                        <>
+                          <span className="tag sched-skip">{t("schedule.skippedTag")}</span> {item.reason || t("schedule.lowerPriority", tunerCount)}
+                        </>
+                      ) : ch ? (
+                        t("schedule.recordsWindow", { number: ch, start: formatClock(window.start), end: formatClock(window.end) })
+                      ) : (
+                        t("schedule.recordsWindowNoNumber", { start: formatClock(window.start), end: formatClock(window.end) })
+                      )}
+                    </span>
+                  </span>
+                  {item.suggestion ? (
+                    <span className="schedule-suggest">
+                      <span>
+                        {item.suggestion.guideNumber
+                          ? t("schedule.laterOnChannel", { when: formatDay(new Date(item.suggestion.start), now), number: item.suggestion.guideNumber })
+                          : t("schedule.laterOn", { when: formatDay(new Date(item.suggestion.start), now) })}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn small schedule-fix"
+                        disabled={fixing !== ""}
+                        aria-label={actionName(t("schedule.recordLater"), item.airing.title)}
+                        onClick={() => void recordLater(item)}
+                      >
+                        {t("schedule.recordLater")}
+                      </button>
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {note ? (
+          <p className="hint" role="alert">
+            {note}
+          </p>
+        ) : null}
+        {items.some((item) => item.conflict) ? <p className="hint">{t("schedule.conflictHint")}</p> : null}
+      </section>
       <Passes passes={passes} onPasses={onPasses} />
-      <h3 className="section-title">{t("schedule.activity")}</h3>
-      {events.length === 0 ? (
-        <p className="empty">{t("schedule.activityEmpty")}</p>
-      ) : (
-        <ul className="source-list">
-          {events.map((event) => (
-            <li key={event.id} className="source-row">
-              <span className="ch-num">{formatClock(new Date(event.at))}</span>
-              <span>{event.message}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {active.length === 0 ? (
-        <article className="quiet-card wide">
-          <p>{t("schedule.nothingRecording")}</p>
-        </article>
-      ) : (
-        <ul className="source-list">
-          {active.map((rec) => (
-            <li key={rec.id} className="source-row">
-              <span className="ch-num">{rec.guideNumber}</span>
-              <span>{rec.title}</span>
-              <button
-                type="button"
-                className="btn"
-                aria-label={actionName(t("schedule.stop"), rec.title)}
-                onClick={() => void stopRecording(rec.id).then(onStop)}
-              >
-                {t("schedule.stop")}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <section className="sched-section" aria-labelledby="sched-activity">
+        <div className="sched-head">
+          <h2 id="sched-activity" className="section-title">
+            {t("schedule.activity")}
+          </h2>
+          {hidden > 0 || everything ? (
+            <button type="button" className="chip sched-finds" aria-pressed={everything} onClick={() => setEverything((on) => !on)}>
+              {everything ? t("schedule.hideFinds") : t("schedule.showFinds", hidden)}
+            </button>
+          ) : null}
+        </div>
+        {activity.length === 0 ? (
+          <p className="sched-empty">{t("schedule.activityQuiet")}</p>
+        ) : (
+          <ul className="sched-activity">
+            {listed.map((event) => {
+              const at = new Date(event.at);
+              const day = dayOf(at, now);
+              return (
+                <li key={event.id} data-kind={event.kind}>
+                  <time dateTime={event.at}>{day === "today" ? formatClock(at) : formatDay(at, now)}</time>
+                  <span>{event.message}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {activity.length > listed.length ? (
+          <button type="button" className="btn small ghost sched-more" onClick={() => setMore(true)}>
+            {t("schedule.showMore", { count: activity.length - listed.length })}
+          </button>
+        ) : null}
+      </section>
     </section>
   );
 }
 
-function formatDay(date: Date) {
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${months[date.getMonth()]} ${date.getDate()}, ${formatClock(date)}`;
+/** A recording on now. Stop asks first: the button sits where a quick tap lands. */
+function LiveRow({ rec, onStop }: { rec: Recording; onStop: () => void }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const keepRef = useRef<HTMLButtonElement>(null);
+  const stopRef = useRef<HTMLButtonElement>(null);
+  const was = useRef(false);
+  useEffect(() => {
+    if (asking) focusRing(keepRef.current);
+    else if (was.current) focusRing(stopRef.current);
+    was.current = asking;
+  }, [asking]);
+  useEffect(() => {
+    if (!asking) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (!dismissesLayer(event.key, event.target, event.keyCode) || pageCovered()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setAsking(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [asking]);
+  const start = new Date(rec.startedAt);
+  const end = rec.endsAt ? new Date(rec.endsAt) : null;
+  const name = rec.subtitle ? `${rec.title} · ${rec.subtitle}` : rec.title;
+  async function stop() {
+    setBusy(true);
+    setError("");
+    try {
+      await stopRecording(rec.id);
+      setAsking(false);
+      onStop();
+    } catch {
+      setError(t("schedule.stopFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <li className="sched-row live">
+      <span className="sched-when">
+        <span className="live-dot">
+          <span className="live-dot-light" aria-hidden="true" />
+          {t("schedule.recordingNow")}
+        </span>
+      </span>
+      <span className="sched-main">
+        <span className="sched-title">{name}</span>
+        <span className="sched-sub">
+          {end ? t("schedule.recordingUntil", { number: rec.guideNumber, end: formatClock(end) }) : t("schedule.recordingSince", { number: rec.guideNumber, start: formatClock(start) })}
+        </span>
+      </span>
+      {asking ? (
+        <span className="sched-actions sched-ask" role="group" aria-label={t("schedule.stopAsk", { title: rec.title })}>
+          <span className="sched-ask-text">
+            {t("schedule.stopAsk", { title: rec.title })} <span className="codec">{t("schedule.stopKept")}</span>
+          </span>
+          <button ref={keepRef} type="button" className="btn small" disabled={busy} onClick={() => setAsking(false)}>
+            {t("schedule.keepRecording")}
+          </button>
+          <button type="button" className="btn small danger" disabled={busy} aria-label={actionName(t("schedule.stopNow"), rec.title)} onClick={() => void stop()}>
+            {t("schedule.stopNow")}
+          </button>
+          {error ? (
+            <span className="hint error" role="alert">
+              {error}
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        <span className="sched-actions">
+          <button type="button" className="btn small" aria-label={actionName(t("schedule.watch"), rec.title)} onClick={() => navigate(`/play?recording=${rec.id}`)}>
+            {t("schedule.watch")}
+          </button>
+          <button ref={stopRef} type="button" className="btn small ghost" aria-label={actionName(t("schedule.stop"), rec.title)} onClick={() => setAsking(true)}>
+            {t("schedule.stop")}
+          </button>
+        </span>
+      )}
+    </li>
+  );
+}
+
+function dayName(date: Date, now: Date) {
+  const day = dayOf(date, now);
+  if (day === "today") return t("schedule.today");
+  if (day === "tomorrow") return t("schedule.tomorrow");
+  if (day === "yesterday") return t("schedule.yesterday");
+  return date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+}
+
+function formatDay(date: Date, now: Date) {
+  return `${dayName(date, now)}, ${formatClock(date)}`;
 }
 
 function recordWindow(item: PlannedAiring) {

@@ -146,7 +146,7 @@ test("every page renders in the pseudo locale without overflow", { timeout: 180_
         if (box.locale !== "pseudo") problems.push(`${where}: locale is ${box.locale || "unset"}`);
         if (box.overflowX > 1) problems.push(`${where}: page is ${box.overflowX}px wider than the window`);
         for (const clip of box.clipped) problems.push(`${where}: clipped "${clip.text}" (${clip.cls})`);
-        const immersive = ["/play", "/multiview", "/setup"].includes(item.path.split("?")[0]) || item.path.includes("virtual=");
+        const immersive = ["/play", "/multiview", "/setup", "/pair"].includes(item.path.split("?")[0]) || item.path.includes("virtual=");
         if (!immersive) {
           const home = page.getByRole("link", { name: "HomeHome", exact: true });
           if ((await home.count()) !== 1) problems.push(`${where}: the Home tab is not doubled${crashes.length ? ` (${crashes.at(-1)})` : ""}`);

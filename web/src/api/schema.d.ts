@@ -1416,6 +1416,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/direct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The secure name on the home network: `lan.<label>.direct.wolfeup.com`, pointed
+         *     at this server's home address with a Let's Encrypt certificate, served with
+         *     HTTP/2 on its own port (8443 by default). Nothing to set up. Off by default for now
+         *     (`BROADWAVE_DIRECT=1` turns it on) until the packager makes sub-second parts.
+         *     Requests by this name are home requests, like the server's address.
+         *     `state` is `off`, `starting`, `ready`, `error`, or `unavailable` (the server
+         *     was started without `BROADWAVE_DIRECT=1`).
+         */
+        get: operations["getDirect"];
+        /** @description Turns the secure name on or off. Off stops serving it at once and leaves `secureUrl` out of `/server`. */
+        put: operations["putDirect"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/invites": {
         parameters: {
             query?: never;
@@ -2058,6 +2084,29 @@ export interface components {
             update?: components["schemas"]["ServerUpdate"];
             /** @description Google Cast application id from BROADWAVE_CAST_APP_ID. Omitted when unset or not 4 to 32 letters and digits. The web player shows Cast only when this is set. */
             castAppId?: string;
+            /** @description The same server over HTTPS and HTTP/2 on the home network, such as https://lan.abcdefghij.direct.wolfeup.com:8443. Present once a trusted certificate is live. Apps prefer it when it answers and stay on this address when it does not (a router that blocks private answers to public names, a phone away from home). */
+            secureUrl?: string;
+        };
+        DirectStatus: {
+            enabled: boolean;
+            /** @enum {string} */
+            state: "off" | "starting" | "ready" | "error" | "unavailable";
+            /** @description The secure name, once registered. */
+            name?: string;
+            /** @description Same as secureUrl in /server. Omitted until a trusted certificate is live. */
+            url?: string;
+            /**
+             * Format: date-time
+             * @description When the certificate runs out. It is renewed 30 days before.
+             */
+            expires?: string;
+            /** @description Devices trust the certificate. A test authority's is served but not offered. */
+            trusted: boolean;
+            /** @description Home network addresses the name points at. */
+            addresses: string[];
+            lastError?: string;
+            /** Format: date-time */
+            errorAt?: string;
         };
         /** @description A newer Broadwave release. The message is the banner. */
         ServerUpdate: {
@@ -5755,6 +5804,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    getDirect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secure name status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectStatus"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    putDirect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    enabled: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Secure name status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectStatus"];
                 };
             };
             400: components["responses"]["Error"];

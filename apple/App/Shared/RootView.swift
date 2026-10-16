@@ -10,7 +10,16 @@ import SwiftUI
 @MainActor
 @Observable
 final class NowPlaying {
-    var channel: Channel?
+    var channel: Channel? {
+        didSet {
+            if let oldValue, oldValue.id != channel?.id {
+                previousChannel = oldValue
+            }
+        }
+    }
+
+    /// The channel before this one, which a viewer often goes back to. Its picture is kept warm.
+    private(set) var previousChannel: Channel?
     var expanded = false
     /// The channel that played last, kept after the player closes: Back from the
     /// Apple TV guide goes back to it, and the guide opens on its row.
@@ -130,6 +139,14 @@ final class NowPlaying {
             channel = channels.first
         }
         expanded = true
+    }
+
+    /// Apple TV: the player steps aside and the channel plays on in the guide's preview,
+    /// so Back on the guide brings it back at once.
+    func dock() {
+        guard channel != nil else { return }
+        stoppedAt = Date()
+        expanded = false
     }
 
     func stop() {
@@ -878,9 +895,13 @@ struct RootView: View {
         }
         .modifier(ExternalDisplayAccessory(store: store, nowPlaying: nowPlaying))
         #else
-        .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil }, set: {
+        .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil && nowPlaying.expanded }, set: {
             if !$0 {
-                nowPlaying.stop()
+                if nowPlaying.together.isEmpty {
+                    nowPlaying.dock()
+                } else {
+                    nowPlaying.stop()
+                }
             }
         })) {
             playingCover
@@ -1058,7 +1079,7 @@ struct RootView: View {
 
     private var playerCovers: Bool {
         #if os(tvOS)
-            nowPlaying.channel != nil
+            nowPlaying.channel != nil && nowPlaying.expanded
         #else
             nowPlaying.channel != nil && nowPlaying.expanded
         #endif

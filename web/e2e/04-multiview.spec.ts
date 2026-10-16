@@ -69,10 +69,14 @@ async function tiles(page: Page): Promise<Tile[]> {
   });
 }
 
+// ourViewers is the tuners a viewer holds. A tuner whose viewers left stays
+// ours for a while (the server's tuner linger) with no viewers on it: a return
+// starts on a locked frequency, and a new tune takes it first, so it holds
+// nothing back from the next watch.
 async function ourViewers(base: string): Promise<Tuner[]> {
   const body = (await (await fetch(`${base}/api/v1/tuners`)).json()) as { tuners?: Tuner[] };
   return (body.tuners ?? [])
-    .filter((tuner) => tuner.ours)
+    .filter((tuner) => tuner.ours && (tuner.viewers ?? 0) > 0)
     .map((tuner) => ({ index: tuner.index, guide: tuner.guide ?? "", viewers: tuner.viewers ?? 0 }))
     .sort((a, b) => a.index - b.index);
 }
@@ -173,7 +177,7 @@ test("side by side to quad plays every picture the server has room for", async (
   const kbwv2 = channel("KBWV2");
   const wtst2 = channel("WTST2");
   await expect
-    .poll(async () => (await ourViewers(base)).length === 0, { timeout: 60_000, intervals: [500], message: "the previous watch let the tuners go" })
+    .poll(async () => (await ourViewers(base)).length === 0, { timeout: 60_000, intervals: [500], message: "no viewer from the previous watch holds a tuner" })
     .toBe(true);
   await openMultiview(page, [kbwv.id, wtst.id], "2up", kbwv.id);
   await expect.poll(async () => (await tiles(page)).filter((tile) => tile.moving).length, { timeout: 50_000, intervals: [800] }).toBe(2);
@@ -236,7 +240,7 @@ test.describe("a restarted server", () => {
       const name = (layout === "2up" ? "side" : "quad") + (slow ? "-slow" : "");
       try {
         await expect
-          .poll(async () => (await ourViewers(base)).length === 0, { timeout: 60_000, intervals: [500], message: "the previous watch let the tuners go" })
+          .poll(async () => (await ourViewers(base)).length === 0, { timeout: 60_000, intervals: [500], message: "no viewer from the previous watch holds a tuner" })
           .toBe(true);
         await openMultiview(page, ids, layout, kbwv.id);
         await page.evaluate(() => {

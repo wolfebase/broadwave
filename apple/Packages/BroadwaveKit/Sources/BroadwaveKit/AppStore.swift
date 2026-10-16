@@ -65,6 +65,13 @@ public final class AppStore {
         didSet { UserDefaults.standard.set(lineUpAutomatically, forKey: "lineUp") }
     }
 
+    /// The secure address in use for this server, when the app moved to it. Nil
+    /// on the home address. See `SecureLink`.
+    public private(set) var secureBase: URL?
+    /// A secure address that failed is not tried again before this, unless the network changes.
+    private var secureRetryAt = Date.distantPast
+    @ObservationIgnored private var pathWatch: PathWatch?
+
     private var clock: Timer?
     private var frameTick = 0
     private var announced = false
@@ -218,25 +225,66 @@ public final class AppStore {
             freshAt = nil
             error = nil
         }
-        socket?.disconnect()
         clearGameAlerts()
         screenWatch = nil
         screenRemote = nil
         // A new server is not the previous one's outage. The banner waits out a short drop.
         offline = false
         signedOut = nil
-        // Down until the first message, so a server that is off at launch gets the banner.
-        noteConnection(false)
         announced = false
         self.server = server
+        secureRetryAt = .distantPast
+        // The secure address that answered last time, with the token already
+        // handed to it. The first refresh falls back when it no longer answers.
+        if let secure = Self.rememberedSecure(server, token: token) {
+            attach(base: secure.url, token: secure.token, started: started)
+        } else {
+            attach(base: server.url, token: token, started: started)
+        }
+        startPathWatch()
+        save(server, "server")
+        // The demo lives inside the app, where the Top Shelf cannot reach it.
+        SharedServer.save(server.id == "demo" ? nil : server.url)
+        SharedServer.saveToken(server.id == "demo" ? nil : token, for: server.url)
+        // Channel ids belong to one server; the new lineup is written after its first refresh.
+        SharedLineup.save(nil)
+        sharedLineup = []
+        remembered = RememberedServers.upsert(remembered, server, movedFrom: movedFrom)
+        save(remembered, "servers")
+        frameIDs = []
+        seatAsked = false
+        Task { await refresh() }
+    }
+
+    /// The remembered secure address for this server, and the token to use there.
+    static func rememberedSecure(_ server: FoundServer, token: String?) -> (url: URL, token: String?)? {
+        guard !["", "demo", "pending"].contains(server.id), let url = SecureMemory.url(for: server.id),
+              SecureLink.candidate(url.absoluteString, offeredBy: server.url) != nil else { return nil }
+        guard let token else { return (url, nil) }
+        // Only a token handed over for this same server, and only while it is
+        // the same token the home address holds.
+        guard DeviceTokens.token(for: url, server: server.id) == token else { return nil }
+        return (url, token)
+    }
+
+    /// Points the API client and the event socket at `base`. The server, its
+    /// catalog, and the home address stay as they are.
+    private func attach(base: URL, token: String?, started: Int) {
+        socket?.disconnect()
+        // Down until the first message, so a server that is off at launch gets the banner.
+        noteConnection(false)
+        secureBase = server.flatMap { ServerOrigin.same($0.url, base) ? nil : base }
         // A call the server turns away signs out now, not at the next refresh.
-        let api = APIClient(base: server.url, session: session, token: token) { [weak self] message in
+        let api = APIClient(base: base, session: session, token: token) { [weak self] message in
             Task { @MainActor in self?.noteTokenRefused(message, started: started) }
         }
         self.api = api
-        let socket = EventSocket(base: server.url, token: token)
+        let socket = EventSocket(base: base, token: token)
         socket.onFailure = { [weak self] in
-            Task { await self?.relocate() }
+            Task {
+                await self?.recheckSecure()
+                await self?.relocate()
+            }
         }
         socket.onConnected = { [weak self] up in
             self?.noteConnection(up)
@@ -277,18 +325,71 @@ public final class AppStore {
         }
         socket.connect()
         self.socket = socket
-        save(server, "server")
-        // The demo lives inside the app, where the Top Shelf cannot reach it.
-        SharedServer.save(server.id == "demo" ? nil : server.url)
-        SharedServer.saveToken(server.id == "demo" ? nil : token, for: server.url)
-        // Channel ids belong to one server; the new lineup is written after its first refresh.
-        SharedLineup.save(nil)
-        sharedLineup = []
-        remembered = RememberedServers.upsert(remembered, server, movedFrom: movedFrom)
-        save(remembered, "servers")
-        frameIDs = []
-        seatAsked = false
+    }
+
+    /// Moves to the secure address the server offered when it answers as this
+    /// same server. Runs after a refresh on the home address finished, so the
+    /// move cannot drop the lists that refresh was loading.
+    func considerSecure(_ info: ServerInfo, started: Int) async {
+        guard let current = server, current.id == info.id, generation == started, secureBase == nil,
+              !["", "demo", "pending"].contains(current.id), let api, ServerOrigin.same(api.base, current.url) else { return }
+        guard let target = SecureLink.candidate(info.secureUrl, offeredBy: current.url) else {
+            SecureMemory.save(nil, for: current.id)
+            return
+        }
+        guard secureRetryAt <= Date() else { return }
+        let answered = await SecureLink.probe(target, id: current.id, key: current.key, session: session)
+        guard generation == started, server?.id == current.id, secureBase == nil, self.api?.base == current.url else { return }
+        guard answered else {
+            secureRetryAt = Date().addingTimeInterval(10 * 60)
+            SecureMemory.save(nil, for: current.id)
+            return
+        }
+        var token: String?
+        if self.api?.token != nil {
+            guard let moved = SecureLink.handOver(from: current.url, to: target, server: current.id) else { return }
+            token = moved
+        }
+        SecureMemory.save(target, for: current.id)
+        NSLog("broadwave secure %@", target.absoluteString)
+        attach(base: target, token: token, started: started)
+    }
+
+    /// Back to the home address, when the secure one stopped answering.
+    func leaveSecure() {
+        guard let current = server, secureBase != nil else { return }
+        NSLog("broadwave secure fallback %@", current.url.absoluteString)
+        secureRetryAt = Date().addingTimeInterval(10 * 60)
+        SecureMemory.save(nil, for: current.id)
+        attach(base: current.url, token: DeviceTokens.token(for: current.url, server: current.id), started: generation)
         Task { await refresh() }
+    }
+
+    /// The socket dropped. On the secure address, a quick look decides whether
+    /// the address still answers or the app goes back to the home address.
+    func recheckSecure() async {
+        guard let current = server, let secure = secureBase else { return }
+        let started = generation
+        let answered = await SecureLink.probe(secure, id: current.id, key: current.key, session: session)
+        guard generation == started, secureBase == secure, !answered else { return }
+        leaveSecure()
+    }
+
+    /// A new network can make the secure address work, or stop it working.
+    private func startPathWatch() {
+        guard pathWatch == nil else { return }
+        pathWatch = PathWatch { [weak self] in
+            Task { @MainActor in await self?.networkChanged() }
+        }
+    }
+
+    func networkChanged() async {
+        secureRetryAt = .distantPast
+        if secureBase != nil {
+            await recheckSecure()
+        } else if let info, server?.id == info.id {
+            await considerSecure(info, started: generation)
+        }
     }
 
     /// Looks on the local network for the saved server at this address, when its
@@ -419,6 +520,7 @@ public final class AppStore {
         socket?.disconnect()
         socket = nil
         api = nil
+        secureBase = nil
         server = nil
         info = nil
         channels = []
@@ -574,8 +676,14 @@ public final class AppStore {
                     CatalogCache.save(CatalogSnapshot(channels: channels, airings: merged, recordings: recordings), serverID: id)
                 }
             }
+            await considerSecure(info, started: started)
         } catch {
             guard sameSession(started, base) else { return }
+            // The secure address did not answer at all: back to the home address.
+            if secureBase != nil, !(error is APIError) {
+                leaveSecure()
+                return
+            }
             if let failure = error as? APIError, failure.signedOut {
                 noteSignedOut(failure.message)
                 return
@@ -596,7 +704,11 @@ public final class AppStore {
         guard !id.isEmpty, let current = server, api?.token != nil,
               DeviceTokens.device(for: current.url) == id else { return }
         DeviceTokens.save(nil, for: current.url, server: current.id)
+        if let secure = secureBase ?? SecureMemory.url(for: current.id) {
+            DeviceTokens.save(nil, for: secure, server: current.id)
+        }
         SharedServer.saveToken(nil, for: nil)
+        secureBase = nil
         api = APIClient(base: current.url, session: session)
         noteSignedOut(APIError.signInWall)
     }

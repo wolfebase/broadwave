@@ -2286,6 +2286,49 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /direct:
+    get:
+      tags: [server]
+      operationId: getDirect
+      description: |
+        The secure name on the home network: `lan.<label>.direct.wolfeup.com`, pointed
+        at this server's home address with a Let's Encrypt certificate, served with
+        HTTP/2 on its own port (8443 by default). Nothing to set up. Off by default for now
+        (`BROADWAVE_DIRECT=1` turns it on) until the packager makes sub-second parts.
+        Requests by this name are home requests, like the server's address.
+        `state` is `off`, `starting`, `ready`, `error`, or `unavailable` (the server
+        was started without `BROADWAVE_DIRECT=1`).
+      responses:
+        "200":
+          description: Secure name status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DirectStatus" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [server]
+      operationId: putDirect
+      description: Turns the secure name on or off. Off stops serving it at once and leaves `secureUrl` out of `/server`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Secure name status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DirectStatus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /invites:
     get:
       tags: [pairing]
@@ -3046,6 +3089,25 @@ components:
         castAppId:
           type: string
           description: "Google Cast application id from BROADWAVE_CAST_APP_ID. Omitted when unset or not 4 to 32 letters and digits. The web player shows Cast only when this is set."
+        secureUrl:
+          type: string
+          description: "The same server over HTTPS and HTTP/2 on the home network, such as https://lan.abcdefghij.direct.wolfeup.com:8443. Present once a trusted certificate is live. Apps prefer it when it answers and stay on this address when it does not (a router that blocks private answers to public names, a phone away from home)."
+    DirectStatus:
+      type: object
+      required: [enabled, state, trusted, addresses]
+      properties:
+        enabled: { type: boolean }
+        state: { type: string, enum: [off, starting, ready, error, unavailable] }
+        name: { type: string, description: "The secure name, once registered." }
+        url: { type: string, description: "Same as secureUrl in /server. Omitted until a trusted certificate is live." }
+        expires: { type: string, format: date-time, description: "When the certificate runs out. It is renewed 30 days before." }
+        trusted: { type: boolean, description: "Devices trust the certificate. A test authority's is served but not offered." }
+        addresses:
+          type: array
+          items: { type: string }
+          description: Home network addresses the name points at.
+        lastError: { type: string }
+        errorAt: { type: string, format: date-time }
     ServerUpdate:
       type: object
       required: [version, notesUrl, message]

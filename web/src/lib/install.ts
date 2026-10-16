@@ -25,3 +25,16 @@ export function installBlocked(): boolean {
   const standalone = ios || window.matchMedia("(display-mode: standalone)").matches;
   return !offerInstall({ standalone, dismissed, hasPrompt: true });
 }
+
+/** iPhone and iPad, including an iPad that asks for the desktop site and says it is a Mac. */
+export function isAppleTouch(userAgent: string, maxTouchPoints: number): boolean {
+  return /iPhone|iPad|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1);
+}
+
+/**
+ * Safari on iPhone never offers to install, so it gets a hint instead. Only on
+ * https: a home screen app on plain http has no offline page.
+ */
+export function offerHomeScreenHint(state: { appleTouch: boolean; secure: boolean; standalone: boolean; dismissed: boolean }): boolean {
+  return state.appleTouch && state.secure && !state.standalone && !state.dismissed;
+}

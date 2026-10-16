@@ -10,7 +10,7 @@ struct GuideView: View {
     @State private var filter: BroadwaveKit.Category?
     @State private var favoritesOnly = false
     @State private var selected: Selection?
-    @State private var jump: Date?
+    @State private var jump: GuideJump?
     @State private var scores: [String: String] = [:]
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
@@ -26,6 +26,8 @@ struct GuideView: View {
             case tonight
             case later(TimeInterval)
             case chip(String)
+            /// The live pane at the end of the day row.
+            case pane
         }
     #endif
 
@@ -50,8 +52,24 @@ struct GuideView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            filters
-            dayJump
+            #if os(tvOS)
+                filters
+                // The channel the player stepped away from plays on at the end of the day row.
+                HStack(alignment: .center, spacing: 0) {
+                    dayJump
+                    if nowPlaying.docked, let channel = nowPlaying.channel {
+                        GuideLivePane(channel: channel)
+                            .focused($headerFocus, equals: .pane)
+                            .onMoveCommand { moveHeader($0, from: .pane) }
+                            .padding(.trailing, 60)
+                            .padding(.bottom, 8)
+                            .transition(.opacity)
+                    }
+                }
+            #else
+                filters
+                dayJump
+            #endif
             #if os(tvOS)
                 // Select plays what is on now, as on any TV guide; a later program opens its
                 // details. A long press opens the details of anything.
@@ -139,7 +157,7 @@ struct GuideView: View {
         .onAppear { claimGuideFocus() }
         .onChange(of: tvSelectedTab) { _, _ in claimGuideFocus() }
         // Closing the player lands back on the channel that played.
-        .onChange(of: nowPlaying.channel == nil) { _, closed in
+        .onChange(of: nowPlaying.channel == nil || !nowPlaying.expanded) { _, closed in
             if closed {
                 claimGuideFocus()
             }
@@ -180,8 +198,15 @@ struct GuideView: View {
         /// a channel), so the press went to the row under it. That Back leaves the player,
         /// so one press always does. Otherwise Back plays the last channel again.
         private var backAction: (() -> Void)? {
-            if nowPlaying.channel != nil, nowPlaying.together.isEmpty, nowPlaying.recordingScreens.isEmpty, !nowPlaying.live.pictureInPicture {
-                return { nowPlaying.stop() }
+            if nowPlaying.channel != nil, nowPlaying.expanded, nowPlaying.together.isEmpty, nowPlaying.recordingScreens.isEmpty, !nowPlaying.live.pictureInPicture {
+                return { nowPlaying.dock() }
+            }
+            // The channel plays on in the preview: Back brings it back full screen at once.
+            if nowPlaying.docked {
+                return {
+                    guard Date().timeIntervalSince(nowPlaying.stoppedAt ?? .distantPast) > 1.5 else { return }
+                    nowPlaying.expanded = true
+                }
             }
             guard let last = resumable else { return nil }
             return {
@@ -206,22 +231,28 @@ struct GuideView: View {
     private var dayJump: some View {
         guideRow {
             HStack(spacing: 8) {
-                Button("Now") { jump = store.now.addingTimeInterval(-15 * 60) }
+                Button { go(store.now.addingTimeInterval(-15 * 60)) } label: { chipLabel("Now") }
                     .buttonStyle(.glass)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Now")
                     .accessibilityIdentifier("guide-now")
                 #if os(tvOS)
                     .focused($headerFocus, equals: .now)
                     .onMoveCommand { moveHeader($0, from: .now) }
                 #endif
-                Button("Tonight") { jump = primeTime(on: store.now, after: store.now) }
+                Button { go(primeTime(on: store.now, after: store.now)) } label: { chipLabel("Tonight") }
                     .buttonStyle(.glass)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Tonight")
                 #if os(tvOS)
                     .focused($headerFocus, equals: .tonight)
                     .onMoveCommand { moveHeader($0, from: .tonight) }
                 #endif
                 ForEach(comingDays, id: \.timeIntervalSince1970) { day in
-                    Button(dayLabel(day)) { jump = primeTime(on: day, after: day) }
+                    Button { go(primeTime(on: day, after: day)) } label: { chipLabel(dayLabel(day)) }
                         .buttonStyle(.glass)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(dayLabel(day))
                     #if os(tvOS)
                         .focused($headerFocus, equals: .later(day.timeIntervalSince1970))
                         .onMoveCommand { moveHeader($0, from: .later(day.timeIntervalSince1970)) }
@@ -233,10 +264,19 @@ struct GuideView: View {
         }
     }
 
+    /// Every press scrolls, the same day twice included.
+    private func go(_ date: Date) {
+        jump = GuideJump(to: date, serial: (jump?.serial ?? 0) + 1)
+    }
+
+    /// Tomorrow and the day after, while the listings reach that evening. A day with
+    /// nothing listed would scroll to an empty grid.
     private var comingDays: [Date] {
         let cal = Calendar.current
         let start = cal.startOfDay(for: store.now)
+        let listed = store.channels.compactMap { store.index.airings($0.id).last?.end }.max() ?? store.now
         return (1 ... 2).compactMap { cal.date(byAdding: .day, value: $0, to: start) }
+            .filter { primeTime(on: $0, after: $0) < listed }
     }
 
     private func dayLabel(_ day: Date) -> String {
@@ -326,13 +366,21 @@ struct GuideView: View {
         #endif
     }
 
+    /// One label for every chip in the header: the filters and the days.
+    private func chipLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .lineLimit(1)
+            .fixedSize()
+    }
+
     private func chip(_ title: String, spot: String, color: Color? = nil, on: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 if let color {
                     Circle().fill(color).frame(width: 8, height: 8)
                 }
-                Text(title).font(.subheadline.weight(.semibold))
+                chipLabel(title)
             }
             .padding(.horizontal, 6)
         }
@@ -353,6 +401,9 @@ struct GuideView: View {
             spots += [BroadwaveKit.Category.sports, .news, .movies, .kids].map { .chip($0.rawValue) }
             spots += [.now, .tonight]
             spots += comingDays.map { .later($0.timeIntervalSince1970) }
+            if nowPlaying.docked {
+                spots.append(.pane)
+            }
             return spots
         }
 
@@ -424,12 +475,23 @@ struct GuideView: View {
 
 /// The time grid. The channel column and time header stay pinned while the grid
 /// scrolls both ways, and the tally-red line marks now.
+struct GuideCellKey: Hashable {
+    var channel: Int64
+    var airing: Int64
+}
+
+/// A place in the guide to scroll to. The serial makes a second press of the same day count.
+struct GuideJump: Equatable {
+    var to: Date
+    var serial: Int
+}
+
 struct GuideGrid: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
     let channels: [Channel]
     let highlight: BroadwaveKit.Category?
-    let jump: Date?
+    let jump: GuideJump?
     var scores: [String: String] = [:]
     #if os(tvOS)
         var channelFocus: FocusState<Int64?>.Binding
@@ -439,6 +501,19 @@ struct GuideGrid: View {
     @State private var offset: CGPoint = .zero
     @State private var scroll = ScrollPosition()
     @State private var hasScrollSample = false
+    #if os(tvOS)
+        /// The program with focus, by row, so its row and channel can light up.
+        @FocusState private var cellFocus: GuideCellKey?
+    #endif
+
+    /// The row the remote is on: a program's or the channel column's.
+    private var focusedRow: Int64? {
+        #if os(tvOS)
+            cellFocus?.channel ?? channelFocus.wrappedValue
+        #else
+            nil
+        #endif
+    }
 
     #if os(tvOS)
         private let rowH: CGFloat = 110
@@ -471,6 +546,46 @@ struct GuideGrid: View {
         guideOrigin(for: store.now)
     }
 
+    #if os(tvOS)
+        private let dayW: CGFloat = 200
+    #else
+        private let dayW: CGFloat = 110
+    #endif
+
+    /// Today, Tomorrow, or the date, for the left edge of the grid.
+    private func dayTitle(at scrollX: CGFloat) -> String {
+        let date = origin.addingTimeInterval(Double(scrollX / perMinute) * 60 + 60)
+        let cal = Calendar.current
+        if cal.isDateInToday(date) {
+            return "Today"
+        }
+        if cal.isDateInTomorrow(date) {
+            return "Tomorrow"
+        }
+        return date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    }
+
+    /// Where the grid sits when it shows now: the half hour before, so the left edge
+    /// starts programs whole instead of showing the last minutes of earlier ones.
+    private var nowScrollX: CGFloat {
+        let back = store.now.addingTimeInterval(-900).timeIntervalSince(origin)
+        return max(0, x(origin.addingTimeInterval((back / 1800).rounded(.down) * 1800)))
+    }
+
+    /// The grid shows another part of the day than now.
+    private var awayFromNow: Bool {
+        abs(offset.x - nowScrollX) > 600
+    }
+
+    #if os(tvOS)
+        private func backToNow(_ channel: Channel) {
+            withAnimation(.smooth(duration: 0.35)) {
+                scroll.scrollTo(point: CGPoint(x: nowScrollX, y: offset.y))
+            }
+            channelFocus.wrappedValue = channel.id
+        }
+    #endif
+
     private func x(_ date: Date) -> CGFloat {
         CGFloat(date.timeIntervalSince(origin) / 60) * perMinute
     }
@@ -494,7 +609,7 @@ struct GuideGrid: View {
         let width = CGFloat(hours * 60) * perMinute
         let end = origin.addingTimeInterval(hours * 3600)
         let gridW = max(0, viewport.width - channelW)
-        let lead = x(store.now.addingTimeInterval(-900))
+        let lead = nowScrollX
         let fraction = max(0, min(1, width > 0 ? lead / width : 0))
         let scrollX = hasScrollSample ? offset.x : max(0, fraction * (width - gridW))
         return ScrollViewReader { proxy in
@@ -525,12 +640,6 @@ struct GuideGrid: View {
                             }
                         }
                         .frame(height: headH + CGFloat(channels.count) * rowHeight, alignment: .top)
-                        ForEach(0 ..< Int(hours), id: \.self) { hour in
-                            Color.clear
-                                .frame(width: 1, height: 1)
-                                .id(hour)
-                                .offset(x: CGFloat(hour * 60) * perMinute)
-                        }
                         // Now line
                         Rectangle()
                             .fill(Tokens.ColorToken.tally)
@@ -540,13 +649,16 @@ struct GuideGrid: View {
                             .allowsHitTesting(false)
                         // Omit a mark that has crossed this edge; the column would slice it.
                         ZStack(alignment: .topLeading) {
-                            Rectangle().fill(.ultraThinMaterial).frame(width: width, height: headH)
+                            // Opaque: a row scrolled up under it must not show through.
+                            Rectangle().fill(Tokens.ColorToken.surface1).frame(width: width, height: headH)
+                                .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
                             ForEach(0 ..< Int(hours * 2), id: \.self) { i in
                                 let t = origin.addingTimeInterval(Double(i) * 1800)
                                 let markX = x(t) + 8
                                 // The now pill sits over this row; a mark under it would show through.
                                 let underPill = markX > x(store.now) - 40 && markX < x(store.now) + nowPillW
-                                if markX >= scrollX, !underPill {
+                                // The day sits at the left edge of the header.
+                                if markX >= scrollX + dayW, !underPill {
                                     Text(t.formatted(date: .omitted, time: .shortened))
                                         .font(.footnote.weight(.semibold))
                                         .monospacedDigit()
@@ -565,12 +677,22 @@ struct GuideGrid: View {
                                     .shadow(color: Tokens.ColorToken.tally.opacity(0.6), radius: 8)
                                     .offset(x: nowX, y: 10)
                             }
+                            Text(dayTitle(at: scrollX))
+                                .font(.footnote.weight(.bold))
+                                .lineLimit(1)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 3)
+                                .background(.white.opacity(0.14), in: .capsule)
+                                .offset(x: scrollX + 8, y: 10)
+                                .accessibilityIdentifier("guide-day")
                         }
                         .offset(y: offset.y)
                         .zIndex(3)
                     }
                 }
                 .frame(width: gridW, height: viewport.height)
+                // A tvOS scroll view draws past its bounds: rows showed below the channel column.
+                .clipped()
                 .scrollIndicators(.hidden)
                 .scrollPosition($scroll)
                 .onScrollGeometryChange(for: CGPoint.self) { $0.contentOffset } action: { _, new in
@@ -582,21 +704,21 @@ struct GuideGrid: View {
                 .task {
                     proxy.scrollTo("guide-now", anchor: .leading)
                 }
-                .onChange(of: jump) { _, date in
-                    guard let date else { return }
-                    let hour = max(0, min(Int(hours) - 1, Int(date.timeIntervalSince(origin) / 3600)))
-                    proxy.scrollTo(hour, anchor: .leading)
+                .onChange(of: jump) { _, jump in
+                    guard let jump else { return }
+                    // The left edge lands on a half hour, so no program shows as a sliver there.
+                    let half = (jump.to.timeIntervalSince(origin) / 1800).rounded(.down) * 1800
+                    let target = max(0, min(width - gridW, x(origin.addingTimeInterval(half))))
+                    withAnimation(.smooth(duration: 0.35)) {
+                        scroll.scrollTo(point: CGPoint(x: target, y: offset.y))
+                    }
                 }
             }
         }
     }
 
     private func channelRail(rowHeight: CGFloat, viewport: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            Rectangle()
-                .fill(Tokens.ColorToken.surface1)
-                .frame(height: headH)
-                .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
+        ZStack(alignment: .top) {
             VStack(spacing: 0) {
                 ForEach(channels) { channel in
                     Button { onSelect(channel, store.index.on(channel.id, at: store.now)) } label: {
@@ -640,7 +762,7 @@ struct GuideGrid: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
                         .frame(width: channelW, height: rowHeight)
-                        .background(Tokens.ColorToken.surface1)
+                        .background(focusedRow == channel.id ? Tokens.ColorToken.surface2 : Tokens.ColorToken.surface1)
                         .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
                     }
                     .buttonStyle(GuideChannelStyle())
@@ -654,7 +776,13 @@ struct GuideGrid: View {
                         .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)\(channel.isATSC3 ? ", ATSC 3.0" : "")")
                 }
             }
+            .padding(.top, headH)
             .offset(y: -offset.y)
+            // The corner over the column stays empty: rows scroll under it.
+            Rectangle()
+                .fill(Tokens.ColorToken.surface1)
+                .frame(height: headH)
+                .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
         }
     }
 
@@ -674,11 +802,13 @@ struct GuideGrid: View {
                 return
             }
             guard channels.indices.contains(next) else { return }
-            let top = headH + CGFloat(next) * rowHeight - offset.y
+            // One more row stays in view past the focused one, so you see what is coming.
+            let ahead = direction == .down ? min(next + 1, channels.count - 1) : max(next - 1, 0)
+            let top = headH + CGFloat(ahead) * rowHeight - offset.y
             if top < headH {
-                scroll.scrollTo(y: CGFloat(next) * rowHeight)
+                scroll.scrollTo(y: CGFloat(ahead) * rowHeight)
             } else if top + rowHeight > viewport + 1 {
-                scroll.scrollTo(y: headH + CGFloat(next + 1) * rowHeight - viewport)
+                scroll.scrollTo(y: headH + CGFloat(ahead + 1) * rowHeight - viewport)
             }
             channelFocus.wrappedValue = channels[next].id
         }
@@ -715,6 +845,9 @@ struct GuideGrid: View {
                     // landed on the leftmost cell: a program that had ended, whose panel
                     // offered only Record series.
                     .disabled(airing.end <= store.now)
+                    .focused($cellFocus, equals: GuideCellKey(channel: channel.id, airing: airing.id))
+                    // Back from later in the day comes back to now, on this channel.
+                    .onExitCommand(perform: awayFromNow ? { backToNow(channel) } : nil)
                 #endif
                     .offset(x: x(s))
             }
@@ -727,6 +860,7 @@ struct GuideGrid: View {
                     .offset(x: x(last.end) + 12)
             }
         }
+        .background(focusedRow == channel.id ? Color.white.opacity(0.05) : .clear)
         .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
     }
 }
@@ -768,6 +902,8 @@ struct GuideCell: View {
                             }
                             if airing.new == true {
                                 Text("NEW").font(.caption2.weight(.heavy)).foregroundStyle(Tokens.ColorToken.accent)
+                                    .fixedSize()
+                                    .layoutPriority(1)
                             }
                         }
                         Text(airing.subtitle ?? airing.start.formatted(date: .omitted, time: .shortened))
@@ -825,9 +961,11 @@ struct GuideCellStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .overlay(RoundedRectangle(cornerRadius: Tokens.Radius.sm).stroke(.white, lineWidth: focused ? 3 : 0))
-                .scaleEffect(focused ? 1.04 : configuration.isPressed ? 0.98 : 1)
-                .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 14, y: 8)
+                // Focused, the cell lifts and fills, so it reads from across the room.
+                .overlay(RoundedRectangle(cornerRadius: Tokens.Radius.sm).fill(.white.opacity(focused ? 0.16 : 0)))
+                .overlay(RoundedRectangle(cornerRadius: Tokens.Radius.sm).stroke(.white, lineWidth: focused ? 4 : 0))
+                .scaleEffect(focused ? 1.06 : configuration.isPressed ? 0.98 : 1)
+                .shadow(color: .black.opacity(focused ? 0.6 : 0), radius: 18, y: 10)
                 .zIndex(focused ? 1 : 0)
                 .animation(Tokens.Motion.spring, value: focused)
         }
@@ -860,6 +998,8 @@ struct ProgramSheet: View {
     @Environment(NowPlaying.self) private var nowPlaying
     @Environment(\.dismiss) private var dismiss
     @State private var problem = ""
+    /// Record series asks first: it records every airing from now on.
+    @State private var confirmSeries = false
     let channel: Channel
     let airing: Airing?
 
@@ -976,7 +1116,7 @@ struct ProgramSheet: View {
                     if let airing {
                         Button {
                             if series == nil {
-                                act { try await store.recordSeries(airing) }
+                                confirmSeries = true
                             }
                         } label: {
                             Label(series != nil ? "Series is recording" : kind == .sports ? "Record every airing" : "Record series", systemImage: "repeat")
@@ -987,12 +1127,31 @@ struct ProgramSheet: View {
                         #if os(iOS)
                             .disabled(series != nil)
                         #endif
+                            .accessibilityIdentifier("program-record-series")
+                            .confirmationDialog(
+                                kind == .sports ? "Record every airing of \(airing.title)?" : "Record every episode of \(airing.title)?",
+                                isPresented: $confirmSeries,
+                                titleVisibility: .visible
+                            ) {
+                                Button(kind == .sports ? "Record every airing" : "Record series") {
+                                    act { try await store.recordSeries(airing) }
+                                }
+                                .accessibilityIdentifier("program-record-series-confirm")
+                                Button("Cancel", role: .cancel) {}
+                            } message: {
+                                Text("New airings record as they come up. You can stop it in Recordings › Upcoming.")
+                            }
                     }
                     if !problem.isEmpty {
                         Text(problem).font(.footnote).foregroundStyle(.red)
                     }
                 }
                 .padding(.top, 8)
+                #if os(tvOS)
+                    // Room for the focused button to grow without touching the sheet's edge.
+                    .padding(.bottom, 36)
+                    .padding(.horizontal, 12)
+                #endif
             }
             .padding(24)
         }

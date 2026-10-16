@@ -1,0 +1,16 @@
+# Broadwave direct: trusted HTTPS names for home servers.
+# Deploy: npx wrangler@4 deploy (the CF_API_TOKEN secret is a DNS-edit token for the zone).
+name = "broadwave-direct"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = false
+routes = [{ pattern = "api.direct.wolfeup.com", custom_domain = true }]
+
+[vars]
+BASE_DOMAIN = "direct.wolfeup.com"
+ZONE_ID = "af8a64abd18433a3777be8bfc1862821"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "broadwave-direct"
+database_id = "fbcdf2b1-ae50-49ec-bcfc-37045e6dba9f"

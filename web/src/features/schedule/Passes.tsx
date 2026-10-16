@@ -207,9 +207,11 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
   }
 
   return (
-    <>
-      <div className="passes-head">
-        <h3 className="section-title">{t("schedule.passes")}</h3>
+    <section className="sched-section" aria-labelledby="sched-passes">
+      <div className="sched-head passes-head">
+        <h2 id="sched-passes" className="section-title">
+          {t("schedule.passes")}
+        </h2>
         {editing === "new" ? null : (
           <button type="button" className="btn small" data-pass-new onClick={() => setEditing("new")}>
             {t("schedule.newPass")}
@@ -226,7 +228,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
         />
       ) : null}
       {rows.length === 0 && editing !== "new" ? (
-        <p className="empty">{t("schedule.passesEmpty")}</p>
+        <p className="sched-empty">{t("schedule.passesEmpty")}</p>
       ) : (
         <ol className="source-list pass-list">
           {rows.map((pass, index) => (
@@ -305,8 +307,8 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
         </ol>
       )}
       {note ? <p className="hint" role="alert">{note}</p> : null}
-      <p className="hint">{t("schedule.priorityHint")}</p>
-    </>
+      {rows.length > 1 ? <p className="hint">{t("schedule.priorityHint")}</p> : null}
+    </section>
   );
 }
 
@@ -368,6 +370,7 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
   const dayNames = weekdayShortNames();
   const label = pass ? pass.title : t("schedule.newPass");
   const shown = channels.filter((ch) => !ch.hidden || ch.id === draft.channelId);
+  const id = pass?.id ?? "new";
   return (
     <form
       className="pass-editor"
@@ -378,33 +381,39 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
       }}
     >
       {once || team ? null : (
-        <div className="pad">
-          <label>
+        <div className="pe-row">
+          <span className="pe-label" id={`pe-match-${id}`}>
             {t("schedule.match")}
-            <select value={draft.matchKind} onChange={(e) => set("matchKind", e.target.value as Draft["matchKind"])}>
-              <option value="title">{t("schedule.titleIs")}</option>
-              <option value="contains">{t("schedule.titleContains")}</option>
-              <option value="category">{t("schedule.category")}</option>
-            </select>
-          </label>
-          <label className="pass-name">
-            {draft.matchKind === "category" ? t("schedule.category") : draft.matchKind === "contains" ? t("schedule.words") : t("schedule.titleField")}
-            <input
-              type="text"
-              placeholder={draft.matchKind === "category" ? t("schedule.placeholderCategory") : draft.matchKind === "contains" ? t("schedule.placeholderWords") : t("schedule.placeholderTitle")}
-              value={draft.title}
-              autoFocus={!pass}
-              onChange={(e) => set("title", e.target.value)}
-            />
-          </label>
+          </span>
+          <div className="pe-control">
+            <div className="segmented" role="group" aria-labelledby={`pe-match-${id}`}>
+              {(["title", "contains", "category"] as const).map((kind) => (
+                <button key={kind} type="button" className={draft.matchKind === kind ? "seg on" : "seg"} aria-pressed={draft.matchKind === kind} onClick={() => set("matchKind", kind)}>
+                  {kind === "title" ? t("schedule.titleIs") : kind === "contains" ? t("schedule.titleHas") : t("schedule.category")}
+                </button>
+              ))}
+            </div>
+            <label className="pe-field pass-name">
+              <span className="sr-only">{draft.matchKind === "category" ? t("schedule.category") : draft.matchKind === "contains" ? t("schedule.words") : t("schedule.titleField")}</span>
+              <input
+                type="text"
+                placeholder={draft.matchKind === "category" ? t("schedule.placeholderCategory") : draft.matchKind === "contains" ? t("schedule.placeholderWords") : t("schedule.placeholderTitle")}
+                value={draft.title}
+                autoFocus={!pass}
+                onChange={(e) => set("title", e.target.value)}
+              />
+            </label>
+          </div>
         </div>
       )}
       {once ? null : (
         <>
-          <div className="pad">
-            <label>
+          <div className="pe-row">
+            <label className="pe-label" htmlFor={`pe-channel-${id}`}>
               {t("schedule.channel")}
-              <select value={draft.channelId} onChange={(e) => set("channelId", Number(e.target.value))}>
+            </label>
+            <div className="pe-control">
+              <select id={`pe-channel-${id}`} value={draft.channelId} onChange={(e) => set("channelId", Number(e.target.value))}>
                 <option value={0}>{t("schedule.anyChannel")}</option>
                 {shown.map((ch) => (
                   <option key={ch.id} value={ch.id}>
@@ -412,105 +421,152 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
                   </option>
                 ))}
               </select>
-            </label>
-            {team ? null : (
-              <label>
+            </div>
+          </div>
+          {team ? null : (
+            <div className="pe-row">
+              <span className="pe-label" id={`pe-episodes-${id}`}>
                 {t("schedule.episodes")}
-                <select value={draft.episodes} onChange={(e) => set("episodes", e.target.value as Draft["episodes"])}>
-                  <option value="all">{t("schedule.all")}</option>
-                  <option value="new">{t("schedule.newOnly")}</option>
-                </select>
-              </label>
-            )}
+              </span>
+              <div className="pe-control">
+                <div className="segmented" role="group" aria-labelledby={`pe-episodes-${id}`}>
+                  {(["all", "new"] as const).map((kind) => (
+                    <button key={kind} type="button" className={draft.episodes === kind ? "seg on" : "seg"} aria-pressed={draft.episodes === kind} onClick={() => set("episodes", kind)}>
+                      {kind === "all" ? t("schedule.all") : t("schedule.newOnly")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="pe-row pass-days" role="group" aria-labelledby={`pe-days-${id}`}>
+            <span className="pe-label" id={`pe-days-${id}`}>{t("schedule.days")}</span>
+            <div className="pe-control guide-chips pe-days">
+              {dayNames.map((name, day) => {
+                const on = draft.days.includes(day);
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    className={`chip${on ? " on" : ""}`}
+                    aria-pressed={on}
+                    onClick={() => set("days", on ? draft.days.filter((d) => d !== day) : [...draft.days, day].sort())}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+              {draft.days.length === 0 ? <span className="pe-note">{t("schedule.everyDay")}</span> : null}
+            </div>
           </div>
-          <fieldset className="pad pass-days">
-            <legend>{t("schedule.days")}</legend>
-            {dayNames.map((name, day) => {
-              const on = draft.days.includes(day);
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  className={`chip${on ? " on" : ""}`}
-                  aria-pressed={on}
-                  onClick={() => set("days", on ? draft.days.filter((d) => d !== day) : [...draft.days, day].sort())}
-                >
-                  {name}
+          <div className="pe-row" role="group" aria-labelledby={`pe-time-${id}`}>
+            <span className="pe-label" id={`pe-time-${id}`}>{t("schedule.time")}</span>
+            <div className="pe-control pe-inline">
+              <label className="pe-unit">
+                <span>{t("schedule.from")}</span>
+                <input type="time" value={draft.timeStart} onChange={(e) => set("timeStart", e.target.value)} />
+              </label>
+              <label className="pe-unit">
+                <span>{t("schedule.until")}</span>
+                <input type="time" value={draft.timeEnd} onChange={(e) => set("timeEnd", e.target.value)} />
+              </label>
+              {draft.timeStart || draft.timeEnd ? (
+                <button type="button" className="btn small ghost" onClick={() => setDraft((d) => ({ ...d, timeStart: "", timeEnd: "" }))}>
+                  {t("schedule.anyTime")}
                 </button>
-              );
-            })}
-            <span className="codec">{draft.days.length === 0 ? t("schedule.everyDay") : ""}</span>
-          </fieldset>
-          <div className="pad">
-            <label>
-              {t("schedule.from")}
-              <input type="time" value={draft.timeStart} onChange={(e) => set("timeStart", e.target.value)} />
-            </label>
-            <label>
-              {t("schedule.until")}
-              <input type="time" value={draft.timeEnd} onChange={(e) => set("timeEnd", e.target.value)} />
-            </label>
-            {draft.timeStart || draft.timeEnd ? (
-              <button type="button" className="btn small" onClick={() => setDraft((d) => ({ ...d, timeStart: "", timeEnd: "" }))}>
-                {t("schedule.anyTime")}
-              </button>
-            ) : (
-              <span className="codec">{t("schedule.anyTime")}</span>
-            )}
+              ) : (
+                <span className="pe-note">{t("schedule.anyTime")}</span>
+              )}
+            </div>
           </div>
-          <div className="pad">
-            <label>
+          <div className="pe-row">
+            <span className="pe-label" id={`pe-keep-${id}`}>
               {t("schedule.keep")}
-              <select value={draft.keepMode} onChange={(e) => set("keepMode", e.target.value as Draft["keepMode"])}>
-                <option value="all">{t("schedule.all")}</option>
-                <option value="unwatched">{t("schedule.unwatched")}</option>
-                <option value="last">{t("schedule.theNewest")}</option>
-              </select>
-            </label>
-            {draft.keepMode === "last" ? (
-              <label>
-                {t("schedule.howMany")}
-                <input type="number" min={1} max={99} value={draft.keepCount} onChange={(e) => set("keepCount", clamp(e.target.value, 1, 99))} />
-              </label>
-            ) : null}
-            <label>
-              {t("schedule.stopAt")}
-              <input type="number" min={0} max={99} aria-describedby={`stop-${pass?.id ?? "new"}`} value={draft.limitCount} onChange={(e) => set("limitCount", clamp(e.target.value, 0, 99))} />
-            </label>
-            <span className="codec" id={`stop-${pass?.id ?? "new"}`}>{t("schedule.unwatchedLimit")}{draft.limitCount === 0 ? t("schedule.noLimit") : ""}</span>
-            {team ? null : (
-              <label>
-                <input type="checkbox" checked={draft.rerecord} onChange={(e) => set("rerecord", e.target.checked)} />
-                {t("schedule.recordAgainAfterDelete")}
-              </label>
-            )}
+            </span>
+            <div className="pe-control pe-inline">
+              <div className="segmented" role="group" aria-labelledby={`pe-keep-${id}`}>
+                {(["all", "unwatched", "last"] as const).map((mode) => (
+                  <button key={mode} type="button" className={draft.keepMode === mode ? "seg on" : "seg"} aria-pressed={draft.keepMode === mode} onClick={() => set("keepMode", mode)}>
+                    {mode === "all" ? t("schedule.keepAll") : mode === "unwatched" ? t("schedule.keepUnwatched") : t("schedule.keepNewest")}
+                  </button>
+                ))}
+              </div>
+              {draft.keepMode === "last" ? (
+                <label className="pe-unit">
+                  <input type="number" min={1} max={99} aria-label={t("schedule.keepNewestCount")} value={draft.keepCount} onChange={(e) => set("keepCount", clamp(e.target.value, 1, 99))} />
+                  <span>{t("schedule.recordings")}</span>
+                </label>
+              ) : null}
+            </div>
+          </div>
+          <div className="pe-row">
+            <span className="pe-label" id={`pe-limit-${id}`}>
+              {t("schedule.limit")}
+            </span>
+            <div className="pe-control pe-inline">
+              <div className="segmented" role="group" aria-labelledby={`pe-limit-${id}`}>
+                <button type="button" className={draft.limitCount === 0 ? "seg on" : "seg"} aria-pressed={draft.limitCount === 0} onClick={() => set("limitCount", 0)}>
+                  {t("schedule.noLimitChoice")}
+                </button>
+                <button type="button" className={draft.limitCount > 0 ? "seg on" : "seg"} aria-pressed={draft.limitCount > 0} onClick={() => set("limitCount", draft.limitCount || 5)}>
+                  {t("schedule.limitAt")}
+                </button>
+              </div>
+              {draft.limitCount > 0 ? (
+                <label className="pe-unit">
+                  <input type="number" min={1} max={99} aria-label={t("schedule.limitCount")} aria-describedby={`stop-${id}`} value={draft.limitCount} onChange={(e) => set("limitCount", clamp(e.target.value, 1, 99))} />
+                  <span>{t("schedule.unwatchedUnit")}</span>
+                </label>
+              ) : null}
+              {draft.limitCount > 0 ? (
+                <span className="pe-note pe-wide" id={`stop-${id}`}>
+                  {t("schedule.limitHint")}
+                </span>
+              ) : null}
+            </div>
           </div>
         </>
       )}
-      <div className="pad">
-        <label>
-          {t("schedule.early")}
-          <input type="number" min={0} max={30} value={draft.padBefore} onChange={(e) => set("padBefore", clamp(e.target.value, 0, 30))} />
-        </label>
-        <label>
-          {t("schedule.after")}
-          <input type="number" min={0} max={30} value={draft.padAfter} onChange={(e) => set("padAfter", clamp(e.target.value, 0, 30))} />
-        </label>
-        <label>
-          <input type="checkbox" checked={draft.commercials} onChange={(e) => set("commercials", e.target.checked)} />
-          {copy.library.findCommercials}
-        </label>
+      <div className="pe-row" role="group" aria-labelledby={`pe-pad-${id}`}>
+        <span className="pe-label" id={`pe-pad-${id}`}>{t("schedule.padding")}</span>
+        <div className="pe-control pe-inline">
+          <label className="pe-unit">
+            <span>{t("schedule.start")}</span>
+            <input type="number" min={0} max={30} aria-label={t("schedule.startEarlyLabel")} value={draft.padBefore} onChange={(e) => set("padBefore", clamp(e.target.value, 0, 30))} />
+            <span>{t("schedule.minEarly")}</span>
+          </label>
+          <label className="pe-unit">
+            <span>{t("schedule.end")}</span>
+            <input type="number" min={0} max={30} aria-label={t("schedule.endLateLabel")} value={draft.padAfter} onChange={(e) => set("padAfter", clamp(e.target.value, 0, 30))} />
+            <span>{t("schedule.minLate")}</span>
+          </label>
+        </div>
+      </div>
+      <div className="pe-row" role="group" aria-labelledby={`pe-opts-${id}`}>
+        <span className="pe-label" id={`pe-opts-${id}`}>{t("schedule.options")}</span>
+        <div className="pe-control pe-switches">
+          <label className="switch-row">
+            <input type="checkbox" checked={draft.commercials} onChange={(e) => set("commercials", e.target.checked)} />
+            <span>{copy.library.findCommercials}</span>
+          </label>
+          {once || team ? null : (
+            <label className="switch-row">
+              <input type="checkbox" checked={draft.rerecord} onChange={(e) => set("rerecord", e.target.checked)} />
+              <span>{t("schedule.recordAgainAfterDelete")}</span>
+            </label>
+          )}
+        </div>
       </div>
       {body.title ? <PreviewLines preview={preview} note={previewNote} channels={channels} /> : null}
       {preview && !once && preview.utcOffset !== -new Date().getTimezoneOffset() * 60 ? (
         <p className="hint">{t("schedule.serverClock", { zone: preview.timeZone })}</p>
       ) : null}
       {error ? <p className="hint error" role="alert">{error}</p> : null}
-      <div className="pad">
-        <button type="submit" className="btn primary small" disabled={saving}>
+      <div className="pe-actions">
+        <button type="submit" className="btn primary" disabled={saving}>
           {pass ? t("schedule.save") : t("schedule.addPass")}
         </button>
-        <button type="button" className="btn small" onClick={() => onDone(false)}>
+        <button type="button" className="btn ghost" onClick={() => onDone(false)}>
           {t("schedule.cancel")}
         </button>
       </div>
@@ -584,7 +640,11 @@ export function passDetails(pass: Pass, channels: Channel[]) {
   if (pass.keepMode === "unwatched") parts.push(t("schedule.keepsUnwatched"));
   if (pass.keepMode === "last") parts.push(t("schedule.keepsNewest", { count: pass.keepCount || 1 }));
   if (pass.limitCount) parts.push(t("schedule.stopsAt", { count: pass.limitCount }));
-  parts.push(t("schedule.pad", { before: pass.padBefore ?? 0, after: pass.padAfter ?? 0 }));
+  const before = pass.padBefore ?? 0;
+  const after = pass.padAfter ?? 0;
+  if (before && after) parts.push(t("schedule.padLine", { before, after }));
+  else if (before) parts.push(t("schedule.padStart", { before }));
+  else if (after) parts.push(t("schedule.padEnd", { after }));
   return parts.join(" · ");
 }
 

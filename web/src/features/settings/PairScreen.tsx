@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { focusRing } from "../../app/remote";
+import { pairMessages } from "../../i18n/messages/pair.ts";
 import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
 import { bind } from "../../i18n/runtime.ts";
+import { browserName } from "../../lib/events";
 import { writeToken } from "../../lib/deviceToken";
 import { claimPair, pollPair, startPair } from "./pairApi";
-import { codeAfterPoll, formatPairCode, normalizeClaimCode, normalizeInviteCode, pairPollStep } from "./pairCode";
+import { codeAfterPoll, codeLooksLikeInvite, detectKind, formatPairCode, normalizeClaimCode, normalizeInviteCode, normalizePairCode, pairPollStep, type PairKind } from "./pairCode";
+import "../manage.css";
+import "./pair.css";
 
 const t = bind(settingsUiMessages);
-
-type Kind = "web" | "phone" | "tv";
+const p = bind(pairMessages);
 
 type PairSession = { id: string; secret: string };
 
@@ -25,20 +29,43 @@ function message(err: unknown): string {
   return err instanceof Error && err.message ? err.message : t("devices.failed");
 }
 
+function guessKind(): PairKind {
+  return detectKind(navigator.userAgent, navigator.maxTouchPoints ?? 0, document.documentElement.dataset.layout ?? "");
+}
+
+const kinds: { id: PairKind; label: () => string }[] = [
+  { id: "phone", label: () => p("pair.kindPhone") },
+  { id: "web", label: () => p("pair.kindComputer") },
+  { id: "tv", label: () => p("pair.kindTv") },
+];
+
 export function PairScreen({ onPaired }: { onPaired: () => void }) {
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState<Kind>("web");
+  const [name, setName] = useState(() => browserName());
+  const [kind, setKind] = useState<PairKind>(guessKind);
   const [invite] = useState(invitedCode);
   const [code, setCode] = useState(invite);
+  const [letters, setLetters] = useState(Boolean(invite));
   const [issued, setIssued] = useState("");
   const [session, setSession] = useState<PairSession | null>(null);
   const [error, setError] = useState("");
+  const [showError, setShowError] = useState("");
   const [busy, setBusy] = useState(false);
   const onPairedRef = useRef(onPaired);
+  const showRef = useRef<HTMLButtonElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
+  const invited = letters || codeLooksLikeInvite(code);
 
   useEffect(() => {
     onPairedRef.current = onPaired;
   }, [onPaired]);
+
+  useEffect(() => {
+    // A remote cannot type a code easily, so a TV starts on showing one.
+    if (document.documentElement.dataset.layout !== "tv") return;
+    const frame = window.requestAnimationFrame(() => focusRing(showRef.current ?? submitRef.current));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     if (!session) return;
@@ -51,7 +78,7 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
       window.clearInterval(timer);
       setSession(null);
       setIssued((current) => codeAfterPoll(action, current));
-      setError(notice);
+      setShowError(notice);
     };
     const tick = () => {
       if (stop) return;
@@ -68,7 +95,7 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
             window.clearInterval(timer);
             writeToken(res.token);
             setSession(null);
-            setError("");
+            setShowError("");
             onPairedRef.current();
             return;
           }
@@ -81,10 +108,10 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
             finish(step.action === "expired" ? t("pair.expired") : t("pair.denied"), step.action);
             return;
           }
-          setError("");
+          setShowError("");
         })
         .catch((err: unknown) => {
-          if (!stop) setError(message(err));
+          if (!stop) setShowError(message(err));
         });
     };
     timer = window.setInterval(tick, 2000);
@@ -95,16 +122,16 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
     };
   }, [session]);
 
-  async function claim(event: FormEvent) {
-    event.preventDefault();
+  async function claim(raw: string) {
     const trimmed = name.trim();
-    const normalized = normalizeClaimCode(code);
+    const normalized = normalizeClaimCode(raw);
     if (!trimmed) {
       setError(t("pair.needName"));
       return;
     }
     if (!normalized) {
       setError(t("pair.needCode"));
+      codeRef.current?.focus();
       return;
     }
     setBusy(true);
@@ -127,7 +154,7 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
 
   async function showCode() {
     setBusy(true);
-    setError("");
+    setShowError("");
     setIssued("");
     setSession(null);
     try {
@@ -138,67 +165,135 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
       });
       setIssued(res.code);
       if (!res.pollSecret) {
-        setError(t("pair.cannotWait"));
+        setShowError(t("pair.cannotWait"));
         return;
       }
       setSession({ id: res.id, secret: res.pollSecret });
     } catch (err: unknown) {
-      setError(message(err));
+      setShowError(message(err));
     } finally {
       setBusy(false);
     }
   }
 
+  const help = invited ? p("pair.inviteHelp") : p("pair.codeHelp");
+
   return (
-    <div className="page-wrap">
-      <header className="page-header">
-        <h1>{invite ? t("pair.inviteTitle") : t("pair.title")}</h1>
-        <p className="lede">{invite ? t("pair.inviteLede") : t("pair.lede")}</p>
-      </header>
-      <form onSubmit={(event) => void claim(event)}>
-        <label className="field">
-          {t("pair.name")}
-          <input required value={name} autoComplete="off" spellCheck={false} onChange={(event) => setName(event.target.value)} />
-        </label>
-        <label className="field">
-          {t("pair.device")}
-          <select value={kind} onChange={(event) => setKind(event.target.value as Kind)}>
-            <option value="web">{t("devices.browser")}</option>
-            <option value="phone">{t("devices.phone")}</option>
-            <option value="tv">{t("devices.tv")}</option>
-          </select>
-        </label>
-        <label className="field">
-          {t("pair.code")}
-          <input
-            required
-            value={code}
-            autoComplete="one-time-code"
-            autoCapitalize="characters"
-            spellCheck={false}
-            onChange={(event) => setCode(event.target.value)}
-          />
-        </label>
-        <button type="submit" className="btn primary" disabled={busy}>
-          {t("pair.submit")}
-        </button>
-      </form>
-      {invite ? null : (
-        <button type="button" className="btn" disabled={busy} onClick={() => void showCode()}>
-          {t("pair.showCode")}
-        </button>
-      )}
-      {issued ? (
-        <>
-          <p className="pair-code">{formatPairCode(issued)}</p>
-          <p className="hint">{t("pair.codeHint")}</p>
-        </>
-      ) : null}
-      {error ? (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      ) : null}
+    <div className="pair-page manage">
+      <section className="pair-card" aria-labelledby="pair-title">
+        <header className="pair-head">
+          <span className="brand-tally" aria-hidden="true" />
+          <h1 id="pair-title">{invite ? t("pair.inviteTitle") : t("pair.title")}</h1>
+          <p className="lede">{invite ? t("pair.inviteLede") : t("pair.lede")}</p>
+        </header>
+        <form
+          className="pair-form"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!busy) void claim(code);
+          }}
+        >
+          <div className="pair-group">
+            <label className="field pair-code-field" htmlFor="pair-code">
+              {invited ? p("pair.inviteLabel") : p("pair.codeLabel")}
+            </label>
+            <input
+              ref={codeRef}
+              id="pair-code"
+              className={invited ? "pair-code-input letters" : "pair-code-input"}
+              value={code}
+              inputMode={invited ? "text" : "numeric"}
+              pattern={invited ? undefined : "[0-9 ]*"}
+              autoComplete="one-time-code"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              maxLength={invited ? 20 : 7}
+              placeholder={invited ? "ABCD-EFGH-JKLM" : "000 000"}
+              aria-describedby={error ? "pair-code-help pair-error" : "pair-code-help"}
+              aria-invalid={error ? true : undefined}
+              onChange={(event) => {
+                const next = event.target.value;
+                setCode(next);
+                if (error) setError("");
+                // Six digits is the whole code. Pair as soon as it is in.
+                if (!invited && !busy && name.trim() && normalizePairCode(next) && !normalizePairCode(code)) void claim(next);
+              }}
+            />
+            <span className="hint" id="pair-code-help">
+              {help}
+            </span>
+            {error ? (
+              <p className="error pair-error" id="pair-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            {invite ? null : (
+              <button
+                type="button"
+                className="text-btn pair-switch"
+                onClick={() => {
+                  setLetters((on) => !on);
+                  setCode("");
+                  setError("");
+                  window.requestAnimationFrame(() => codeRef.current?.focus());
+                }}
+              >
+                {invited ? p("pair.useDigits") : p("pair.useInvite")}
+              </button>
+            )}
+          </div>
+          <fieldset className="pair-group">
+            <legend>{p("pair.thisDevice")}</legend>
+            <label className="field">
+              {p("pair.nameLabel")}
+              <input value={name} maxLength={40} autoComplete="off" spellCheck={false} onChange={(event) => setName(event.target.value)} />
+              <span className="hint">{p("pair.nameHelp")}</span>
+            </label>
+            <div className="field">
+              <span id="pair-kind-label">{p("pair.kindLabel")}</span>
+              <div className="segmented pair-kinds" role="group" aria-labelledby="pair-kind-label">
+                {kinds.map((item) => (
+                  <button key={item.id} type="button" className={kind === item.id ? "seg on" : "seg"} aria-pressed={kind === item.id} onClick={() => setKind(item.id)}>
+                    {item.label()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </fieldset>
+          <button ref={submitRef} type="submit" className="btn primary big pair-submit" disabled={busy}>
+            {busy && !issued ? p("pair.pairing") : t("pair.submit")}
+          </button>
+        </form>
+        {invite ? null : (
+          <div className="pair-alt">
+            <h2>{p("pair.or")}</h2>
+            <p className="hint">{p("pair.orLede")}</p>
+            {issued ? (
+              <div className="pair-issued" role="status" aria-live="polite">
+                <span className="kicker">{p("pair.yourCode")}</span>
+                <p className="pair-code">{formatPairCode(issued)}</p>
+                <p className="hint">{t("pair.codeHint")}</p>
+                {session ? (
+                  <p className="pair-waiting">
+                    <span className="pair-spinner" aria-hidden="true" />
+                    {p("pair.waiting")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {showError ? (
+              <p className="error" role="alert">
+                {showError}
+              </p>
+            ) : null}
+            <button ref={showRef} type="button" className="btn" disabled={busy} onClick={() => void showCode()}>
+              {issued || showError ? p("pair.newCode") : t("pair.showCode")}
+            </button>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

@@ -824,3 +824,64 @@ func TestA3Point0EncodeReadsItsProgramThroughTheFilter(t *testing.T) {
 		}
 	}
 }
+
+// A stopped recording has a length the moment its status leaves
+// "recording": the list no longer runs ffprobe while it waits, so a viewer
+// who opens Recordings right after a stop would otherwise see none.
+func TestAStoppedRecordingHasALengthAtOnce(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	h := &Hub{Dir: dir, Store: st, RenditionIdle: time.Hour, channels: map[int64]*feed{}, muxes: map[int]*mux{}, reserved: map[int]bool{}}
+	m := &mux{freq: 1, tuner: -1, feeds: map[string]*feed{}, cancel: func() {}, body: fakeBody{}}
+	h.muxes[m.freq] = m
+	f := addTestFeed(h, m, 1, "4.1")
+	path := dir + "/news.ts"
+	var raw []byte
+	for _, tick := range []uint64{0, 10 * 90000, 25 * 90000} {
+		raw = append(raw, pcrTS(0x100, tick)...)
+	}
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	empty := dir + "/empty.ts"
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ends := time.Now().Add(time.Hour)
+	files := map[string]string{"news": path, "empty": empty}
+	ids := map[string]int64{}
+	for name, file := range files {
+		id, err := st.CreateRecording(context.Background(), store.Recording{
+			ChannelID: 1, GuideNumber: "4.1", Title: name, Path: file,
+			Status: "recording", StartedAt: time.Now().Add(-30 * time.Second), EndsAt: &ends,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[name] = id
+	}
+	for _, name := range []string{"news", "empty"} {
+		h.mu.Lock()
+		f.recording = &recording{id: ids[name], path: files[name], ends: ends}
+		h.finishRecordingLocked(f, "complete", "")
+		h.mu.Unlock()
+	}
+	got, err := st.Recording(context.Background(), ids["news"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "complete" || got.Duration < 24 || got.Duration > 26 {
+		t.Fatalf("stopped recording is %s with length %v, want complete with the 25 s in the file", got.Status, got.Duration)
+	}
+	got, err = st.Recording(context.Background(), ids["empty"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Duration > 0 {
+		t.Fatalf("a recording that wrote nothing has length %v", got.Duration)
+	}
+}
