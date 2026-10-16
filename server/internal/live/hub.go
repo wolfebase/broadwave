@@ -3573,6 +3573,7 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	}
 	f.recording = nil
 	h.changed()
+	h.storeLengthLocked(rec)
 	_ = h.Store.FinishRecording(context.Background(), rec.id, status, errText)
 	if saved, err := h.Store.Recording(context.Background(), rec.id); err == nil {
 		writeSidecar(saved)
@@ -3590,6 +3591,34 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	}
 }
 
+// storeLengthLocked stores what a recording holds as it finishes, before its
+// status leaves "recording". The list shows a recording's media so far, then
+// the stored length once it is done: a list read right after a stop has a
+// length, not a zero until ffprobe runs. It reads the PCR at the two ends of
+// the file the copy just closed, as the list did while it recorded (MediaWritten).
+// rememberDuration replaces it with ffprobe's answer.
+func (h *Hub) storeLengthLocked(rec *recording) {
+	ctx := context.Background()
+	row, err := h.Store.Recording(ctx, rec.id)
+	if err != nil || row.Duration > 0 {
+		return
+	}
+	path := rec.path
+	if path == "" {
+		path = row.Path
+	}
+	// A file with no clock in it is left to ffprobe: elapsed time alone would
+	// give a length to a recording that wrote nothing.
+	span, ok := mediaSpan(path)
+	if !ok {
+		return
+	}
+	if elapsed := time.Since(row.StartedAt).Seconds(); !row.StartedAt.IsZero() && elapsed > 0 && span > elapsed+30 {
+		span = elapsed
+	}
+	_ = h.Store.SetDuration(ctx, rec.id, span)
+}
+
 func (h *Hub) rememberDuration(rec store.Recording) {
 	tool := FFProbePath(h.FFmpeg)
 	if tool == "" || rec.Path == "" || h.Store == nil {
@@ -3597,7 +3626,10 @@ func (h *Hub) rememberDuration(rec store.Recording) {
 	}
 	seconds, err := ProbeDuration(tool, rec.Path)
 	if err != nil || seconds <= 0 {
-		_ = h.Store.SetDuration(context.Background(), rec.ID, -1)
+		// A length read from the file as it finished still stands.
+		if rec.Duration <= 0 {
+			_ = h.Store.SetDuration(context.Background(), rec.ID, -1)
+		}
 		return
 	}
 	_ = h.Store.SetDuration(context.Background(), rec.ID, seconds)
