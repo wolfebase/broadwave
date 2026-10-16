@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, useSyncExternalStore } from "react";
 import type { Channel, Device } from "../../types";
 import { useLayout } from "../../app/layout";
 import { settingsHubMessages } from "../../i18n/messages/settingsHub.ts";
@@ -9,6 +9,13 @@ import { Choice, Group, Switch } from "./rows";
 import { SearchSmallIcon } from "./icons";
 
 const h = bind(settingsHubMessages);
+
+// The table needs room for its five columns beside the settings list; a tablet gets the list.
+const roomy = window.matchMedia("(min-width: 1100px)");
+const watchRoomy = (fn: () => void) => {
+  roomy.addEventListener("change", fn);
+  return () => roomy.removeEventListener("change", fn);
+};
 
 type Patch = { enabled?: boolean; hidden?: boolean; customName?: string; customNumber?: string; guideKey?: string; twinChoice?: string };
 
@@ -23,7 +30,8 @@ export function Lineup({ channels, devices, onPatch }: { channels: Channel[]; de
   const shown = rows.filter((row) => (extra || !row.extra) && matchesLineup(row.channel, query));
   // The tuner column earns its place only when the rows shown come from more than one.
   const manyTuners = new Set(shown.map((row) => row.tuner)).size > 1;
-  const table = layout === "desktop";
+  const wide = useSyncExternalStore(watchRoomy, () => roomy.matches);
+  const table = layout === "desktop" && wide;
   return (
     <Group title={h("lineup.group")} lede={h("lineup.count", rows.length - hiddenCount)}>
       <div className="lineup-tools">
