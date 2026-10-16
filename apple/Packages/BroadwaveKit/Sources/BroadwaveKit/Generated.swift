@@ -398,6 +398,16 @@ public struct Marker: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+public struct MediaLink: Codable, Sendable, Hashable {
+    public var url: String
+    public var expiresAt: Date
+
+    public init(url: String, expiresAt: Date) {
+        self.url = url
+        self.expiresAt = expiresAt
+    }
+}
+
 public struct MosaicSession: Codable, Sendable, Hashable {
     public var key: String
     public var playlist: String
