@@ -106,6 +106,81 @@
             XCUIDevice.shared.orientation = .portrait
         }
 
+        // MARK: Search
+
+        /// Results come in while typing, one card per show; a show's page asks before recording.
+        func testSearchWhileTyping() throws {
+            let app = try launch(["-BroadwaveTab", "search"])
+            let field = app.searchFields.firstMatch
+            XCTAssertTrue(field.waitForExistence(timeout: 30), app.debugDescription)
+            pause(2)
+            shot("search-start")
+            field.tap()
+            field.typeText("news")
+            pause(0.4)
+            shot("search-typing")
+            let card = app.buttons.matching(identifier: "search-show-live").firstMatch
+            let any = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'search-show'")).firstMatch
+            XCTAssertTrue(any.waitForExistence(timeout: 10), "no results without pressing Search\n\(app.debugDescription)")
+            pause(2)
+            shot("search-results")
+            let titles = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'search-show'")).allElementsBoundByIndex.map(\.label)
+            print("search shows \(titles.count)")
+            (card.exists ? card : any).firstMatch.tap()
+            let series = app.buttons["show-record-series"]
+            XCTAssertTrue(series.waitForExistence(timeout: 8), app.debugDescription)
+            pause(1)
+            shot("search-show")
+            if series.isEnabled {
+                series.tap()
+                let confirm = app.buttons["show-record-series-confirm"]
+                XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Record series did not ask first")
+                shot("search-confirm")
+                // A popover on iPhone has no Cancel; a tap outside closes it without recording.
+                if app.buttons["Cancel"].exists {
+                    app.buttons["Cancel"].firstMatch.tap()
+                } else {
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).tap()
+                }
+                XCTAssertTrue(until(5) { !confirm.exists }, app.debugDescription)
+            }
+        }
+
+        // MARK: Sports and Home
+
+        /// Games only: no fishing, hunting, or sitcom about football.
+        func testSportsListsGamesOnly() throws {
+            let app = try launch(["-BroadwaveTab", "sports"])
+            XCTAssertTrue(app.descendants(matching: .any)["sports-page"].waitForExistence(timeout: 30), app.debugDescription)
+            pause(4)
+            shot("sports")
+            let cards = app.buttons.matching(NSPredicate(format: "identifier IN %@", ["sports-live", "sports-later"])).allElementsBoundByIndex
+            let labels = cards.map(\.label)
+            print("sports cards \(labels.count): \(labels.prefix(6))")
+            for word in ["Outdoors", "DeerGear", "Charlie Moore", "The Game,"] {
+                XCTAssertFalse(labels.contains { $0.contains(word) }, "\(word) is on the Sports page")
+            }
+            app.swipeUp(velocity: .slow)
+            pause(1)
+            shot("sports-scrolled")
+        }
+
+        /// The hero is something worth watching, and its card does not take the 3.0 tag's identifier.
+        func testHomeLeadsWithAShowWorthWatching() throws {
+            let app = try launch(["-BroadwaveTab", "home"])
+            let watch = app.buttons["home-watch"]
+            XCTAssertTrue(watch.waitForExistence(timeout: 30), app.debugDescription)
+            pause(3)
+            shot("home")
+            XCTAssertFalse(app.descendants(matching: .any)["atsc3-tag"].exists, "a card answers to atsc3-tag")
+            app.swipeUp(velocity: .slow)
+            pause(1)
+            shot("home-scrolled")
+            app.swipeUp(velocity: .slow)
+            pause(1)
+            shot("home-scrolled2")
+        }
+
         // MARK: Helpers
 
         private func firstRowLabel(_ app: XCUIApplication) -> String {

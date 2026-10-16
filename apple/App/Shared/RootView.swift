@@ -806,7 +806,8 @@ struct RootView: View {
                 Tab("Guide", systemImage: "square.grid.3x3.topleft.filled", value: AppTab.guide) {
                     stack(.guide) { GuideView() }
                 }
-                Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
+                // The system search tab: its own glass button, and the field rises with the keyboard.
+                Tab("Search", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                     stack(.search) { SearchView() }
                 }
                 Tab("Sports", systemImage: "sportscourt.fill", value: AppTab.sports) {

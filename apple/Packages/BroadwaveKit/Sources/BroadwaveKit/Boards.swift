@@ -188,3 +188,110 @@ public struct RecentSearches: Sendable {
         items = []
     }
 }
+
+public extension SearchBoard {
+    /// One show and its airings: on now first, then by start.
+    struct Show: Sendable, Identifiable {
+        public let id: String
+        public let airings: [Airing]
+        /// The airing on at the time the list was made.
+        public let live: Airing?
+
+        /// What the card leads with: the airing on now, else the next one.
+        public var lead: Airing {
+            live ?? airings[0]
+        }
+
+        /// The first airing that has not started.
+        public func next(after now: Date) -> Airing? {
+            airings.first { $0.start > now }
+        }
+    }
+
+    /// Results as one card per show. Every airing of a series is one card; a game is its
+    /// own card, so two different College Football games stay apart. A twin's copy is dropped
+    /// as `group` drops it. Shows on now lead; the rest follow by their next airing.
+    static func shows(_ airings: [Airing], visible: Set<Int64>, now: Date) -> [Show] {
+        let grouped = group(airings, visible: visible, now: now)
+        var order: [String] = []
+        var found: [String: [Airing]] = [:]
+        for airing in grouped.onNow + grouped.later {
+            let key = showKey(airing)
+            if found[key] == nil {
+                order.append(key)
+            }
+            found[key, default: []].append(airing)
+        }
+        return order.compactMap { key -> Show? in
+            guard let list = found[key], !list.isEmpty else { return nil }
+            let live = list.first { $0.isOn(at: now) }
+            let rest = list.filter { !$0.isOn(at: now) }.sorted { $0.start < $1.start }
+            return Show(id: key, airings: (live.map { [$0] } ?? []) + rest, live: live)
+        }
+        .sorted { a, b in
+            if (a.live != nil) != (b.live != nil) {
+                return a.live != nil
+            }
+            return a.lead.start < b.lead.start
+        }
+    }
+
+    internal static func showKey(_ airing: Airing) -> String {
+        if (airing.gameId ?? "").isEmpty == false || airing.matchup != nil {
+            return SportsBoard.sameGame(airing)
+        }
+        return "show:" + airing.title.trimmingCharacters(in: .whitespaces).lowercased()
+    }
+}
+
+/// Home's lead: something worth watching now, not a show in its last minutes.
+public enum HomeBoard {
+    /// The channel and program the hero shows. A live game leads, then a favorite channel,
+    /// then a program with art, a new episode, or one just starting. A program with under
+    /// ten minutes left, paid programming, and shopping sink to the bottom.
+    public static func hero(_ pairs: [(Channel, Airing?)], now: Date) -> (Channel, Airing?)? {
+        var best: (Channel, Airing?)?
+        var bestScore = -Double.infinity
+        for (channel, airing) in pairs {
+            let s = score(channel, airing, now: now)
+            if s > bestScore {
+                best = (channel, airing)
+                bestScore = s
+            }
+        }
+        return best
+    }
+
+    static func score(_ channel: Channel, _ airing: Airing?, now: Date) -> Double {
+        var s = channel.favorite ? 2.0 : 0
+        if channel.hd {
+            s += 0.5
+        }
+        guard let airing, airing.isOn(at: now) else { return s - 6 }
+        let title = airing.title.lowercased()
+        let category = (airing.category ?? "").lowercased()
+        if title.contains("paid program") || title.contains("infomercial") || category.contains("shopping") {
+            return s - 20
+        }
+        s += 1
+        if SportsBoard.isGame(airing) {
+            s += 5
+        }
+        if let image = airing.imageUrl, !image.isEmpty {
+            s += 1.5
+        }
+        if airing.new == true || airing.premiere == true {
+            s += 1
+        }
+        let left = airing.end.timeIntervalSince(now) / 60
+        if left < 10 {
+            s -= 5
+        } else if left < 20 {
+            s -= 1.5
+        }
+        if now.timeIntervalSince(airing.start) < 15 * 60 {
+            s += 0.5
+        }
+        return s
+    }
+}

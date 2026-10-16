@@ -71,21 +71,7 @@ struct GuideView: View {
                     }
                 }
             #else
-                if verticalSize == .compact {
-                    // Landscape iPhone: one row of chips, so more than two channels fit.
-                    guideRow {
-                        HStack(spacing: 8) {
-                            filterChips
-                            Divider().frame(height: 22)
-                            dayChips
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 6)
-                    }
-                } else {
-                    filters
-                    dayJump
-                }
+                touchHeader
             #endif
             #if os(tvOS)
                 // Select plays what is on now, as on any TV guide; a later program opens its
@@ -102,18 +88,7 @@ struct GuideView: View {
                     }
                 )
             #else
-                if sizeClass == .compact, verticalSize != .compact {
-                    onNowList
-                } else {
-                    if sizeClass == .regular, verticalSize == .regular {
-                        GuidePreview(picked: selected?.channel)
-                    }
-                    GuideGrid(
-                        channels: rows, highlight: filter, jump: jump, scores: scores, compactHeight: verticalSize == .compact,
-                        onDetails: { selected = Selection(channel: $0, airing: $1) },
-                        onSelect: { channel, airing in pick(channel, airing) }
-                    )
-                }
+                touchGuide
             #endif
         }
         #if os(iOS)
@@ -196,6 +171,45 @@ struct GuideView: View {
         }
         #endif
     }
+
+    #if !os(tvOS)
+        /// The list in portrait on iPhone; the grid elsewhere, with the preview on iPad.
+        @ViewBuilder
+        private var touchGuide: some View {
+            if sizeClass == .compact, verticalSize != .compact {
+                onNowList
+            } else {
+                if sizeClass == .regular, verticalSize == .regular {
+                    GuidePreview(picked: selected?.channel)
+                }
+                GuideGrid(
+                    channels: rows, highlight: filter, jump: jump, scores: scores, compactHeight: verticalSize == .compact,
+                    onDetails: { selected = Selection(channel: $0, airing: $1) },
+                    onSelect: { channel, airing in pick(channel, airing) }
+                )
+            }
+        }
+
+        /// Landscape iPhone: one row of chips, so more than two channels fit.
+        @ViewBuilder
+        private var touchHeader: some View {
+            if verticalSize == .compact {
+                // Landscape iPhone: one row of chips, so more than two channels fit.
+                guideRow {
+                    HStack(spacing: 8) {
+                        filterChips
+                        Divider().frame(height: 22)
+                        dayChips
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
+                }
+            } else {
+                filters
+                dayJump
+            }
+        }
+    #endif
 
     #if os(tvOS)
         /// The sidebar stays open over the grid until something in the page has focus, and it covers the
