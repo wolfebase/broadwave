@@ -232,6 +232,8 @@ type Hub struct {
 	grabbers sync.WaitGroup
 	// failures are recent renditions given up on, by channel and key.
 	failures map[string]startFailure
+	// releasing counts tuners being set to none outside h.mu.
+	releasing sync.WaitGroup
 }
 
 type mux struct {
@@ -285,6 +287,9 @@ type mux struct {
 	// The tune's steps, for NoteStart. Set and read under h.mu.
 	tuneBegan, tuneStatus, tuneLocked time.Time
 	firstByte                         stamp
+	// retune is set on a tune whose tuner another watch claimed: it is
+	// tuned again outside h.mu, so stopping this one does not set it to none.
+	retune bool
 }
 
 // feed is one channel on a tuned frequency.
@@ -2360,6 +2365,7 @@ func (h *Hub) Shutdown() {
 	// running survives the process, and the next boot has no pid to reap.
 	h.stopFileEncodes()
 	h.grabbers.Wait()
+	h.releasing.Wait()
 }
 
 // recordingPath picks a free file for a new recording: by show (Plex and
@@ -3355,8 +3361,8 @@ func (h *Hub) stopFeedLocked(f *feed) {
 		for _, sub := range m.shut() {
 			sub.stop()
 		}
-		if m.tuner >= 0 {
-			_, _ = hdhr.Control{Addr: controlAddr(m.host)}.Set(fmt.Sprintf("/tuner%d/channel", m.tuner), "none")
+		if m.tuner >= 0 && !m.retune {
+			h.releaseLaterLocked(m.host, m.tuner)
 		}
 		delete(h.muxes, m.freq)
 	}
@@ -3568,6 +3574,13 @@ func (h *Hub) feedsLocked() []*feed {
 // held only so a flip back is instant: no viewer, recording, export, or probe
 // on any of its channels. It returns that tuner, and false when none was.
 func (h *Hub) freeWarmTunerLocked(host string) (int, string, bool) {
+	return h.claimWarmLocked(host, func(*mux) bool { return true }, false)
+}
+
+// claimWarmLocked is freeWarmTunerLocked for the muxes ok accepts. With
+// retune, the tuner is not set to none: the caller tunes it again outside
+// h.mu, and gives it back itself if that fails.
+func (h *Hub) claimWarmLocked(host string, ok func(*mux) bool, retune bool) (int, string, bool) {
 	want := hostOf(host)
 	var oldest *mux
 	var left time.Time
@@ -3579,6 +3592,9 @@ func (h *Hub) freeWarmTunerLocked(host string) (int, string, bool) {
 		if m.tuner < 0 && (len(m.feeds) != 1 || m.input != "") {
 			continue
 		}
+		if !ok(m) {
+			continue
+		}
 		last, warm := warmSince(m)
 		if warm && (oldest == nil || last.Before(left)) {
 			oldest, left = m, last
@@ -3587,6 +3603,7 @@ func (h *Hub) freeWarmTunerLocked(host string) (int, string, bool) {
 	if oldest == nil {
 		return 0, "", false
 	}
+	oldest.retune = retune
 	guide := ""
 	for g := range oldest.feeds {
 		guide = g
@@ -4103,6 +4120,29 @@ func (b *keptBody) Close() error {
 		b.once.Do(b.stop)
 	}
 	return b.ReadCloser.Close()
+}
+
+// releaseLaterLocked sets a tuner to none outside h.mu. The device answers
+// in milliseconds, but an unplugged one holds the call for its dial timeout,
+// and every playlist and watch waits on h.mu. The tuner stays pending, so
+// no tune picks it before the device has let it go. Shutdown waits for it.
+func (h *Hub) releaseLaterLocked(host string, tuner int) {
+	if host == "" || tuner < 0 {
+		return
+	}
+	if h.pending == nil {
+		h.pending = map[string]bool{}
+	}
+	key := pendingKey(host, tuner)
+	h.pending[key] = true
+	h.releasing.Add(1)
+	go func() {
+		defer h.releasing.Done()
+		releaseTuner(host, tuner)
+		h.mu.Lock()
+		delete(h.pending, key)
+		h.mu.Unlock()
+	}()
 }
 
 func releaseTuner(host string, tuner int) {
