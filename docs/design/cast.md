@@ -18,7 +18,10 @@ The message is JSON on the namespace `urn:x-cast:app.broadwave.watch`:
 | `room` | `channel:<id>`, or `group:ch<id>` when this screen is watching together |
 | `latency` | `lowest`, `balanced`, or `stable`. The sender's live delay. It matters when this television is the first member of the room |
 | `token` | The browser's device token, omitted when device sign-in is off |
+| `media` | Optional. `playlist` with `mk=` from `POST /api/v1/media/link`, sent when the browser has a device token. The receiver keeps only the `mk` value, and only when the path is the same playlist and `mk` is the only query |
 | `title`, `subtitle` | The program and the channel, for the line on the television before the picture starts |
+
+Away from home, a television's own media requests may not carry the header through every player path, so the sender also sends `media`. The receiver adds that `mk` to the playlist it was already allowed to play; the server then names every segment and part with it. A newer link for the same playlist does not restart the picture. An older receiver ignores the field.
 
 The receiver refuses any other playlist. A Cast message cannot make the television fetch an arbitrary URL. The token is not written into the playlist URL and it is not logged. The television sends it as `Authorization: Bearer` on media requests and on its watch request, and as `access_token` on the WebSocket, which is the same query the browser uses because a WebSocket cannot set that header.
 
