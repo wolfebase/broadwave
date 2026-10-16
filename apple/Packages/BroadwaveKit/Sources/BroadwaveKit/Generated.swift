@@ -240,8 +240,9 @@ public struct Device: Codable, Sendable, Hashable {
     public var lastSeen: String?
     public var note: String?
     public var offline: Bool?
+    public var retired: Bool?
 
-    public init(deviceId: String, friendlyName: String, modelNumber: String? = nil, firmwareName: String? = nil, firmwareVersion: String? = nil, upgradeAvailable: String? = nil, baseUrl: String, lineupUrl: String? = nil, tunerCount: Int, priority: Int? = nil, lastSeen: String? = nil, note: String? = nil, offline: Bool? = nil) {
+    public init(deviceId: String, friendlyName: String, modelNumber: String? = nil, firmwareName: String? = nil, firmwareVersion: String? = nil, upgradeAvailable: String? = nil, baseUrl: String, lineupUrl: String? = nil, tunerCount: Int, priority: Int? = nil, lastSeen: String? = nil, note: String? = nil, offline: Bool? = nil, retired: Bool? = nil) {
         self.deviceId = deviceId
         self.friendlyName = friendlyName
         self.modelNumber = modelNumber
@@ -255,6 +256,7 @@ public struct Device: Codable, Sendable, Hashable {
         self.lastSeen = lastSeen
         self.note = note
         self.offline = offline
+        self.retired = retired
     }
 }
 
@@ -530,6 +532,22 @@ public struct NewPass: Codable, Sendable, Hashable {
     }
 }
 
+public struct NowChannel: Codable, Sendable, Hashable {
+    public var channelId: Int64
+    public var now: Airing?
+    public var next: Airing?
+    public var progress: Double
+    public var art: String
+
+    public init(channelId: Int64, now: Airing? = nil, next: Airing? = nil, progress: Double, art: String) {
+        self.channelId = channelId
+        self.now = now
+        self.next = next
+        self.progress = progress
+        self.art = art
+    }
+}
+
 public struct PairGrant: Codable, Sendable, Hashable {
     public var token: String
     public var device: ClientDevice
@@ -735,6 +753,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var passId: Int64?
     public var status: String
     public var error: String?
+    public var partial: Bool?
     public var startedAt: Date
     public var endsAt: Date?
     public var endedAt: Date?
@@ -755,7 +774,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var creditsStart: Double?
     public var health: RecordingHealth?
 
-    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, passId: Int64? = nil, status: String, error: String? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, keep: Bool? = nil, file: String? = nil, missing: Bool? = nil, season: Int? = nil, episode: Int? = nil, episodeLabel: String? = nil, originalAir: String? = nil, progressAt: Date? = nil, introStart: Double? = nil, introEnd: Double? = nil, creditsStart: Double? = nil, health: RecordingHealth? = nil) {
+    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, passId: Int64? = nil, status: String, error: String? = nil, partial: Bool? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, keep: Bool? = nil, file: String? = nil, missing: Bool? = nil, season: Int? = nil, episode: Int? = nil, episodeLabel: String? = nil, originalAir: String? = nil, progressAt: Date? = nil, introStart: Double? = nil, introEnd: Double? = nil, creditsStart: Double? = nil, health: RecordingHealth? = nil) {
         self.id = id
         self.channelId = channelId
         self.guideNumber = guideNumber
@@ -768,6 +787,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
         self.passId = passId
         self.status = status
         self.error = error
+        self.partial = partial
         self.startedAt = startedAt
         self.endsAt = endsAt
         self.endedAt = endedAt

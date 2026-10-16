@@ -42,7 +42,7 @@ func (s *Server) scanMissing(ctx context.Context) {
 		if freq > 0 {
 			seen[freq] = true
 			_ = s.Store.NoteGuideScan(ctx, freq, time.Now())
-			slog.Info(fmt.Sprintf("guide: scanned %s at %d Hz", ch.GuideNumber, freq))
+			slog.Debug(fmt.Sprintf("guide: scanned %s at %d Hz", ch.GuideNumber, freq))
 		}
 	}
 }
