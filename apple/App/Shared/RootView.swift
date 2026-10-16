@@ -767,7 +767,7 @@ struct RootView: View {
             case .sports: SportsView()
             case .recordings: RecordingsView()
             case .settings:
-                SettingsView().safeAreaInset(edge: .top, spacing: 0) {
+                TVSettingsView().safeAreaInset(edge: .top, spacing: 0) {
                     if bannersInTabs {
                         banners
                     }
