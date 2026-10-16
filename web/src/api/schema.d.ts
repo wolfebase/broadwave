@@ -3731,6 +3731,12 @@ export interface operations {
                  *     title that names a matchup (vs, at, @). A server that predates it returns every kind.
                  */
                 kind?: "sports";
+                /**
+                 * @description grid leaves out what a guide grid does not draw: description, cast, rating, originalAir,
+                 *     seriesId, programId, and guideSource. A listing's details come from a full request for its
+                 *     channel and time. A server that predates it returns every field.
+                 */
+                fields?: "grid";
             };
             header?: never;
             path?: never;

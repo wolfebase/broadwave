@@ -235,7 +235,13 @@ func main() {
 		tick := time.NewTicker(time.Hour)
 		defer tick.Stop()
 		for range tick.C {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			// Old listings go even when the guide pull keeps failing, and the
+			// query planner's statistics follow the catalog's shape.
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			_, _ = st.PruneAirings(ctx, time.Now())
+			_ = st.Optimize(ctx)
+			cancel()
+			ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
 			n, err := api.RefreshSources(ctx, time.Now())
 			cancel()
 			if err != nil {
