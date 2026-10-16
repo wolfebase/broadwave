@@ -29,6 +29,7 @@ import {
   timeLabel,
   type Category,
 } from "../../lib/guide";
+import { guideEnterAction, guidePageRow, isInfoKey, slotUnderNow } from "../../lib/guideKeys";
 import { scrollBehavior } from "../../lib/motion";
 import { canonicalKey } from "../../lib/tvKey";
 import type { Airing, Channel } from "../../types";
@@ -73,8 +74,8 @@ export function Guide() {
   const { channels, index, now, planned, recordings, virtuals, favorite, editChannel } = useData();
   const player = usePlayer();
   const layout = useLayout();
-  const [filter, setFilter] = useState<Filter>("all");
-  const [query, setQuery] = useState("");
+  const [filter, setFilterRaw] = useState<Filter>("all");
+  const [query, setQueryRaw] = useState("");
   const [when, setWhen] = useState<"now" | "tonight">("now");
   const [sheet, setSheet] = useState<{ channel: Channel; airing?: Airing } | null>(null);
   const [focus, setFocus] = useState<{ row: number; at: number; id: number }>({ row: 0, at: now, id: 0 });
@@ -83,6 +84,9 @@ export function Guide() {
   const [order, setOrder] = useState<number[]>(loadOrder);
   const [landscape, setLandscape] = useState(() => window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches);
   const scores = useScoreMap();
+  // OK held on a TV opens the details instead of tuning.
+  const enterHeld = useRef<{ timer: number; fired: boolean } | null>(null);
+  useEffect(() => () => window.clearTimeout(enterHeld.current?.timer), []);
 
   const tv = layout === "tv";
   const grid = guideShowsGrid(layout, landscape);
@@ -235,6 +239,8 @@ export function Guide() {
     setOrder(next);
   }
 
+  // The sheet came from the grid's keys, so closing it gives the grid its keys back.
+  const sheetFromGrid = useRef(false);
   function open(channel: Channel, airing?: Airing) {
     setSheet({ channel, airing });
   }
@@ -257,6 +263,49 @@ export function Guide() {
     const x = ((t - origin) / MIN) * pxPerMin;
     if (x < el.scrollLeft + 40) el.scrollLeft = Math.max(0, x - 80);
     else if (x > el.scrollLeft + el.clientWidth - channelW - 120) el.scrollLeft = x - el.clientWidth + channelW + 240;
+  }
+
+  // A new filter or search starts at the top of what it found.
+  function toTop() {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = 0;
+    if (!grid) document.querySelector("main.content")?.scrollTo({ top: 0 });
+    setFocus((f) => ({ row: 0, at: f.at, id: 0 }));
+  }
+
+  function setFilter(next: Filter) {
+    setFilterRaw(next);
+    toTop();
+  }
+
+  function setQuery(next: string) {
+    setQueryRaw(next);
+    toTop();
+  }
+
+  function clearFilters() {
+    setFilterRaw("all");
+    setQueryRaw("");
+    toTop();
+  }
+
+  function closeSheet() {
+    const fromGrid = Boolean(document.activeElement?.closest(".guide-canvas") || sheetFromGrid.current);
+    sheetFromGrid.current = false;
+    setSheet(null);
+    if (!grid || !fromGrid) return;
+    // The dialog hands focus back to the cell first. The grid is what holds the keys.
+    window.requestAnimationFrame(() => focusRing(document.querySelector<HTMLElement>(".guide-canvas")));
+  }
+
+  function onKeyUp(e: KeyboardEvent) {
+    const held = enterHeld.current;
+    if (canonicalKey(e) !== "Enter" || !held) return;
+    window.clearTimeout(held.timer);
+    enterHeld.current = null;
+    if (held.fired) return;
+    const row = rows[focus.row];
+    if (row) watch(row);
   }
 
   function onKey(e: KeyboardEvent) {
@@ -303,10 +352,51 @@ export function Guide() {
         move(focus.row, prev);
         break;
       }
-      case "Enter":
+      case "PageDown":
+      case "PageUp": {
         handled();
+        const el = scrollRef.current;
+        move(guidePageRow(focus.row, key === "PageDown" ? 1 : -1, el?.clientHeight ?? 600, rowH, headH, rows.length), focus.at);
+        break;
+      }
+      case "Home":
+        handled();
+        if (e.ctrlKey || e.metaKey) move(0, now);
+        else {
+          scrollToTime(now - 30 * MIN, "auto");
+          move(focus.row, now);
+        }
+        break;
+      case "End": {
+        handled();
+        if (e.ctrlKey || e.metaKey) {
+          move(rows.length - 1, focus.at);
+          break;
+        }
+        const list = index.get(row.id) ?? [];
+        const last = list[list.length - 1];
+        move(focus.row, last ? Date.parse(last.start) : focus.at);
+        break;
+      }
+      case "Enter": {
+        handled();
+        const airingNow = !!cur && Date.parse(cur.start) <= now && Date.parse(cur.end) > now;
+        if (guideEnterAction(tv, airingNow, false) === "watch") {
+          // Tune on release. Held past half a second, OK opens the details instead.
+          if (e.repeat || enterHeld.current) break;
+          const slot = { timer: 0, fired: false };
+          slot.timer = window.setTimeout(() => {
+            slot.fired = true;
+            sheetFromGrid.current = true;
+            open(row, cur);
+          }, 500);
+          enterHeld.current = slot;
+          break;
+        }
+        sheetFromGrid.current = true;
         open(row, cur);
         break;
+      }
       case " ":
         handled();
         watch(row);
@@ -319,6 +409,12 @@ export function Guide() {
         handled();
         void editChannel(row, { hidden: true });
         break;
+      default:
+        if (isInfoKey(key)) {
+          handled();
+          sheetFromGrid.current = true;
+          open(row, cur);
+        }
     }
   }
 
@@ -388,7 +484,7 @@ export function Guide() {
           onTonight={() => setWhen("tonight")}
           compact
         />
-        {rows.length === 0 ? <Empty title={t("guideUi.nothingMatches")}>{t("guideUi.nothingHint")}</Empty> : null}
+        {rows.length === 0 ? <NoMatch filter={filter} query={query} onClear={clearFilters} /> : null}
         <ul className="onnow-list">
           {rows.map((c) => {
             const at = when === "tonight" ? primeTime(now) : now;
@@ -418,7 +514,7 @@ export function Guide() {
         </ul>
         {sheet ? (
           <Suspense fallback={null}>
-            <ProgramSheet {...sheet} onClose={() => setSheet(null)} onWatch={watch} />
+            <ProgramSheet {...sheet} onClose={closeSheet} onWatch={watch} />
           </Suspense>
         ) : null}
       </div>
@@ -428,6 +524,16 @@ export function Guide() {
   return (
     <div className="guide-page">
       <h1 className="sr-only">{t("guideUi.guide")}</h1>
+      <a
+        className="skip-link"
+        href="#guide-grid"
+        onClick={(event) => {
+          event.preventDefault();
+          focusRing(document.querySelector<HTMLElement>(".guide-canvas"));
+        }}
+      >
+        {t("guideUi.skipToGrid")}
+      </a>
       <GuideControls
         filter={filter}
         setFilter={setFilter}
@@ -440,14 +546,18 @@ export function Guide() {
         onTonight={tonight}
         onDay={jumpToDay}
       />
+      {rows.length === 0 ? <NoMatch filter={filter} query={query} onClear={clearFilters} /> : null}
       <div
         ref={scrollRef}
         className="guide-scroll"
+        hidden={rows.length === 0}
         onKeyDown={onKey}
+        onKeyUp={onKeyUp}
         style={{ ["--row" as string]: `${rowH}px`, ["--channel" as string]: `${channelW}px`, ["--head" as string]: `${headH}px` }}
       >
         <div
           className="guide-canvas"
+          id="guide-grid"
           role="grid"
           aria-label={t("guideUi.tvGuide")}
           aria-rowcount={rows.length}
@@ -457,11 +567,14 @@ export function Guide() {
         >
           <div className="guide-times glass-flat" aria-hidden="true" style={{ width: channelW + width }}>
             <div className="guide-corner">{formatDateTime(new Date(Math.max(leftT, origin)), { weekday: "short", month: "short", day: "numeric" })}</div>
-            {slots.map((t) => (
-              <div key={t} className="guide-slot" style={{ left: channelW + ((t - origin) / MIN) * pxPerMin, width: 30 * pxPerMin }}>
-                {timeLabel(t)}
-              </div>
-            ))}
+            {slots.map((t) => {
+              const x = ((t - origin) / MIN) * pxPerMin;
+              return (
+                <div key={t} className={slotUnderNow(x, nowX, tv ? 70 : 44) ? "guide-slot under-now" : "guide-slot"} style={{ left: channelW + x, width: 30 * pxPerMin }}>
+                  <span className="guide-slot-label">{timeLabel(t)}</span>
+                </div>
+              );
+            })}
             <div className="now-flag" style={{ left: channelW + nowX }}>
               {timeLabel(now)}
             </div>
@@ -508,12 +621,14 @@ export function Guide() {
                         {c.displayName}
                       </span>
                     </span>
-                    {c.standard === "atsc3" || c.favorite ? (
+                    {c.standard === "atsc3" ? (
                       <span className="gc-meta">
-                        {c.standard === "atsc3" ? <Atsc3Tag /> : null}
-                        {c.favorite ? <StarIcon filled className="gc-star" /> : null}
+                        <Atsc3Tag />
                       </span>
                     ) : null}
+                  </span>
+                  <span className="gc-fav" aria-hidden="true">
+                    {c.favorite ? <StarIcon filled className="gc-star" /> : null}
                   </span>
                 </button>
                 </div>
@@ -616,9 +731,47 @@ export function Guide() {
       )}
       {sheet ? (
         <Suspense fallback={null}>
-          <ProgramSheet {...sheet} onClose={() => setSheet(null)} onWatch={watch} />
+          <ProgramSheet {...sheet} onClose={closeSheet} onWatch={watch} />
         </Suspense>
       ) : null}
+    </div>
+  );
+}
+
+const filterWords: Record<Filter, () => string> = {
+  all: () => t("guideUi.nothingHint"),
+  favorites: () => t("guideUi.noFavorites"),
+  recording: () => t("guideUi.noRecording"),
+  sports: () => t("guideUi.noCategory", { category: categoryLabel.sports }),
+  news: () => t("guideUi.noCategory", { category: categoryLabel.news }),
+  movies: () => t("guideUi.noCategory", { category: categoryLabel.movies }),
+  kids: () => t("guideUi.noCategory", { category: categoryLabel.kids }),
+  series: () => t("guideUi.noCategory", { category: categoryLabel.series }),
+  other: () => t("guideUi.nothingHint"),
+};
+
+/** A filter or search with no rows says why and offers the way back. */
+function NoMatch({ filter, query, onClear }: { filter: Filter; query: string; onClear: () => void }) {
+  const q = query.trim();
+  return (
+    <div className="guide-empty" role="status">
+      <Empty
+        title={q ? t("guideUi.noMatchQuery", { query: q }) : t("guideUi.nothingMatches")}
+        action={
+          <div className="guide-empty-actions">
+            <button type="button" className="btn primary" onClick={onClear}>
+              {t("guideUi.clear")}
+            </button>
+            {q.length >= 2 ? (
+              <button type="button" className="btn" onClick={() => navigate(`/search?q=${encodeURIComponent(q)}`)}>
+                <SearchIcon /> {t("guideUi.searchEverything")}
+              </button>
+            ) : null}
+          </div>
+        }
+      >
+        {q ? t("guideUi.queryHint") : filterWords[filter]()}
+      </Empty>
     </div>
   );
 }
