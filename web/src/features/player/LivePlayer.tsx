@@ -37,6 +37,7 @@ import { groupRoom, peopleSentence, personLabel, useGroup } from "./together";
 import { useLiveStream } from "./useLiveStream";
 import { neighbourIds } from "./warmPlan";
 import { noteHandoff } from "../multiview/handoff";
+import { readCaptionStyle, saveCaptionStyle, type CaptionStyle } from "./captionStyle";
 
 const t = bind(playerUiMessages);
 
@@ -89,6 +90,12 @@ export function LivePlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const rootRef = useRef<HTMLElement>(null);
   const [opts, setOpts] = useState<Options>(readOptions);
+  const [cc, setCc] = useState<CaptionStyle>(readCaptionStyle);
+  function styleCaptions(next: Partial<CaptionStyle>) {
+    const style = { ...cc, ...next };
+    setCc(style);
+    saveCaptionStyle(style);
+  }
   // Pause and seek drop sync for this visit only. The checkbox stays in opts.
   const [detached, setDetached] = useState(false);
   const [picturePick, setPicturePick] = useState<PictureMode | null>(null);
@@ -862,6 +869,13 @@ export function LivePlayer({
               labels={{ off: t("player.off"), on: t("player.on") }}
               onChange={(v) => setOpts((o) => ({ ...o, captions: v === "on" }))}
             />
+          ) : null}
+          {stream.canCaption && opts.captions ? (
+            <>
+              <OptionRow label={t("player.ccSize")} value={cc.size} options={["small", "medium", "large"]} labels={{ small: t("player.ccSmall"), medium: t("player.ccMedium"), large: t("player.ccLarge") }} onChange={(size) => styleCaptions({ size })} />
+              <OptionRow label={t("player.ccBack")} value={cc.back} options={["none", "box", "solid"]} labels={{ none: t("player.ccNone"), box: t("player.ccBox"), solid: t("player.ccSolid") }} onChange={(back) => styleCaptions({ back })} />
+              <OptionRow label={t("player.ccColor")} value={cc.color} options={["white", "yellow"]} labels={{ white: t("player.ccWhite"), yellow: t("player.ccYellow") }} onChange={(color) => styleCaptions({ color })} />
+            </>
           ) : null}
           <OptionRow label={t("player.evenVolume")} value={opts.even ? "on" : "off"} options={["off", "on"]} labels={{ off: t("player.off"), on: t("player.on") }} onChange={(v) => setOpts((o) => ({ ...o, even: v === "on" }))} />
           <OptionRow
