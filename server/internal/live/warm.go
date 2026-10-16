@@ -179,7 +179,6 @@ func (h *Hub) openAuto(ctx context.Context, ch store.SourceChannel, guess bool) 
 	used := h.usedTunersLocked(hostOf(ch.BaseURL))
 	replaced := h.guessGuidesLocked()
 	held := h.heldLocked(hostOf(ch.BaseURL), tuners)
-	h.mu.Unlock()
 	free, idle := 0, 0
 	for _, t := range tuners {
 		if !t.ATSC3 || used[t.Index] || held[t.Index] {
@@ -192,8 +191,23 @@ func (h *Hub) openAuto(ctx context.Context, ch store.SourceChannel, guess bool) 
 			idle++
 		}
 	}
-	if (guess && free+idle < 2) || (!guess && free < 1) {
+	claimed := -1
+	if !guess && free < 1 {
+		claimed = h.claimWarm3Locked(hostOf(ch.BaseURL), tuners, held)
+	}
+	h.mu.Unlock()
+	if (guess && free+idle < 2) || (!guess && free < 1 && claimed < 0) {
 		return nil
+	}
+	if claimed >= 0 {
+		// The device picks the tuner for an /auto stream, so the warm one is
+		// set to none first, outside h.mu, as the locked path would under it.
+		releaseTuner(hostOf(ch.BaseURL), claimed)
+		defer func() {
+			h.mu.Lock()
+			delete(h.pending, pendingKey(ch.BaseURL, claimed))
+			h.mu.Unlock()
+		}()
 	}
 	url := h.autoURL(ch, h.streamRootFor(ctx, ch.BaseURL, ch.GuideNumber))
 	res, err := openStream(url, "", "")
@@ -223,4 +237,40 @@ func (h *Hub) guessGuidesLocked() map[string]bool {
 		}
 	}
 	return out
+}
+
+// claimWarm3Locked stops the warm tune left longest ago on a tuner that can
+// carry ATSC 3.0, for a watch that found none free. It returns that tuner,
+// held pending until the caller has opened its stream, or -1.
+func (h *Hub) claimWarm3Locked(host string, tuners []Tuner, held map[int]bool) int {
+	index := func(m *mux) int {
+		if m.tuner >= 0 {
+			return m.tuner
+		}
+		// A device-tuned stream is known by the channel its tuner reads.
+		for g := range m.feeds {
+			for _, t := range tuners {
+				if t.Guide == g {
+					return t.Index
+				}
+			}
+		}
+		return -1
+	}
+	// Stopping the mux empties its feeds, so the index is read before.
+	at := map[*mux]int{}
+	m, _, _, ok := h.claimWarmLocked(host, func(m *mux) bool {
+		i := index(m)
+		at[m] = i
+		return i >= 0 && !held[i] && atsc3Tuner(tuners, i)
+	})
+	if !ok {
+		return -1
+	}
+	i := at[m]
+	if h.pending == nil {
+		h.pending = map[string]bool{}
+	}
+	h.pending[pendingKey(host, i)] = true
+	return i
 }

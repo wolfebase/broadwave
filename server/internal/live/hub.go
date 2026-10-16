@@ -287,8 +287,8 @@ type mux struct {
 	// The tune's steps, for NoteStart. Set and read under h.mu.
 	tuneBegan, tuneStatus, tuneLocked time.Time
 	firstByte                         stamp
-	// retune is set on a tune whose tuner another watch claimed: it is
-	// tuned again outside h.mu, so stopping this one does not set it to none.
+	// retune is set on a tune whose tuner is claimed for another one:
+	// stopping it leaves setting the tuner to none to the claimant.
 	retune bool
 }
 
@@ -2232,7 +2232,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 				_ = h.Store.AddEvent(ctx, "recording", StopWarning(labels, time.Now(), title, time.Now()))
 			}
 			for _, feed := range feeds {
-				h.stopFeedLocked(feed)
+				h.stopFeedNowLocked(feed)
 			}
 			f, err = h.ensureFeedLocked(ctx, ch, res)
 		}
@@ -3573,14 +3573,35 @@ func (h *Hub) feedsLocked() []*feed {
 // freeWarmTunerLocked stops the tuner that was left longest ago among those
 // held only so a flip back is instant: no viewer, recording, export, or probe
 // on any of its channels. It returns that tuner, and false when none was.
+// The tune that follows picks the tuner at once, so it is set to none here
+// and not later: a late none would land on the new tune.
 func (h *Hub) freeWarmTunerLocked(host string) (int, string, bool) {
-	return h.claimWarmLocked(host, func(*mux) bool { return true }, false)
+	m, tuner, guide, ok := h.claimWarmLocked(host, func(*mux) bool { return true })
+	if ok && tuner >= 0 {
+		releaseTuner(m.host, tuner)
+	}
+	return tuner, guide, ok
 }
 
-// claimWarmLocked is freeWarmTunerLocked for the muxes ok accepts. With
-// retune, the tuner is not set to none: the caller tunes it again outside
-// h.mu, and gives it back itself if that fails.
-func (h *Hub) claimWarmLocked(host string, ok func(*mux) bool, retune bool) (int, string, bool) {
+// stopFeedNowLocked is stopFeedLocked for a caller that tunes again at once
+// (a recording taking a viewer's tuner): the tuner is set to none before it
+// returns instead of in the background, where it would still be pending.
+func (h *Hub) stopFeedNowLocked(f *feed) {
+	m := muxOf(h, f)
+	last := m != nil && m.tuner >= 0 && len(m.feeds) == 1 && m.feeds[f.channel.GuideNumber] == f
+	if last {
+		m.retune = true
+	}
+	h.stopFeedLocked(f)
+	if last && h.muxes[m.freq] != m {
+		releaseTuner(m.host, m.tuner)
+	}
+}
+
+// claimWarmLocked stops the warm mux ok accepts that was left longest ago.
+// Its tuner is not set to none: the caller does that, or tunes it again
+// outside h.mu.
+func (h *Hub) claimWarmLocked(host string, ok func(*mux) bool) (*mux, int, string, bool) {
 	want := hostOf(host)
 	var oldest *mux
 	var left time.Time
@@ -3601,9 +3622,9 @@ func (h *Hub) claimWarmLocked(host string, ok func(*mux) bool, retune bool) (int
 		}
 	}
 	if oldest == nil {
-		return 0, "", false
+		return nil, 0, "", false
 	}
-	oldest.retune = retune
+	oldest.retune = true
 	guide := ""
 	for g := range oldest.feeds {
 		guide = g
@@ -3616,7 +3637,7 @@ func (h *Hub) claimWarmLocked(host string, ok func(*mux) bool, retune bool) (int
 	for _, f := range maps.Clone(oldest.feeds) {
 		h.stopFeedLocked(f)
 	}
-	return oldest.tuner, guide, true
+	return oldest, oldest.tuner, guide, true
 }
 
 // warmSince is when a mux was last watched, and whether it is held only for a
@@ -4038,7 +4059,7 @@ func fetchTunerStatus(ctx context.Context, host string) ([]tunerStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := fetchguard.TunerDo(req, 0)
+	res, err := answerWithin(req, streamAnswer, func(r *http.Request) (*http.Response, error) { return fetchguard.TunerDo(r, 0) })
 	if err != nil {
 		return nil, err
 	}
@@ -4173,7 +4194,7 @@ func openStream(u, userAgent, referrer string) (*http.Response, error) {
 	if referrer != "" {
 		req.Header.Set("Referer", fetchguard.OneLine(referrer))
 	}
-	res, err := fetchguard.Do(req, 0)
+	res, err := answerWithin(req, streamAnswer, func(r *http.Request) (*http.Response, error) { return fetchguard.Do(r, 0) })
 	if err != nil {
 		return nil, fmt.Errorf("%w (%w)", ErrStreamDown, err)
 	}
@@ -4301,13 +4322,49 @@ func muxURL(root string, tuner, freq int) string {
 	return fmt.Sprintf("%s/tuner%d/ch%d", strings.TrimRight(root, "/"), tuner, freq)
 }
 
+// streamAnswer bounds how long a device or stream server takes to answer a
+// stream request. A tuner on a dark frequency answers 807 after about 10 s;
+// one that left the network would hold the tune for the transport's two
+// minutes. The body that follows has no deadline.
+var streamAnswer = 15 * time.Second
+
+// answerWithin is do with a deadline on the response headers only.
+func answerWithin(req *http.Request, d time.Duration, do func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+	ctx, cancel := context.WithCancel(req.Context())
+	timer := time.AfterFunc(d, cancel)
+	res, err := do(req.WithContext(ctx))
+	if !timer.Stop() {
+		if err == nil {
+			res.Body.Close()
+		}
+		err = fmt.Errorf("no answer in %s", d)
+	}
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	res.Body = &cancelBody{ReadCloser: res.Body, cancel: cancel}
+	return res, nil
+}
+
+type cancelBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *cancelBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
+
 func openMux(root string, tuner, freq int) (io.ReadCloser, error) {
 	u := muxURL(root, tuner, freq)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
-	res, err := fetchguard.TunerDo(req, 0)
+	res, err := answerWithin(req, streamAnswer, func(r *http.Request) (*http.Response, error) { return fetchguard.TunerDo(r, 0) })
 	if err != nil {
 		return nil, err
 	}
