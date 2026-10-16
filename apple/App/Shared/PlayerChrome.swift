@@ -69,7 +69,6 @@ struct TuneBackdrop: View {
         let tuning: Bool
         @State private var shown = true
         @State private var touched = Date()
-        @State private var pinchScale: CGFloat = 1
 
         init(panel: Binding<PlayerPanel>, fill: Binding<Bool>, showMove: Binding<Bool>, actions: LiveChromeActions, tuning: Bool) {
             _panel = panel
@@ -112,8 +111,9 @@ struct TuneBackdrop: View {
                 }
             }
             .tint(.white)
-            // With a panel open, a swipe down puts the panel away, not the player.
-            .interactiveDismissDisabled(panel != .none)
+            // With a panel open, a swipe down puts the panel away, not the player. Filled,
+            // a pinch in fits the picture first; from fit it closes the player.
+            .interactiveDismissDisabled(panel != .none || fill)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: visible)
             .statusBarHidden(!stacked && !visible)
             .persistentSystemOverlays(!stacked && !visible ? .hidden : .automatic)
@@ -158,12 +158,16 @@ struct TuneBackdrop: View {
                         .exclusively(before: TapGesture().onEnded { tapPicture() })
                 )
                 .simultaneousGesture(channelDrag)
-                .simultaneousGesture(fillPinch)
+                .background {
+                    PinchToFill { scale in
+                        if (scale > 1) != fill {
+                            toggleFill()
+                        }
+                    }
+                }
                 .accessibilityElement()
                 .accessibilityLabel("Picture")
                 .accessibilityValue(fill ? "Fill" : "Fit")
-                .accessibilityHint("Double-tap to show or hide the controls")
-                .accessibilityAction { tapPicture() }
                 .accessibilityAction(named: fill ? "Fit to screen" : "Fill screen") { toggleFill() }
                 .accessibilityIdentifier("player-gesture")
         }
@@ -199,18 +203,83 @@ struct TuneBackdrop: View {
                     actions.step(dy < 0 ? ChannelStep.offset(up: true) : ChannelStep.offset(up: false))
                 }
         }
+    }
 
-        private var fillPinch: some Gesture {
-            MagnificationGesture()
-                .onChanged { pinchScale = $0 }
-                .onEnded { scale in
-                    let amount = abs(pinchScale - 1) > abs(scale - 1) ? pinchScale : scale
-                    pinchScale = 1
-                    guard abs(amount - 1) > 0.08 else { return }
-                    let wants = amount > 1
-                    guard wants != fill else { return }
-                    toggleFill()
+    /// Pinch out fills the screen, pinch in fits it. The zoom transition's own pinch
+    /// takes a SwiftUI pinch over the picture, so this one listens on the window beside it.
+    private struct PinchToFill: UIViewRepresentable {
+        var onPinch: (CGFloat) -> Void
+
+        func makeCoordinator() -> Coordinator {
+            Coordinator()
+        }
+
+        func makeUIView(context: Context) -> WindowWatcher {
+            let view = WindowWatcher()
+            view.coordinator = context.coordinator
+            view.isUserInteractionEnabled = false
+            return view
+        }
+
+        func updateUIView(_: WindowWatcher, context: Context) {
+            context.coordinator.onPinch = onPinch
+        }
+
+        static func dismantleUIView(_: WindowWatcher, coordinator: Coordinator) {
+            coordinator.detach()
+        }
+
+        @MainActor
+        final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+            var onPinch: (CGFloat) -> Void = { _ in }
+            private var acted = false
+            private weak var host: UIView?
+            private lazy var pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
+
+            func attach(to view: UIView) {
+                guard host !== view else { return }
+                detach()
+                pinch.delegate = self
+                pinch.cancelsTouchesInView = false
+                view.addGestureRecognizer(pinch)
+                host = view
+            }
+
+            func detach() {
+                host?.removeGestureRecognizer(pinch)
+                host = nil
+            }
+
+            @objc private func pinched(_ gesture: UIPinchGestureRecognizer) {
+                switch gesture.state {
+                case .began:
+                    acted = false
+                case .changed:
+                    if !acted, abs(gesture.scale - 1) > 0.12 {
+                        acted = true
+                        onPinch(gesture.scale)
+                    }
+                default:
+                    break
                 }
+            }
+
+            nonisolated func gestureRecognizer(_: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer) -> Bool {
+                true
+            }
+        }
+
+        final class WindowWatcher: UIView {
+            weak var coordinator: Coordinator?
+
+            override func didMoveToWindow() {
+                super.didMoveToWindow()
+                if let window {
+                    coordinator?.attach(to: window)
+                } else {
+                    coordinator?.detach()
+                }
+            }
         }
     }
 
@@ -434,11 +503,8 @@ struct TuneBackdrop: View {
                     }
                 }
             } label: {
-                Label("Audio", systemImage: "speaker.wave.2")
+                GlassCircleLabel(title: String(localized: "Audio"), symbol: "speaker.wave.2")
             }
-            .labelStyle(.iconOnly)
-            .menuStyle(.button)
-            .buttonStyle(GlassCircle())
             .accessibilityLabel("Audio")
             .accessibilityIdentifier("portrait-audio")
         }
@@ -472,11 +538,9 @@ struct TuneBackdrop: View {
                     .pickerStyle(.menu)
                 }
             } label: {
-                Label("More", systemImage: "ellipsis")
+                GlassCircleLabel(title: String(localized: "More"), symbol: "ellipsis")
             }
-            .labelStyle(.iconOnly)
-            .menuStyle(.button)
-            .buttonStyle(GlassCircle())
+            .accessibilityLabel("More")
             .accessibilityIdentifier("player-more")
         }
 
@@ -759,6 +823,28 @@ struct TuneBackdrop: View {
                 .contentShape(Circle())
                 .glassEffect(.regular.interactive(), in: .circle)
                 .opacity(configuration.isPressed ? 0.7 : 1)
+        }
+    }
+
+    /// A menu's face in the same glass circle. The menu's button takes its name from
+    /// the text inside it, so the title is there, drawn clear.
+    struct GlassCircleLabel: View {
+        let title: String
+        let symbol: String
+
+        var body: some View {
+            ZStack {
+                Text(title)
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                Image(systemName: symbol)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .accessibilityHidden(true)
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
+            .glassEffect(.regular.interactive(), in: .circle)
         }
     }
 

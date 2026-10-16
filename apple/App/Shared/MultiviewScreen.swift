@@ -1362,7 +1362,7 @@ struct MultiviewScreen: View {
                         }
                         .contentTransition(.symbolEffect(.replace))
                         .accessibilityIdentifier("multiview-pause")
-                        Menu("More", systemImage: "ellipsis") {
+                        Menu {
                             if !roomyBar {
                                 Toggle(isOn: Binding(get: { auto }, set: { _ in toggleAuto() })) {
                                     Label("Auto", systemImage: "wand.and.stars")
@@ -1374,10 +1374,15 @@ struct MultiviewScreen: View {
                                 SavedMultiview.save(name: name, channels: tiles.map(\.id), layout: session.layout.rawValue)
                             }
                             .disabled(tiles.count < 2)
+                        } label: {
+                            GlassCircleLabel(title: String(localized: "More"), symbol: "ellipsis")
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("More")
                         .accessibilityIdentifier("multiview-more")
                     }
                     .labelStyle(.iconOnly)
+                    .tint(.white)
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
                 }
