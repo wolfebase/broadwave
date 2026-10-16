@@ -79,10 +79,11 @@ func benchGuide(b *testing.B) (*Server, http.Handler, time.Time) {
 }
 
 func BenchmarkDataEndpoints(b *testing.B) {
-	_, h, now := benchGuide(b)
+	s, h, now := benchGuide(b)
 	from := now.Truncate(30 * time.Minute)
 	cases := []struct{ name, path string }{
 		{"Airings48h", "/api/v1/airings"},
+		{"Airings48hGrid", "/api/v1/airings?fields=grid"},
 		{"Airings4h", "/api/v1/airings?from=" + from.Format(time.RFC3339) + "&to=" + from.Add(4*time.Hour).Format(time.RFC3339)},
 		{"Airings4hUnrounded", "/api/v1/airings?from=" + now.Add(-17*time.Second).Format(time.RFC3339) + "&to=" + now.Add(4*time.Hour).Format(time.RFC3339)},
 		{"Channels", "/api/v1/channels"},
@@ -98,9 +99,29 @@ func BenchmarkDataEndpoints(b *testing.B) {
 			if probe.Code != http.StatusOK {
 				b.Skipf("%s: %d", c.path, probe.Code)
 			}
-			b.ReportMetric(float64(probe.Body.Len()), "bytes")
+			size := probe.Body.Len()
+			zreq := httptest.NewRequest(http.MethodGet, c.path, nil)
+			zreq.Header.Set("Accept-Encoding", "gzip")
+			zprobe := httptest.NewRecorder()
+			h.ServeHTTP(zprobe, zreq)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
+				req := httptest.NewRequest(http.MethodGet, c.path, nil)
+				req.Header.Set("Accept-Encoding", "gzip")
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+				if rec.Code != http.StatusOK {
+					b.Fatalf("%d", rec.Code)
+				}
+			}
+			// After the loop: ResetTimer drops a metric reported before it.
+			b.ReportMetric(float64(size), "json-bytes")
+			b.ReportMetric(float64(zprobe.Body.Len()), "gz-bytes")
+		})
+		// Cold is the first request after a change: nothing cached.
+		b.Run(c.name+"Cold", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				s.bodies = bodyCache{}
 				req := httptest.NewRequest(http.MethodGet, c.path, nil)
 				req.Header.Set("Accept-Encoding", "gzip")
 				rec := httptest.NewRecorder()

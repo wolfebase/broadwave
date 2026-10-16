@@ -2,11 +2,8 @@ package httpapi
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -117,6 +114,9 @@ type Server struct {
 	remoteAt  time.Time
 
 	routes []string
+
+	// bodies caches the encoded guide, channel, and schedule answers.
+	bodies bodyCache
 }
 
 func (s *Server) Handler() http.Handler {
@@ -467,18 +467,22 @@ func (s *Server) look(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) channels(w http.ResponseWriter, r *http.Request) {
 	guideOnly := r.URL.Query().Get("guide") == "1"
-	channels, err := s.Store.Channels(r.Context(), guideOnly)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	if channels == nil {
-		channels = []store.Channel{}
-	}
-	writeCachedJSON(w, r, http.StatusOK, map[string]any{
-		"channels": withNetworks(channels),
-		"listings": "empty",
-		"message":  "Listings turn on when you add an XMLTV file. Live picture arrives with the player.",
+	// Which twin shows depends on the tuners still answering, so the answer
+	// also turns over each minute.
+	key := s.versionKey(r.Context(), fmt.Sprintf("channels|%v|%s", guideOnly, s.now().Truncate(time.Minute).Format(time.RFC3339)), "channels", "guide")
+	s.serveCached(w, r, key, func(ctx context.Context) (any, error) {
+		channels, err := s.Store.Channels(ctx, guideOnly)
+		if err != nil {
+			return nil, err
+		}
+		if channels == nil {
+			channels = []store.Channel{}
+		}
+		return map[string]any{
+			"channels": withNetworks(channels),
+			"listings": "empty",
+			"message":  "Listings turn on when you add an XMLTV file. Live picture arrives with the player.",
+		}, nil
 	})
 }
 
@@ -594,7 +598,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeCachedJSON(w, r, http.StatusOK, values)
+	writeCachedJSON(w, r, values)
 }
 
 func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
@@ -946,35 +950,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // writeCachedJSON sets an ETag and gzips when the client accepts it.
 // A matching If-None-Match returns 304. The tag is the body, so gzip and plain share it.
-func writeCachedJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
-	body, err := marshalJSON(v)
+func writeCachedJSON(w http.ResponseWriter, r *http.Request, v any) {
+	entry, err := encodeBody(v)
 	if err != nil {
 		http.Error(w, "json", http.StatusInternalServerError)
 		return
 	}
-	sum := sha256.Sum256(body)
-	etag := `"` + hex.EncodeToString(sum[:16]) + `"`
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "private, no-cache")
-	w.Header().Set("Vary", "Accept-Encoding")
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		var buf bytes.Buffer
-		gz, _ := gzip.NewWriterLevel(&buf, gzip.DefaultCompression)
-		_, _ = gz.Write(body)
-		_ = gz.Close()
-		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(status)
-		_, _ = w.Write(buf.Bytes())
-		return
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_, _ = w.Write(body)
+	writeEntry(w, r, entry)
 }
 
 func marshalJSON(v any) ([]byte, error) {

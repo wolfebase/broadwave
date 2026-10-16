@@ -464,6 +464,11 @@ func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "kind can only be sports", http.StatusBadRequest)
 		return
 	}
+	fields := r.URL.Query().Get("fields")
+	if fields != "" && fields != "grid" {
+		httpError(w, "fields can only be grid", http.StatusBadRequest)
+		return
+	}
 	var channels []int64
 	if raw := strings.TrimSpace(r.URL.Query().Get("channels")); raw != "" {
 		for _, part := range strings.Split(raw, ",") {
@@ -475,24 +480,44 @@ func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
 			channels = append(channels, id)
 		}
 	}
-	list, err := s.Store.QueryAirings(r.Context(), store.AiringQuery{From: from, To: to, Channels: channels})
-	if err != nil {
-		writeError(w, err)
-		return
+	// The window is widened to whole minutes, so a guide asked for at "now"
+	// shares one cached answer per minute instead of one per request.
+	from = from.Truncate(time.Minute)
+	if up := to.Truncate(time.Minute); up.Before(to) {
+		to = up.Add(time.Minute)
 	}
-	if kind == "sports" {
-		games := make([]store.Airing, 0, len(list))
-		for _, row := range list {
-			if sportsListing(row) {
-				games = append(games, row)
+	key := s.versionKey(r.Context(), fmt.Sprintf("airings|%d|%d|%s|%s|%v", from.Unix(), to.Unix(), kind, fields, channels), "guide")
+	s.serveCached(w, r, key, func(ctx context.Context) (any, error) {
+		list, err := s.Store.QueryAirings(ctx, store.AiringQuery{From: from, To: to, Channels: channels})
+		if err != nil {
+			return nil, err
+		}
+		if kind == "sports" {
+			games := make([]store.Airing, 0, len(list))
+			for _, row := range list {
+				if sportsListing(row) {
+					games = append(games, row)
+				}
+			}
+			list = games
+		}
+		if list == nil {
+			list = []store.Airing{}
+		}
+		if fields == "grid" {
+			for i := range list {
+				list[i] = gridListing(list[i])
 			}
 		}
-		list = games
-	}
-	if list == nil {
-		list = []store.Airing{}
-	}
-	writeCachedJSON(w, r, http.StatusOK, map[string]any{"airings": list})
+		return map[string]any{"airings": list}, nil
+	})
+}
+
+// gridListing keeps what a guide grid draws. The rest (a long description,
+// the cast) was most of a two-day guide's bytes.
+func gridListing(a store.Airing) store.Airing {
+	a.Description, a.Cast, a.Rating, a.OriginalAir, a.SeriesID, a.ProgramID, a.GuideSource = "", "", "", "", "", "", ""
+	return a
 }
 
 // sportsWords and versus are the apps' sports rule (categoryOf on the web,
@@ -557,13 +582,18 @@ func (s *Server) DeferGuide(ctx context.Context, after time.Duration) {
 	_ = s.Store.SetNextGuidePull(ctx, time.Now().Add(after))
 }
 
+// schedule plans once per minute and per change to what the plan reads,
+// not once per request: a 14-day plan of a full guide takes a good part of
+// a second.
 func (s *Server) schedule(w http.ResponseWriter, r *http.Request) {
-	snap, err := s.loadSchedule(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"tunerCount": snap.count, "items": snap.items})
+	key := s.versionKey(r.Context(), "schedule|"+s.now().Truncate(time.Minute).Format(time.RFC3339), "guide", "channels", "recordings", "schedule")
+	s.serveCached(w, r, key, func(ctx context.Context) (any, error) {
+		snap, err := s.loadSchedule(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"tunerCount": snap.count, "items": snap.items}, nil
+	})
 }
 
 type scheduleSnap struct {
