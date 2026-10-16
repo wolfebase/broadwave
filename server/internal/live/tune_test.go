@@ -3,6 +3,7 @@ package live
 import (
 	"context"
 	"io"
+	"net"
 	"os/exec"
 	"strings"
 	"sync"
@@ -226,5 +227,173 @@ func TestA1Point0TuneOnA3Point0TunerLeavesTheHubFree(t *testing.T) {
 	}
 	if err := <-done; err != nil {
 		t.Fatalf("%v (%v)", err, srv.Requests())
+	}
+}
+
+// With every tuner busy, the one held warm for a flip back is tuned to the
+// new channel without holding the hub through the device's answer.
+func TestTakingAWarmTunerLeavesTheHubFree(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	srv := &fake.Server{Profile: fake.ProfileConnectDuo, TunerCount: 1, TuneDelay: 800 * time.Millisecond}
+	st, _ := tuneStore(t, srv)
+	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
+	ctx := context.Background()
+	want := Rendition{Video: "copy", Audio: "aac2"}
+	first, second := idOf(t, st, "4.1"), idOf(t, st, "5.1")
+
+	s, err := h.Watch(ctx, first, want, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Release(first, s.Rendition)
+
+	done := make(chan error, 1)
+	go func() {
+		s2, err := h.Watch(ctx, second, want, false)
+		if err == nil {
+			h.Release(second, s2.Rendition)
+		}
+		done <- err
+	}()
+	time.Sleep(300 * time.Millisecond)
+	began := time.Now()
+	h.Touch(first, want.normalized().Key())
+	if waited := time.Since(began); waited > 200*time.Millisecond {
+		t.Fatalf("the hub was held %v while the warm tuner was tuned again", waited)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.channels[first] != nil {
+		t.Fatal("the warm channel kept its tuner")
+	}
+	if h.channels[second] == nil {
+		t.Fatal("the new channel has no tune")
+	}
+}
+
+// A stream request that gets no answer fails at the deadline instead of
+// holding its tune for the transport's two minutes.
+func TestOpenMuxHasADeadline(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer c.Close()
+		}
+	}()
+	old := streamAnswer
+	streamAnswer = 300 * time.Millisecond
+	defer func() { streamAnswer = old }()
+	began := time.Now()
+	if _, err := openMux("http://"+ln.Addr().String(), 0, 593000000); err == nil || !strings.Contains(err.Error(), "no answer") {
+		t.Fatalf("a silent device: %v", err)
+	}
+	if waited := time.Since(began); waited > 2*time.Second {
+		t.Fatalf("open waited %v", waited)
+	}
+}
+
+// A recording takes a watched tuner when it is the only one, and tunes it
+// at once: the viewer's tuner is let go before the recording picks it.
+func TestARecordingTakesAWatchedTuner(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	srv := &fake.Server{Profile: fake.ProfileConnectDuo, TunerCount: 1}
+	st, _ := tuneStore(t, srv)
+	ctx := context.Background()
+	if err := st.PutSettings(ctx, map[string]string{"watermarkGB": "0"}); err != nil {
+		t.Fatal(err)
+	}
+	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
+	want := Rendition{Video: "copy", Audio: "aac2"}
+	if _, err := h.Watch(ctx, idOf(t, st, "4.1"), want, false); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := h.Record(ctx, idOf(t, st, "5.1"), 1, "News")
+	if err != nil {
+		t.Fatalf("the recording did not take the tuner: %v", err)
+	}
+	h.StopRecord(rec.ID)
+}
+
+// A channel the viewer left stops its encode after RenditionIdle but keeps
+// its tuner for TunerLinger, unless a recording is about to need one.
+func TestALeftChannelKeepsItsTunerAWhile(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	for _, hold := range []int{0, 1} {
+		srv := &fake.Server{Profile: fake.ProfileConnectDuo}
+		st, _ := tuneStore(t, srv)
+		h := New(st, t.TempDir(), "ffmpeg", "libx264")
+		t.Cleanup(h.Shutdown)
+		h.RenditionIdle = 100 * time.Millisecond
+		h.TunerLinger = 800 * time.Millisecond
+		h.SetHold(hold)
+		ctx := context.Background()
+		id := idOf(t, st, "4.1")
+		s, err := h.Watch(ctx, id, Rendition{Video: "copy", Audio: "aac2"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Release(id, s.Rendition)
+		time.Sleep(400 * time.Millisecond)
+		h.mu.Lock()
+		f := h.channels[id]
+		kept := f != nil && len(f.renditions) == 0
+		h.mu.Unlock()
+		if hold == 0 && !kept {
+			t.Fatal("the tune was not kept after its encode stopped")
+		}
+		if hold == 1 && f != nil {
+			t.Fatal("a tune lingered with a recording about to start")
+		}
+		time.Sleep(700 * time.Millisecond)
+		h.mu.Lock()
+		gone := h.channels[id] == nil
+		h.mu.Unlock()
+		if !gone {
+			t.Fatal("the tune outlived TunerLinger")
+		}
+	}
+}
+
+// A guess for an untuned 1.0 channel tunes it without a picture while two
+// tuners are free, and not when only one is.
+func TestAGuessTunesA1Point0Channel(t *testing.T) {
+	for _, tuners := range []int{2, 1} {
+		srv := &fake.Server{Profile: fake.ProfileConnectDuo, TunerCount: tuners}
+		st, _ := tuneStore(t, srv)
+		h := New(st, t.TempDir(), "ffmpeg", "libx264")
+		t.Cleanup(h.Shutdown)
+		id := idOf(t, st, "4.1")
+		running, err := h.Warm(context.Background(), id, Rendition{Video: "copy", Audio: "aac2"}, false)
+		if err != nil || running {
+			t.Fatalf("warm: %v %v", running, err)
+		}
+		h.mu.Lock()
+		f := h.channels[id]
+		h.mu.Unlock()
+		if tuners == 2 && (f == nil || len(f.renditions) > 0) {
+			t.Fatalf("two free tuners: tuned %v", f != nil)
+		}
+		if tuners == 1 && f != nil {
+			t.Fatal("a guess took the only free tuner")
+		}
 	}
 }

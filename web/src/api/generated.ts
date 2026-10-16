@@ -146,6 +146,7 @@ export type Event = {
 
 export type FrameList = {
   channels: number[];
+  noSignal?: number[];
 };
 
 export type Game = {

@@ -155,12 +155,24 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		s.Hub.Release(session.ChannelID, session.Rendition)
 		return
 	}
-	dark := waitServable(r.Context(), s.Hub, session.ChannelID, session.Rendition, 12*time.Second)
-	if r.Context().Err() != nil || dark {
+	state := waitServable(r.Context(), s.Hub, session.ChannelID, session.Rendition, servableWait)
+	if r.Context().Err() != nil || state != startServable {
 		s.Hub.Release(session.ChannelID, session.Rendition)
-		if dark {
+		switch {
+		case r.Context().Err() != nil:
+		case state == startDark:
 			s.Hub.DropDark(session.ChannelID)
 			writeError(w, live.ErrNoSignal)
+		default:
+			// A 200 with an empty playlist leaves a player on a black screen
+			// for its own timeout. Say it failed, and why in the log.
+			key := s.Hub.Current(session.ChannelID, session.Rendition)
+			why := s.Hub.StartFailure(session.ChannelID, key)
+			if why == "" {
+				why = "ffmpeg said nothing"
+			}
+			slog.Error(fmt.Sprintf("watch: %d %s did not start in %s (%s): %s", session.ChannelID, key, time.Since(asked).Round(100*time.Millisecond), state, why))
+			writeError(w, live.ErrNoPicture)
 		}
 		return
 	}
@@ -1017,7 +1029,7 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	if name == "index.m3u8" {
 		if msn, part, ok := blockReload(r); ok {
-			s.Hub.WaitBlocking(channelID, key, msn, part)
+			s.Hub.WaitBlocking(r.Context(), channelID, key, msn, part)
 		}
 		body, err := s.Hub.Playlist(channelID, key)
 		if err != nil {
@@ -1092,7 +1104,7 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 			// It lists the video's whole segments, so a blocking request
 			// waits for that segment; it has no parts.
 			if msn, _, ok := blockReload(r); ok {
-				s.Hub.WaitBlocking(channelID, key, msn, -1)
+				s.Hub.WaitBlocking(r.Context(), channelID, key, msn, -1)
 			}
 			body, err = s.Hub.CaptionPlaylist(channelID, key)
 		default:
@@ -1146,7 +1158,7 @@ func (s *Server) viewPlaylist(r *http.Request, channelID int64, key, name string
 		return nil, false, nil
 	}
 	if msn, part, ok := blockReload(r); ok {
-		s.Hub.WaitBlocking(channelID, key, msn, part)
+		s.Hub.WaitBlocking(r.Context(), channelID, key, msn, part)
 	}
 	skip := false
 	switch r.URL.Query().Get("_HLS_skip") {
@@ -1191,15 +1203,38 @@ func blockReload(r *http.Request) (msn, part int, ok bool) {
 // A tuner that locks sends packets within a second or two.
 var darkAfter = 5 * time.Second
 
+// servableWait is how long a watch waits for its first segment. A start
+// that fails is started again well inside it (live.startStall).
+var servableWait = 12 * time.Second
+
+// startState is how waiting for a watch's first segment ended.
+type startState int
+
+const (
+	startServable startState = iota
+	// startDark is a tuner that sent nothing and has no lock.
+	startDark
+	// startGone is a rendition given up on: its restarts were spent.
+	startGone
+	// startLate is a rendition still running with nothing to serve.
+	startLate
+)
+
+func (s startState) String() string {
+	return [...]string{"servable", "no signal", "encode given up", "nothing written"}[s]
+}
+
 // waitServable returns once the playlist has a segment a player can fetch.
 // A playlist that lists only parts is not enough: hls.js treats that as empty
 // and waits out its retry. The first part still anchors the clock while this waits.
 // A cancelled watch returns immediately so the handler can drop that viewer.
-// It reports true, and stops waiting, when the tuner has sent nothing for
-// darkAfter and says it has no lock: that channel is not coming in.
-func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string, d time.Duration) bool {
+// It reports startDark, and stops waiting, when the tuner has sent nothing for
+// darkAfter and says it has no lock: that channel is not coming in. It
+// reports startGone as soon as the rendition was given up on, and startLate
+// when the wait runs out.
+func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string, d time.Duration) startState {
 	if h == nil || key == "" {
-		return false
+		return startServable
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -1209,12 +1244,12 @@ func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string,
 	var checked time.Time
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
-			return false
+			return startServable
 		}
 		if time.Since(start) >= darkAfter && time.Since(checked) >= 500*time.Millisecond {
 			checked = time.Now()
 			if h.NoSignal(channelID) {
-				return true
+				return startDark
 			}
 		}
 		// A restart replaces the gate. Spending the whole deadline on the
@@ -1228,18 +1263,21 @@ func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string,
 		// Segment 0. A negative part means the whole segment, not an open part.
 		h.WaitMedia(channelID, key, 0, -1, slice)
 		body, err := h.Playlist(channelID, key)
-		if err == nil && strings.Count(string(body), "#EXTINF") >= 1 {
-			return false
+		if err == nil && bytes.Contains(body, []byte("#EXTINF")) {
+			return startServable
+		}
+		if err != nil && !h.Starting(channelID, key) {
+			return startGone
 		}
 		if !time.Now().Before(deadline) {
-			return false
+			return startLate
 		}
 		// No gate yet, or this wake was for a playlist a restart already removed.
 		if time.Since(started) < 50*time.Millisecond {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	return false
+	return startLate
 }
 
 // roomFrameWait caps how long a watch waits for an encode started in the
