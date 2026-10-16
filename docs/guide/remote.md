@@ -2,43 +2,59 @@
 
 There are two ways to watch from somewhere else.
 
-- **A Cloudflare tunnel.** Broadwave gets a public `https` address, such as `tv.example.com`. You invite family, and only the phones, TVs, and browsers you invited can open it. Nothing on your router changes. This is the way to share with people outside the house.
+- **Sign in with Cloudflare.** Broadwave gets a public `https` address, such as `tv.example.com`. You invite family, and only the phones, TVs, and browsers you invited can open it. Nothing on your router changes. This is the way to share with people outside the house.
 - **A VPN only your devices join**, such as [Tailscale](https://tailscale.com/). See [Tailscale](#tailscale) below.
 
 Either way, the tuner stays home. Your phone talks to Broadwave, and Broadwave talks to the tuner. One tune of a channel still feeds every screen and every recording. Do not forward port 8477 or 8478 on your router.
 
-## Cloudflare tunnel
+## Sign in with Cloudflare
 
-You need a free Cloudflare account and a domain whose DNS is on Cloudflare. A tunnel makes an outbound connection from your server to Cloudflare, so no port is opened at home.
+You need a free Cloudflare account with a domain on it. If you do not have a domain on Cloudflare yet, add one first (Cloudflare sells them too), or use [Tailscale](#tailscale).
 
-Everything that comes in through the tunnel needs a paired device. That includes the guide, the video, recordings, the playlist (`/export/lineup.m3u`), and the stream URLs. The home network does not change. Phones and TVs in the house keep working with no code.
+Broadwave makes a Cloudflare tunnel: an outbound connection from your server to Cloudflare, so no port is opened at home. Everything that comes in through the tunnel needs a paired device. That includes the guide, the video, recordings, the playlist (`/export/lineup.m3u`), and the stream URLs. The home network does not change. Phones and TVs in the house keep working with no code.
 
-### 1. Make the tunnel
+### 1. Turn it on
 
-1. Sign in to the Cloudflare dashboard and open **Zero Trust**. The first time, it asks you to pick a team name and the free plan.
-2. Go to **Networks**, then **Tunnels**, then **Create a tunnel**.
-3. Choose **Cloudflared**, name it `broadwave`, and save it.
-4. Cloudflare shows install commands. Copy any one of them. They all contain the same token, a long string that starts with `eyJ`. Keep it private. Anyone with it can run your tunnel.
-5. Go on to **Public hostnames** (on newer dashboards, **Published application routes**). Add one:
-   - **Subdomain:** `tv`, or any name you like.
-   - **Domain:** your domain.
-   - **Service type:** `HTTP`.
-   - **URL:** `localhost:8477`.
-6. Save. Cloudflare adds the DNS record for you.
+Do this on the home network, on a device that is an admin. It is refused from outside the house.
 
-### 2. Give Broadwave the token
+1. Open Broadwave. Go to **Settings**, then **Away from home**.
+2. Choose **Sign in with Cloudflare**. A Cloudflare tab opens. Settings says **Waiting for Cloudflare…** with a countdown. The sign-in lasts about nine minutes.
+3. In the Cloudflare tab, sign in, pick the domain to use, and choose **Authorize**. Then come back to Broadwave. The tab can be closed.
+4. Settings says **Signed in · example.com**. Type a name for the address. `tv` makes `tv.example.com`.
+5. Choose **Turn on**. Broadwave makes the tunnel, adds the name to your DNS, and connects. It takes a few seconds.
+6. Settings says **Connected** and shows the address, such as `https://tv.example.com`. **Copy address** copies it. Now [invite family](#3-invite-family).
 
-The Docker image includes cloudflared, so Broadwave runs the tunnel itself.
+The tunnel is named `broadwave-` and the start of the server's id, so it is easy to find in the Cloudflare dashboard under **Zero Trust**, **Networks**, **Tunnels**.
 
-1. Open Broadwave on the home network. Go to **Settings**, then **Away from home**.
-2. Paste what you copied into **Tunnel token** and choose **Save**. The whole install command is fine. Broadwave keeps only the token.
-3. Within a few seconds it says **Connected to Cloudflare** and shows the address, such as `https://tv.example.com`. Broadwave reads the address from the tunnel. If it does not appear, type it into **Public address**.
+What Broadwave keeps: only the tunnel's own token, which can run this one tunnel and nothing else. The sign-in itself can change every tunnel in the account, so Broadwave keeps it in memory only while you set up, and drops it when setup is done, when you choose **Cancel**, or about 15 minutes after you signed in. The token is in the config folder under `secrets/`, readable only by the server. It is not in the catalog, not in backups, and not in the support bundle.
 
-The token is never shown again, and it is left out of the support bundle. **Remove token** stops the tunnel.
+If something goes wrong:
 
-### If you already run cloudflared
+- **That Cloudflare account has no domain yet.** Add a domain to Cloudflare, then sign in again. Or use Tailscale.
+- **The name is already in use.** Something else in your DNS has that name. Pick another name, or choose **Replace it** to point that name at Broadwave instead.
+- **Sign-in timed out.** You have about nine minutes to authorize in the Cloudflare tab. Choose **Try again**.
+- **Cloudflare did not let this sign-in make a tunnel.** Sign in with the account that owns the domain.
+- **Set this up from the home network.** Signing in hands the server a key to your Cloudflare account, so it only starts at home.
 
-Leave **Tunnel token** empty. Point your tunnel's public hostname at `http://<the server's address>:8477`, then type the hostname into **Public address**, such as `tv.example.com`. Broadwave then answers to that name and asks for a paired device on every request through it. Requests carrying Cloudflare's `Cf-Connecting-Ip` header count as outside, whatever name they use.
+### Turn it off
+
+**Turn off** stops the tunnel here and forgets its token. The tunnel and the DNS name stay in Cloudflare, so turning it back on later is quick.
+
+**Turn off and remove from Cloudflare** asks you to sign in once more, with the account that has the tunnel, then deletes the tunnel and its DNS name too. If Cloudflare does not let Broadwave delete the name, Settings says which name is left. Delete it in the dashboard under **DNS**.
+
+### Restoring a backup
+
+Backups never hold the tunnel token, so restoring one does not start a tunnel. A server that already runs one keeps running it. On a new server, sign in with Cloudflare again. When the catalog came from the same server, it finds the tunnel it made before by name and uses it again.
+
+### Advanced: a token, or your own cloudflared
+
+**Advanced**, at the bottom of **Away from home**, keeps the older ways.
+
+**Paste a tunnel token.** Make a tunnel yourself in the Cloudflare dashboard (**Zero Trust**, **Networks**, **Tunnels**, **Create a tunnel**, **Cloudflared**). Give it a public hostname such as `tv.example.com` with service `HTTP` and URL `localhost:8477`. Copy any install command Cloudflare shows. They all contain the token, a long string that starts with `eyJ`. Paste it into **Tunnel token** and choose **Save**. The whole command is fine. Broadwave keeps only the token, in the same `secrets/` file. The token is never shown again. **Remove token** stops the tunnel.
+
+**Your own cloudflared.** Leave **Tunnel token** empty. Point your tunnel's public hostname at `http://<the server's address>:8477`, then type the hostname into **Public address**, such as `tv.example.com`. Broadwave then answers to that name and asks for a paired device on every request through it. Requests carrying Cloudflare's `Cf-Connecting-Ip` header count as outside, whatever name they use.
+
+A token saved by an older version moves out of the catalog into `secrets/` the first time the new version starts.
 
 ### 3. Invite family
 
