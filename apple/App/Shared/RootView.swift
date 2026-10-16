@@ -459,6 +459,7 @@ struct RootView: View {
                     switch page {
                     case "settings": openSettings()
                     case "search": tab = .search
+                    case "recordings": tab = .recordings
                     default: tab = .guide
                     }
                     return
@@ -502,7 +503,7 @@ struct RootView: View {
         private var sidebarPageTest: String? {
             let page = UserDefaults.standard.string(forKey: "BroadwaveFocus")
             switch page {
-            case "guide", "settings", "search":
+            case "guide", "settings", "search", "recordings":
                 return page
             default:
                 return nil
@@ -762,7 +763,7 @@ struct RootView: View {
             switch page {
             case .home: HomeView()
             case .guide: GuideView()
-            case .search: SearchView()
+            case .search: TVSearchView()
             case .sports: SportsView()
             case .recordings: RecordingsView()
             case .settings:
