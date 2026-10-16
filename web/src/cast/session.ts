@@ -55,6 +55,7 @@ type Open = {
   room: string;
   latency: Latency;
   token?: string;
+  mediaKey?: string;
   title?: string;
   subtitle?: string;
   player: CastPlayer;
@@ -73,6 +74,7 @@ export class CastSession {
   room: string;
   latency: Latency;
   token: string;
+  mediaKey: string;
   title: string;
   subtitle: string;
   /** Bumps on a real retune, so a wait timer from the previous load cannot start the next one. */
@@ -101,6 +103,7 @@ export class CastSession {
     this.room = input.room;
     this.latency = input.latency;
     this.token = input.token ?? "";
+    this.mediaKey = input.mediaKey ?? "";
     this.title = input.title ?? "";
     this.subtitle = input.subtitle ?? "";
     this.player = input.player;
@@ -216,6 +219,7 @@ export class CastSession {
   retune(next: CastLoad): boolean {
     if (this.stopped) return false;
     const nextToken = next.token ?? "";
+    // A fresh link to the same playlist does not reload the picture. The one playing lasts 24 hours.
     if (next.channelId === this.channelId && next.playlist === this.playlist && next.room === this.room && nextToken === this.token) {
       this.title = next.title;
       this.subtitle = next.subtitle;
@@ -228,6 +232,7 @@ export class CastSession {
     this.room = next.room;
     this.latency = next.latency;
     this.token = nextToken;
+    this.mediaKey = next.mediaKey ?? "";
     this.title = next.title;
     this.subtitle = next.subtitle;
     this.generation += 1;
@@ -236,7 +241,7 @@ export class CastSession {
     this.framed = false;
     this.state = null;
     this.memory = freshSync();
-    const media = mediaURL(this.pageURL, next.playlist);
+    const media = mediaURL(this.pageURL, next.playlist, this.mediaKey);
     if (media) this.player.load(media, nextToken);
     this.watch?.hold(this.holdInput());
     this.emit("buffering");
@@ -308,7 +313,7 @@ export function castSessionLive<T extends { stopped: boolean }>(session: T | nul
 
 /** Null when the playlist is not this server's /media/ path. The player is not touched. */
 export function openCastSession(input: Open): CastSession | null {
-  const media = mediaURL(input.pageURL, input.playlist);
+  const media = mediaURL(input.pageURL, input.playlist, input.mediaKey);
   if (!media) return null;
   return new CastSession(input, media);
 }
