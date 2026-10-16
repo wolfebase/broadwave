@@ -146,6 +146,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /devices/{id}/scan", s.startScan)
 	api("GET /devices/{id}/scan", s.scanStatus)
 	api("GET /home", s.home)
+	api("GET /now", s.nowNext)
 	api("POST /sources/discover", s.discover)
 	api("POST /sources/look", s.look)
 	api("GET /sources/free", s.freeSources)

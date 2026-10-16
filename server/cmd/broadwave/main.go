@@ -210,6 +210,11 @@ func main() {
 		}
 	}
 	handler := api.Handler()
+	bus.Versions = api.DataVersions
+	go api.WatchData(context.Background(), 2*time.Second)
+	// sources.found goes out when discovery found a different set, not every
+	// five minutes: each one sent every app to refetch its tuners.
+	found := foundOnce(st)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -220,7 +225,9 @@ func main() {
 			return
 		}
 		slog.Info(fmt.Sprintf("discovery: %d device(s)", n))
-		bus.Publish("sources.found", map[string]int{"found": n})
+		if found(n) {
+			bus.Publish("sources.found", map[string]int{"found": n})
+		}
 		// SiliconDust asks for a random 20-28 h gap after each successful pull.
 		// A restart waits out whatever nextGuidePull was already stored.
 		for !*staging {
@@ -264,7 +271,9 @@ func main() {
 				slog.Error(fmt.Sprintf("discovery: %v", err))
 				continue
 			}
-			bus.Publish("sources.found", map[string]int{"found": n})
+			if found(n) {
+				bus.Publish("sources.found", map[string]int{"found": n})
+			}
 		}
 	}()
 	go api.WatchHome(context.Background())
@@ -483,4 +492,22 @@ func recordingsDir(configDir, flagged string) string {
 		return abs
 	}
 	return flagged
+}
+
+// foundOnce reports a discovery pass that changed something: a different
+// device count, or a lineup or tuner change the channels version counted.
+func foundOnce(st *store.Store) func(n int) bool {
+	var mu sync.Mutex
+	lastN, lastV := -1, int64(-1)
+	return func(n int) bool {
+		v, err := st.DataVersions(context.Background())
+		if err != nil {
+			return true
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		changed := n != lastN || v.Channels != lastV
+		lastN, lastV = n, v.Channels
+		return changed
+	}
 }

@@ -1111,3 +1111,24 @@ func TestSyncAllMarksTheRoomOnce(t *testing.T) {
 		t.Fatalf("a remade room should start unsynced: %+v", fresh)
 	}
 }
+
+func TestHelloCarriesDataVersions(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	bus := NewBus()
+	bus.Versions = func() any { return map[string]int{"guide": 7} }
+	srv := httptest.NewServer(bus)
+	defer srv.Close()
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	_, raw, err := c.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"versions":{"guide":7}`) {
+		t.Fatalf("hello %s", raw)
+	}
+}
