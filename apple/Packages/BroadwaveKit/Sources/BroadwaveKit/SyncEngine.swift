@@ -122,6 +122,14 @@ public final class SyncEngine {
     /// channel change paused 8 s on "Lining up with live…" (J0.114). Above
     /// catchUpLeadMS, so a catch-up seek's planned lead still ends in a pause.
     static let measureAheadMS = 3000.0
+
+    /// Rooms that come to a screen started ahead of them: a channel's, and a
+    /// multiview tile's own room. A warm tile paused 10 s or more for its 16 s
+    /// room. The server moves a tile room only while this screen is alone in it.
+    nonisolated static func measuresAhead(room: String) -> Bool {
+        room.hasPrefix("channel:") || room.hasPrefix("multiview:") && room.split(separator: ":").count == 3
+    }
+
     /// How long a screen plays on after "ahead" before it falls back to the
     /// pause: a server without the command, or a room too old to move.
     static let measureWaitSeconds = 1.5
@@ -502,7 +510,7 @@ public final class SyncEngine {
         let move = Self.decide(
             hasFrame: hasFrame, driftMS: d, roomRate: roomRate, canSeek: canSeek(to: target + Self.catchUpLeadMS, item: item),
             forwardBuffer: bufferedAhead(item), trim: trim, quiet: quiet, canSpeedUp: canSpeedUp,
-            canMeasureAhead: room.hasPrefix("channel:") && roomRate == 1
+            canMeasureAhead: Self.measuresAhead(room: room) && roomRate == 1
                 && aheadSentAt.map { Date().timeIntervalSince($0) < Self.measureWaitSeconds } ?? true,
             canMeasureBehind: room.hasPrefix("channel:") && roomRate == 1
         )

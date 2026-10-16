@@ -1034,7 +1034,7 @@ func TestAheadMeasuresAYoungRoomAtTheScreen(t *testing.T) {
 	}
 }
 
-func TestAheadOnlyForYoungFollowRooms(t *testing.T) {
+func TestAheadOnlyForYoungFollowRoomsAndSoloTiles(t *testing.T) {
 	start := time.Date(2026, 10, 11, 17, 0, 0, 0, time.UTC)
 	r, now := fixedRooms(start)
 	for _, room := range []string{"channel:9", "group:den", "multiview:abc"} {
@@ -1046,6 +1046,18 @@ func TestAheadOnlyForYoungFollowRooms(t *testing.T) {
 		if st, _ := r.Apply(room, Command{Action: "ahead", MediaTime: unixMS(*now) - 8000}); st.Version != before.Version {
 			t.Fatalf("%s took ahead: %+v", room, st)
 		}
+	}
+	// A multiview tile's own room, played by one screen, comes to that tile.
+	r.Join("multiview:abc:9", 9, unixMS(start.Add(-60*time.Second)))
+	tile, _ := r.State("multiview:abc:9")
+	if st, _ := r.Apply("multiview:abc:9", Command{Action: "ahead", MediaTime: unixMS(*now) - 8000}); st.Version == tile.Version {
+		t.Fatalf("a solo tile room should take ahead: %+v", st)
+	}
+	r.Join("multiview:abc:10", 10, unixMS(start.Add(-60*time.Second)))
+	r.Join("multiview:abc:10", 10, unixMS(start.Add(-60*time.Second)))
+	shared, _ := r.State("multiview:abc:10")
+	if st, _ := r.Apply("multiview:abc:10", Command{Action: "ahead", MediaTime: unixMS(*now) - 8000}); st.Version != shared.Version {
+		t.Fatalf("a tile room two screens play took ahead: %+v", st)
 	}
 	*now = start.Add(youngRoom + time.Second)
 	old, _ := r.State("channel:9")
