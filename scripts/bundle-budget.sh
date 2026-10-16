@@ -45,14 +45,19 @@
 # arrows and each show once, the light hero, a missing-tuner line, data change
 # events with versions and /now first paint, and TV and phone target sizes.
 # Measured entry gzip JS 101314 and CSS 13205, plus 300 and 200 bytes.
+# JS and CSS raised 2026-10-16 for the set-up and manage work on top of the
+# watching work: the shell names the server it cannot reach (offline line and
+# stale guide), Safari on iPhone gets a Home Screen hint whose check runs
+# before the app loads, and accent and red fills under white text are darkened
+# to 4.5:1. Measured entry gzip JS 101790 and CSS 13408, plus 300 and 200 bytes.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=101614
-CSS_GZIP_MAX=13405
+JS_GZIP_MAX=102090
+CSS_GZIP_MAX=13608
 
 if [[ ! -f "$INDEX" ]]; then
   echo "bundle budget: missing $INDEX" >&2

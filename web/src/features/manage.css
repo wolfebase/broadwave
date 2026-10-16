@@ -1,0 +1,40 @@
+/* Management screens (settings, setup, pairing, schedule, recordings, sports).
+   Loaded with those pages, not with the shell. */
+
+/* 10-foot: every control is a 56 px target, and a selected or primary control
+   is the accent, not white. On a TV a white pill reads as the focus ring. */
+html[data-layout="tv"] :is(.page-wrap, .setup, .sports-page, .manage) :is(.btn, .chip, .seg, select, input:not([type="checkbox"], [type="radio"], [type="range"])) {
+  min-height: 56px;
+}
+
+html[data-layout="tv"] :is(.page-wrap, .setup, .sports-page, .manage) :is(.btn, .chip, .seg) {
+  padding-inline: 24px;
+  font-size: var(--type-headline-size);
+}
+
+html[data-layout="tv"] :is(.page-wrap, .setup, .sports-page, .manage) .btn.small {
+  min-height: 56px;
+  font-size: var(--type-footnote-size);
+}
+
+html[data-layout="tv"] :is(.page-wrap, .setup, .sports-page, .manage) :is(.btn.primary, .chip.on, .seg.on),
+html[data-layout="tv"] .setup-steps li.on button {
+  background: var(--accent-fill);
+  background-image: none;
+  color: var(--color-on-accent);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+html[data-layout="tv"] :is(.page-wrap, .setup, .sports-page, .manage) :is(.btn.primary, .chip.on, .seg.on):focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+html[data-layout="tv"] :is(.page-wrap, .setup, .sports-page, .manage) .chip.on .chip-count {
+  color: var(--color-on-accent);
+}
+
+html[data-layout="tv"] :is(.page-wrap, .setup, .sports-page, .manage) .check input {
+  width: 28px;
+  height: 28px;
+}

@@ -85,16 +85,17 @@ test("an alert waits off the player, and Not now lets it go", async ({ page }) =
 });
 
 test("game alerts can be turned off", async ({ page }) => {
-  await page.goto("/settings");
-  const picker = page.getByLabel("Game alerts");
-  await expect(picker).toHaveValue("all");
-  for (const value of ["teams", "off"]) {
-    await picker.selectOption(value);
+  await page.goto("/settings/guide");
+  const picker = page.getByRole("radiogroup", { name: "Game alerts" });
+  const choice = { all: "Your teams and close games", teams: "Your teams only", off: "Off" } as const;
+  await expect(picker.getByRole("radio", { name: choice.all })).toHaveAttribute("aria-checked", "true");
+  for (const value of ["teams", "off"] as const) {
+    await picker.getByRole("radio", { name: choice[value] }).click();
     await expect
       .poll(async () => ((await (await page.request.get("/api/v1/settings")).json()) as { gameAlerts?: string }).gameAlerts)
       .toBe(value);
   }
-  await picker.selectOption("all");
+  await picker.getByRole("radio", { name: choice.all }).click();
   await expect
     .poll(async () => ((await (await page.request.get("/api/v1/settings")).json()) as { gameAlerts?: string }).gameAlerts)
     .toBe("all");

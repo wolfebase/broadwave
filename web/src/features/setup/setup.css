@@ -1,15 +1,25 @@
+/* Setup scrolls as a page. The card grows with what it holds, and the next
+   step stays in reach at the bottom of the window. */
 .setup {
   flex: 1;
   min-height: 0;
   width: 100%;
-  max-width: 820px;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+}
+
+.setup-inner {
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: 760px;
   margin: 0 auto;
-  padding: var(--space-6);
+  padding: var(--space-8) var(--space-6) var(--space-6);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: start;
   gap: var(--space-6);
-  overflow: hidden;
-  box-sizing: border-box;
 }
 
 .setup-head {
@@ -26,8 +36,7 @@
 
 .setup-steps {
   display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
   gap: 8px;
   list-style: none;
   padding: 0;
@@ -43,11 +52,12 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  min-height: 36px;
+  padding: 6px 14px 6px 8px;
   border-radius: var(--radius-pill);
   background: var(--color-surface1);
   border: 1px solid var(--color-line);
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
   font-weight: 600;
   font-size: var(--type-footnote-size);
   white-space: nowrap;
@@ -55,16 +65,32 @@
 
 .setup-steps button::before {
   content: counter(step);
+  display: inline-grid;
+  place-items: center;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  background: var(--color-surface3);
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
   font-weight: 800;
+  font-size: 0.9em;
 }
 
 .setup-steps li.on button {
-  background: var(--color-text);
-  color: var(--color-canvas);
+  color: var(--color-text);
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
-.setup-steps li.done button {
+.setup-steps li.on button::before {
+  background: var(--accent-fill);
+  color: var(--color-on-accent);
+}
+
+.setup-steps li.done button::before {
+  content: "\2713";
+  background: color-mix(in srgb, var(--color-success) 22%, transparent);
   color: var(--color-success);
 }
 
@@ -72,14 +98,407 @@
   border-radius: var(--radius-xl);
   padding: var(--space-8);
   display: grid;
-  gap: var(--space-4);
-  min-height: 0;
-  overflow: auto;
+  gap: var(--space-6);
   align-content: start;
+  min-width: 0;
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
 }
 
 .setup-card h2 {
   font-size: var(--type-title2-size);
+}
+
+.setup-card-head {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.setup-card-head .dim {
+  font-size: var(--type-body-size);
+}
+
+/* What was found: a row that reads as settled, with a green mark. */
+.setup-found {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.setup-found li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-success) 8%, var(--color-surface2));
+  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
+}
+
+.setup-found-mark,
+.setup-summary-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-success);
+  font-size: 18px;
+}
+
+.setup-found-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.setup-found-text strong {
+  overflow-wrap: anywhere;
+}
+
+.setup-searching {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface2);
+  color: var(--color-text-secondary);
+}
+
+.setup-spinner {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--color-line-strong, var(--color-line));
+  border-top-color: var(--color-accent);
+  animation: setup-spin 0.9s linear infinite;
+}
+
+@keyframes setup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setup-spinner {
+    border-color: var(--color-accent);
+  }
+}
+
+/* A group of ways in, set off by a hairline. */
+.setup-block {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-line);
+  min-width: 0;
+}
+
+.setup-block > h3,
+.setup-connect > h3 {
+  font-size: var(--type-headline-size);
+}
+
+.setup-address .field label {
+  color: var(--color-text-secondary);
+}
+
+.setup-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.setup-inline input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.setup-inline .btn {
+  flex: none;
+}
+
+.setup-other {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface2);
+}
+
+.setup-other > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 12px;
+  padding: 14px 16px;
+  min-height: 56px;
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius-md);
+}
+
+.setup-other > summary::-webkit-details-marker {
+  display: none;
+}
+
+.setup-other > summary::after {
+  content: "";
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--color-text-secondary);
+  border-bottom: 2px solid var(--color-text-secondary);
+  transform: rotate(45deg) translateY(-3px);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+.setup-other[open] > summary::after {
+  transform: rotate(-135deg) translateY(-3px);
+}
+
+.setup-other-title {
+  font-weight: 700;
+}
+
+.setup-other > summary .hint {
+  grid-column: 1;
+}
+
+.setup-other .setup-form {
+  padding: 4px 16px 16px;
+}
+
+.setup-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.setup-form > .btn {
+  justify-self: start;
+}
+
+.setup-file input[type="file"] {
+  min-height: 0;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+}
+
+.setup-note {
+  color: var(--color-text-secondary);
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface2);
+}
+
+.setup-pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+/* Ready: the summary in words, then what the server checked. */
+.setup-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.setup-summary-mark {
+  width: 48px;
+  height: 48px;
+  font-size: 26px;
+  background: var(--color-surface3);
+  color: var(--color-text-secondary);
+}
+
+.setup-summary-mark.done {
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-success);
+}
+
+.setup-summary h2 {
+  overflow-wrap: anywhere;
+}
+
+.setup-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.setup-checks li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.setup-checks li:first-child {
+  border-top: 0;
+}
+
+.setup-check-mark {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 800;
+  background: var(--color-surface3);
+  color: var(--color-text-tertiary);
+}
+
+.setup-checks li[data-state="done"] .setup-check-mark {
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-success);
+}
+
+.setup-checks li[data-state="check"] .setup-check-mark {
+  background: color-mix(in srgb, var(--color-warning) 22%, transparent);
+  color: var(--color-warning);
+}
+
+.setup-check-mark .setup-spinner {
+  width: 14px;
+  height: 14px;
+}
+
+.setup-check-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.setup-check-text .dim {
+  font-size: var(--type-footnote-size);
+}
+
+.setup-check-word {
+  font-size: var(--type-footnote-size);
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+}
+
+.setup-checks li[data-state="check"] .setup-check-word {
+  color: var(--color-warning);
+}
+
+.setup-connect {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-line);
+}
+
+.setup-connect-text {
+  display: grid;
+  gap: var(--space-2);
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+/* The next step stays at the bottom of the window while the page scrolls. */
+.setup-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: var(--space-4) var(--space-6) max(var(--space-6), env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-canvas) 92%, transparent) 40%);
+}
+
+.setup-foot-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  min-height: 52px;
+}
+
+/* Continue and Watch are the one thing to press. Accent in every theme, so
+   it never reads as disabled or as a focus ring. */
+.setup-foot .btn.primary {
+  background: var(--accent-fill);
+  background-image: none;
+  color: var(--color-on-accent);
+  border-color: transparent;
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+.setup-foot .btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-fill) 86%, #fff);
+}
+
+.setup-foot .btn.primary:disabled {
+  background: var(--color-surface3);
+  color: var(--color-text-secondary);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.setup-foot .btn.primary:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.layout-phone .setup-inner {
+  padding: var(--space-6) var(--space-4) var(--space-4);
+  gap: var(--space-5);
+}
+
+.layout-phone .setup-head h1 {
+  font-size: var(--type-title1-size);
+}
+
+.layout-phone .setup-card {
+  padding: var(--space-5) var(--space-4);
+  gap: var(--space-5);
+  border-radius: var(--radius-lg);
+}
+
+.layout-phone .setup-foot {
+  padding-inline: var(--space-4);
+}
+
+.layout-phone .setup-foot .btn.primary {
+  flex: 1;
+  justify-content: center;
+}
+
+.layout-phone .setup-found li {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.layout-phone .setup-found li > .ok {
+  display: none;
+}
+
+.layout-tv .setup-inner,
+.layout-tv .setup-foot-inner {
+  max-width: 1120px;
+}
+
+.layout-tv .setup-head h1 {
+  font-size: var(--type-title1-size);
+}
+
+.layout-tv .setup-steps button {
+  min-height: 56px;
+  padding-inline: 12px 24px;
 }
 
 .home-list {
@@ -97,10 +516,6 @@
   padding: 0;
   display: grid;
   gap: 8px;
-}
-
-.setup-finish .setup-list li {
-  padding: 8px 12px;
 }
 
 .setup-list li {
@@ -140,12 +555,6 @@
 .setup-row input {
   flex: 1;
   min-width: 220px;
-}
-
-.setup-foot {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: var(--space-2);
 }
 
 .signal-row {
@@ -238,18 +647,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.layout-phone .setup {
-  padding: var(--space-4);
-}
-
-.layout-phone .setup-head h1 {
-  font-size: var(--type-title1-size);
-}
-
-.layout-phone .setup-card {
-  padding: var(--space-5);
-}
-
 .layout-phone .setup-row input {
   min-width: 0;
   flex-basis: 100%;
@@ -261,14 +658,7 @@
 
 .setup-form {
   display: grid;
-  gap: 10px;
-}
-
-.setup-form label {
-  display: grid;
-  gap: 4px;
-  font-size: var(--type-footnote-size);
-  font-weight: 600;
+  gap: var(--space-4);
 }
 
 .setup-channels {

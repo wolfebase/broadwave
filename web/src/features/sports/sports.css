@@ -80,6 +80,7 @@
 }
 
 .gc-time {
+  white-space: nowrap;
   font-size: var(--type-footnote-size);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
@@ -160,6 +161,204 @@
   gap: 6px;
 }
 
+
+
+.chip-logo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.gc-every {
+  font-size: var(--type-footnote-size);
+  align-self: center;
+}
+
+/* Talk, highlights, and magazine shows: a quiet list under the games. */
+.sports-shows {
+  margin-top: var(--space-4);
+}
+
+.sports-shows-title {
+  font-size: var(--type-headline-size);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-3);
+}
+
+.show-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  border-top: 1px solid var(--color-line);
+}
+
+.show-row {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px 16px;
+  min-height: 52px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.show-row .gc-time {
+  white-space: nowrap;
+}
+
+.sr-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sr-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* Phone: a dense list. Art goes, and the league row scrolls on its own under the range chips. */
+.layout-phone .sports-page {
+  padding: var(--space-4) var(--space-4) var(--space-8);
+}
+
+.layout-phone .league-chips {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: calc(var(--space-2) * -1) calc(var(--space-4) * -1) var(--space-4);
+  padding: 8px var(--space-4);
+  background: color-mix(in srgb, var(--color-canvas) 82%, transparent);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.layout-phone .league-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.layout-phone .league-chips .chip {
+  flex: none;
+}
+
 .layout-phone .sports-grid {
   grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.layout-phone .sports-day {
+  margin-bottom: var(--space-6);
+}
+
+.layout-phone .sports-day-title {
+  font-size: var(--type-title3-size);
+  margin-bottom: var(--space-3);
+}
+
+.layout-phone .game-card {
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+}
+
+.layout-phone .gc-art {
+  display: none;
+}
+
+.layout-phone .gc-matchup .team,
+.layout-phone .gc-title {
+  font-size: var(--type-headline-size);
+}
+
+.layout-phone .team-logo {
+  width: 22px;
+  height: 22px;
+}
+
+.layout-phone .gc-foot {
+  gap: 8px;
+}
+
+.layout-phone .show-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 10px 0;
+}
+
+.layout-phone .show-row .sr-when {
+  grid-column: 1 / -1;
+  font-size: var(--type-footnote-size);
+}
+
+.layout-phone .show-row .ch-badge {
+  grid-column: 1;
+}
+
+.layout-phone .show-row .sr-actions {
+  grid-column: 2;
+  grid-row: 2 / span 2;
+}
+
+/* 10-foot: wider cards, and a row on the list is a 56 px target. */
+html[data-layout="tv"] .sports-grid {
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: var(--space-4);
+}
+
+html[data-layout="tv"] .show-row {
+  grid-template-columns: 16rem minmax(0, 1fr) auto auto;
+  min-height: 72px;
+}
+
+.sports-none {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: var(--space-6);
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+}
+
+.gc-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.sr-when {
+  display: grid;
+}
+
+.sr-day {
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+}
+
+.layout-phone .gc-matchup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.layout-phone .gc-matchup .at {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--type-footnote-size);
+}
+
+.layout-phone .show-row .sr-when {
+  display: flex;
+  gap: 8px;
 }

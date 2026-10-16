@@ -24,6 +24,15 @@ html {
   --color-accent-ink: #9cbcff;
   --color-tally-ink: #ff8a82;
   --color-tally-soft-ink: #ffb3ad;
+  /* A fill under white text. The dark-theme accents and red are bright, so they
+     are darkened until white on them reads at 4.5:1. The light theme's are already dark. */
+  --accent-fill: color-mix(in srgb, var(--color-accent) 58%, #000);
+  --tally-fill: color-mix(in srgb, var(--color-tally) 78%, #000);
+}
+
+html[data-theme="light"] {
+  --accent-fill: var(--color-accent);
+  --tally-fill: var(--color-tally);
 }
 
 body {
@@ -644,6 +653,13 @@ html[data-layout="tv"] .source-row input {
   gap: var(--space-3);
 }
 
+/* A list of rows lines up with the heading above it, on every screen. */
+.source-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .device-grid {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
@@ -1000,4 +1016,15 @@ th {
 :root .sports-page {
   width: 100%;
   box-sizing: border-box;
+}
+
+/* Offline on the saved guide: progress bars are a guess until the server answers. */
+html[data-stale] .progress {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+
+html[data-stale] .banner-error {
+  background: var(--color-surface2);
+  color: var(--color-text-secondary);
 }

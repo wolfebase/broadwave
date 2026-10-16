@@ -70,10 +70,11 @@ test.describe("appearance", () => {
       await expect(now).toHaveCSS("background-color", theme === "light" ? "rgb(29, 78, 216)" : "rgb(245, 247, 250)");
       await expect(now).toHaveCSS("color", theme === "light" ? "rgb(255, 255, 255)" : "rgb(7, 10, 16)");
 
+      // Desktop shows the section list beside Appearance; a phone shows the list alone.
+      await page.setViewportSize({ width: 1440, height: 900 });
       await page.getByRole("link", { name: "Settings", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
-      await expect(page.getByRole("button", { name: theme === "light" ? "Light" : "Dark" })).toHaveAttribute("aria-pressed", "true");
-      await page.setViewportSize({ width: 1440, height: 900 });
+      await expect(page.getByRole("radio", { name: theme === "light" ? "Light" : "Dark", exact: true })).toHaveAttribute("aria-checked", "true");
       await expectAccessible(page);
       for (const size of viewports) {
         await atSize(page, size);
@@ -162,8 +163,8 @@ test.describe("appearance", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
     await page.getByRole("link", { name: "Settings", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
-    await page.getByRole("button", { name: "System" }).click();
+    await expect(page.getByRole("radio", { name: "Dark", exact: true })).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("radio", { name: "System", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await page.emulateMedia({ colorScheme: "dark" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
