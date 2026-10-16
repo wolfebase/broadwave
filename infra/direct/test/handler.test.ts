@@ -159,6 +159,20 @@ test("acme is capped a day per name", async () => {
   assert.equal((await handle(req("PUT", `/v1/${a.id}/acme`, JSON.stringify({ value }), a.priv), d)).status, 429);
 });
 
+test("address updates are capped an hour per name", async () => {
+  const d = deps();
+  const r = await registered(d);
+  const path = `/v1/${r.id}/addresses`;
+  for (let i = 0; i < 20; i++) {
+    const body = JSON.stringify({ ipv4: [`192.168.1.${i + 2}`] });
+    assert.equal((await handle(req("PUT", path, body, r.priv), d)).status, 200);
+  }
+  const body = JSON.stringify({ ipv4: ["10.0.0.2"] });
+  assert.equal((await handle(req("PUT", path, body, r.priv), d)).status, 429);
+  d.now = () => 1_800_000_000 + 3600;
+  assert.equal((await handle(req("PUT", path, body, r.priv, 1_800_000_000 + 3600), d)).status, 200);
+});
+
 test("wrong methods and paths", async () => {
   const d = deps();
   assert.equal((await handle(new Request("https://x/v1/register"), d)).status, 405);

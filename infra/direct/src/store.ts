@@ -11,6 +11,9 @@ export interface Registration {
   firstAcme: number;
   acmeDay: string;
   acmeCount: number;
+  // Address updates in the current hour (addrHour = unix hour).
+  addrHour: number;
+  addrCount: number;
   seen: number;
 }
 
@@ -23,6 +26,7 @@ export interface Store {
   firstAcmeSince(since: number): Promise<number>;
   noteAcme(id: string, firstAcme: number, day: string, count: number): Promise<void>;
   touch(id: string, at: number): Promise<void>;
+  noteAddresses(id: string, hour: number, count: number): Promise<void>;
 }
 
 export class MemoryStore implements Store {
@@ -55,6 +59,10 @@ export class MemoryStore implements Store {
     const r = this.rows.get(id);
     if (r) r.seen = at;
   }
+  async noteAddresses(id: string, hour: number, count: number) {
+    const r = this.rows.get(id);
+    if (r) Object.assign(r, { addrHour: hour, addrCount: count });
+  }
 }
 
 interface Row {
@@ -66,6 +74,8 @@ interface Row {
   first_acme: number;
   acme_day: string;
   acme_count: number;
+  addr_hour: number | null;
+  addr_count: number | null;
   seen: number;
 }
 
@@ -80,6 +90,8 @@ function fromRow(r: Row | null): Registration | null {
     firstAcme: r.first_acme,
     acmeDay: r.acme_day,
     acmeCount: r.acme_count,
+    addrHour: r.addr_hour ?? 0,
+    addrCount: r.addr_count ?? 0,
     seen: r.seen,
   };
 }
@@ -134,5 +146,8 @@ export class D1Store implements Store {
   }
   async touch(id: string, at: number) {
     await this.db.prepare("UPDATE servers SET seen = ? WHERE id = ?").bind(at, id).run();
+  }
+  async noteAddresses(id: string, hour: number, count: number) {
+    await this.db.prepare("UPDATE servers SET addr_hour = ?, addr_count = ? WHERE id = ?").bind(hour, count, id).run();
   }
 }
