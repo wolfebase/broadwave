@@ -173,6 +173,16 @@ test("address updates are capped an hour per name", async () => {
   assert.equal((await handle(req("PUT", path, body, r.priv, 1_800_000_000 + 3600), d)).status, 200);
 });
 
+test("the store keeps neither the caller's address nor the server's id", async () => {
+  const d = deps();
+  const r = await registered(d);
+  const row = await d.store.byId(r.id);
+  assert.ok(row);
+  assert.equal(row.serverId, "");
+  assert.notEqual(row.ip, "203.0.113.9");
+  assert.match(row.ip, /^[0-9a-f]{24}$/);
+});
+
 test("wrong methods and paths", async () => {
   const d = deps();
   assert.equal((await handle(new Request("https://x/v1/register"), d)).status, 405);

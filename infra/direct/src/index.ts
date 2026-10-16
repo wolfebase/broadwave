@@ -65,6 +65,12 @@ function fail(status: number, error: string): Response {
   return json(status, { error });
 }
 
+export async function hashAddress(ip: string): Promise<string> {
+  if (!ip) return "";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("broadwave-direct-ip\n" + ip));
+  return [...new Uint8Array(digest).slice(0, 12)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function lanName(id: string, base: string): string {
   return `lan.${id}.${base}`;
 }
@@ -88,14 +94,13 @@ async function signedBy(req: Request, path: string, body: string, publicKey: str
 async function register(req: Request, deps: Deps, path: string): Promise<Response> {
   const body = await readBody(req);
   if (body === null) return fail(413, "too large");
-  let parsed: { publicKey?: unknown; serverId?: unknown };
+  let parsed: { publicKey?: unknown };
   try {
     parsed = JSON.parse(body);
   } catch {
     return fail(400, "invalid json");
   }
   const publicKey = typeof parsed.publicKey === "string" ? parsed.publicKey : "";
-  const serverId = typeof parsed.serverId === "string" ? parsed.serverId.slice(0, 64) : "";
   const raw = decodeBase64(publicKey);
   if (!raw || raw.length !== 32) return fail(400, "publicKey must be a base64 Ed25519 key");
   const now = deps.now();
@@ -103,7 +108,8 @@ async function register(req: Request, deps: Deps, path: string): Promise<Respons
   if (!(await signedBy(req, path, body, publicKey, now))) return fail(401, "bad signature");
   const known = await deps.store.byKey(publicKey);
   if (known) return json(200, { id: known.id, name: lanName(known.id, deps.base) });
-  const ip = req.headers.get("CF-Connecting-IP") ?? "";
+  // Only a hash of the caller's address is kept, for the per-address limit.
+  const ip = await hashAddress(req.headers.get("CF-Connecting-IP") ?? "");
   if ((await deps.store.registeredSince(ip, now - 3600)) >= deps.registerPerHour) return fail(429, "too many registrations from this address");
   if ((await deps.store.allSince(now - 86400)) >= deps.registerPerDay) return fail(429, "too many registrations today");
   for (let tries = 0; tries < 3; tries++) {
@@ -112,7 +118,8 @@ async function register(req: Request, deps: Deps, path: string): Promise<Respons
     const reg: Registration = {
       id,
       publicKey,
-      serverId,
+      // The server's own id is accepted and not kept: nothing here needs it.
+      serverId: "",
       created: now,
       ip,
       firstAcme: 0,
