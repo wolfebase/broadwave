@@ -24,6 +24,15 @@ html {
   --color-accent-ink: #9cbcff;
   --color-tally-ink: #ff8a82;
   --color-tally-soft-ink: #ffb3ad;
+  /* A fill under white text. The dark-theme accents and red are bright, so they
+     are darkened until white on them reads at 4.5:1. The light theme's are already dark. */
+  --accent-fill: color-mix(in srgb, var(--color-accent) 58%, #000);
+  --tally-fill: color-mix(in srgb, var(--color-tally) 78%, #000);
+}
+
+html[data-theme="light"] {
+  --accent-fill: var(--color-accent);
+  --tally-fill: var(--color-tally);
 }
 
 body {

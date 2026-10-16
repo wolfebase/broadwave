@@ -230,9 +230,9 @@ test("recordings", async ({ page }) => {
   await holdClock(page);
   await page.goto("/recordings");
   await settle(page);
-  await expect(page.getByRole("heading", { name: "Recordings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recordings", exact: true })).toBeVisible();
   await sweep(page, "recordings", async () => {
-    await expect(page.getByRole("heading", { name: "Recordings" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Recordings", exact: true })).toBeVisible();
   });
 });
 

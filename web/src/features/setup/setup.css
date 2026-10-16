@@ -84,7 +84,7 @@
 }
 
 .setup-steps li.on button::before {
-  background: var(--color-accent);
+  background: var(--accent-fill);
   color: var(--color-on-accent);
 }
 
@@ -433,7 +433,7 @@
 /* Continue and Watch are the one thing to press. Accent in every theme, so
    it never reads as disabled or as a focus ring. */
 .setup-foot .btn.primary {
-  background: var(--color-accent);
+  background: var(--accent-fill);
   background-image: none;
   color: var(--color-on-accent);
   border-color: transparent;
@@ -441,7 +441,7 @@
 }
 
 .setup-foot .btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-accent) 86%, #fff);
+  background: color-mix(in srgb, var(--accent-fill) 86%, #fff);
 }
 
 .setup-foot .btn.primary:disabled {

@@ -69,11 +69,11 @@ test("a TV remote reaches home, guide, search, recordings, and settings", async 
     expect((await focused(page)).where).not.toBe("body");
   }
 
-  await page.goto("/settings");
+  await page.goto("/settings/playback");
   await settle(page);
-  const motion = page.getByRole("group", { name: "Picture motion" });
-  await expect(motion.getByRole("button", { name: "Broadcast" })).toHaveAttribute("aria-pressed", "true");
-  await expect(motion.getByRole("button", { name: "Smooth" })).toHaveAttribute("aria-pressed", "false");
+  const motion = page.getByRole("radiogroup", { name: "Motion" });
+  await expect(motion.getByRole("radio", { name: "Broadcast" })).toHaveAttribute("aria-checked", "true");
+  await expect(motion.getByRole("radio", { name: "Smooth" })).toHaveAttribute("aria-checked", "false");
 });
 
 test("the guide sheet keeps Tab inside and returns focus", async ({ page }) => {
