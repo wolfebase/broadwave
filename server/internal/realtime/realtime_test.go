@@ -1132,3 +1132,21 @@ func TestHelloCarriesDataVersions(t *testing.T) {
 		t.Fatalf("hello %s", raw)
 	}
 }
+
+// A client that stops reading is closed once its queue fills, so it
+// reconnects and catches up, rather than silently missing events.
+func TestSlowClientIsDroppedNotSkipped(t *testing.T) {
+	c := &client{send: make(chan []byte, 2), behind: make(chan struct{})}
+	if !c.offer([]byte("a")) || !c.offer([]byte("b")) {
+		t.Fatal("room in the queue refused")
+	}
+	if c.offer([]byte("c")) {
+		t.Fatal("a full queue accepted")
+	}
+	select {
+	case <-c.behind:
+	default:
+		t.Fatal("a client that fell behind was kept")
+	}
+	c.offer([]byte("d")) // a second overflow must not close twice
+}
