@@ -4,6 +4,7 @@ import SwiftUI
 
 struct GuideView: View {
     @Environment(AppStore.self) private var store
+    @Environment(NowPlaying.self) private var nowPlaying
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.verticalSizeClass) private var verticalSize
     @State private var filter: BroadwaveKit.Category?
@@ -14,7 +15,6 @@ struct GuideView: View {
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
         @Environment(\.tvGo) private var tvGo
-        @Environment(NowPlaying.self) private var nowPlaying
         @FocusState private var headerFocus: GuideHeader?
         @FocusState private var channelFocus: Int64?
 
@@ -113,6 +113,21 @@ struct GuideView: View {
             }
         }
         #endif
+        // The Top Shelf's More Info: the guide on that channel, with what's on now open.
+        .task(id: nowPlaying.guideChannel) {
+            guard let id = nowPlaying.guideChannel else { return }
+            for _ in 0 ..< 40 where store.channels.isEmpty {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            nowPlaying.guideChannel = nil
+            guard let channel = store.channels.first(where: { $0.id == id }) else { return }
+            #if os(tvOS)
+                channelFocus = id
+            #endif
+            if let airing = store.index.on(id, at: store.now) {
+                selected = Selection(channel: channel, airing: airing)
+            }
+        }
         #if os(iOS)
         .toolbarTitleDisplayMode(.inline)
         .modifier(GuideDetail(selected: $selected, wide: sizeClass == .regular))

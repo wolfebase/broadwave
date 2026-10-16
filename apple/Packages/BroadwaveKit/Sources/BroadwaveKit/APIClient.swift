@@ -528,6 +528,12 @@ public struct APIClient: Sendable {
         authorized(url("/media/poster/\(recordingID)"))
     }
 
+    /// The encode a recording last played from, which the server keeps. A recording never
+    /// played has none (404), and the Top Shelf shows its still instead.
+    public func recordingPreviewURL(recordingID: Int64) -> URL {
+        authorized(url("/media/file/\(recordingID)/index.m3u8"))
+    }
+
     public func artURL(kind: String, id: Int64, width: Int) -> URL {
         authorized(url("/media/art/\(kind)/\(id)?w=\(width)"))
     }

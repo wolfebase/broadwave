@@ -18,6 +18,15 @@ final class NowPlaying {
     /// When the player last closed: a second Back that lands on the guide right
     /// after it should not open the channel again.
     var stoppedAt: Date?
+    /// Multiview's sound tile, whether the grid is paused, and what the system's
+    /// Now Playing buttons do to it. Set by the multiview screen while it is up.
+    var soundChannel: Int64?
+    var multiviewPaused = false
+    @ObservationIgnored var multiviewRemote: SystemNowPlaying.Commands?
+    /// The live channel in the system's Now Playing (iOS and tvOS 27).
+    @ObservationIgnored let system = SystemNowPlaying()
+    /// A channel the guide should open on with its program shown, from the Top Shelf's More Info.
+    var guideChannel: Int64?
     /// Its id across launches, so the guide opens on it after a relaunch.
     static var lastChannelID: Int64 {
         get { Int64(UserDefaults.standard.integer(forKey: "lastChannel")) }
@@ -82,6 +91,7 @@ final class NowPlaying {
         self.expanded = expanded
         lastChannel = channel
         Self.lastChannelID = channel.id
+        SharedRecents.note(channel.id)
     }
 
     /// The one-channel picture is docked under the tabs, so another view may show it.
@@ -96,6 +106,7 @@ final class NowPlaying {
         channel = next
         lastChannel = next
         Self.lastChannelID = next.id
+        SharedRecents.note(next.id)
     }
 
     func watchTogether(_ channels: [Channel], layout: String? = nil, standIns: Set<Int64> = []) {
@@ -312,6 +323,8 @@ struct RootView: View {
         #if os(iOS)
             .environment(settingsRoute)
         #endif
+            .onChange(of: systemShow, initial: true) { publishNowPlaying() }
+            .onChange(of: nowPlaying.multiviewPaused) { publishNowPlaying() }
             .task(id: libraryFilter.openToken) {
                 guard libraryFilter.openToken > 0 else { return }
                 tab = .recordings
@@ -574,7 +587,10 @@ struct RootView: View {
             Task {
                 await openSavedMultiview(ids: ids, layout: layout, store: store, nowPlaying: nowPlaying)
             }
-        case "guide": show(.guide)
+        case "guide":
+            let asked = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "channel" }?.value
+            show(.guide)
+            nowPlaying.guideChannel = asked.flatMap { Int64($0) }
         case "search": show(.search)
         case "sports": show(.sports)
         case "recordings": show(.recordings)
@@ -639,6 +655,44 @@ struct RootView: View {
     private var handoffChannel: Channel? {
         guard nowPlaying.together.isEmpty, nowPlaying.recordingScreens.isEmpty, !libraryFilter.playing else { return nil }
         return nowPlaying.channel
+    }
+
+    /// The live channel for the system's Now Playing: the one channel playing, or multiview's
+    /// sound tile. Nothing while a recording plays; its player publishes the recording.
+    private var systemShow: SystemNowPlaying.Show? {
+        guard SystemNowPlaying.publishesLive, nowPlaying.recordingScreens.isEmpty, !libraryFilter.playing else { return nil }
+        let multiview = !nowPlaying.together.isEmpty
+        guard let id = multiview ? nowPlaying.soundChannel ?? nowPlaying.together.first : nowPlaying.channel?.id,
+              let channel = store.channels.first(where: { $0.id == id }) ?? nowPlaying.channel.flatMap({ $0.id == id ? $0 : nil })
+        else { return nil }
+        let airing = store.index.on(id, at: store.now)
+        let art = airing.flatMap { a in a.imageUrl?.isEmpty == false ? store.api?.artURL(kind: "airing", id: a.id, width: 600) : nil }
+            ?? (channel.artUrl?.isEmpty == false ? store.api?.artURL(kind: "channel", id: channel.id, width: 600) : nil)
+        return SystemNowPlaying.Show(channel: channel, airing: airing, art: art)
+    }
+
+    private func publishNowPlaying() {
+        let multiview = !nowPlaying.together.isEmpty
+        let single = SystemNowPlaying.Commands(
+            step: { dir in
+                guard nowPlaying.together.isEmpty else { return }
+                nowPlaying.step(dir, in: store.channels)
+            },
+            toggle: {
+                let player = nowPlaying.live.player
+                if player.timeControlStatus == .paused {
+                    player.play()
+                } else {
+                    player.pause()
+                }
+            }
+        )
+        nowPlaying.system.publish(
+            systemShow,
+            player: multiview ? nil : nowPlaying.live.player,
+            paused: nowPlaying.multiviewPaused,
+            commands: multiview ? nowPlaying.multiviewRemote ?? single : single
+        )
     }
 
     /// A full-screen cover asked for while another is still closing is dropped.

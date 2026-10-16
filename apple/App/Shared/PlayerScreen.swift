@@ -1890,6 +1890,10 @@ struct SystemPlayer: UIViewControllerRepresentable {
             vc.keysOn = keysOn
         #endif
         #if os(iOS)
+            // On 27 the app's own Now Playing session has the live channel, with channel up and down.
+            if liveMenu, SystemNowPlaying.publishesLive {
+                vc.updatesNowPlayingInfoCenter = false
+            }
             vc.canStartPictureInPictureAutomaticallyFromInline = true
             vc.delegate = context.coordinator.picture
             context.coordinator.picture.onChange = onPictureInPicture
@@ -2354,6 +2358,8 @@ struct RecordingPlayerScreen: View {
     @State private var inIntro = false
     @State private var upNext = UpNext()
     @State private var upNextStep = UpNext.Step.none
+    /// The length the scrubber's breaks and chapters were drawn for. They are drawn again once the item knows its length.
+    @State private var chaptersFor: Double = -1
 
     /// AVFoundation may post this off the main thread.
     private static let ended = NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification).receive(on: DispatchQueue.main)
@@ -2431,6 +2437,9 @@ struct RecordingPlayerScreen: View {
                 while await (try? Task.sleep(for: .milliseconds(250))) != nil {
                     await followBreaks()
                     followEpisode()
+                    if abs(itemLength - chaptersFor) > 5 {
+                        showBreaks()
+                    }
                     #if DEBUG
                         ticks += 1
                         debugReport(ticks)
@@ -2459,6 +2468,7 @@ struct RecordingPlayerScreen: View {
                     }
                 }
             }
+            .onChange(of: markers) { showBreaks() }
             .onAppear {
                 nowPlaying?.recordingScreens.insert(screenID)
             }
@@ -2552,6 +2562,8 @@ struct RecordingPlayerScreen: View {
                 PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
                 item.externalMetadata = metadata(rec)
                 player.replaceCurrentItem(with: item)
+                chaptersFor = -1
+                showBreaks()
                 if position > 5, await Self.reach(item, position) {
                     await player.seek(to: CMTime(seconds: position, preferredTimescale: 600))
                 }
@@ -2804,6 +2816,48 @@ struct RecordingPlayerScreen: View {
         if case .recording = source, let rec = current, let api = store.api, pos.isFinite, pos > 0 {
             Task { await api.saveProgress(recordingID: rec.id, position: pos) }
         }
+    }
+
+    /// The item's length, or the recording's while the item does not know it yet. Zero when neither does.
+    private var itemLength: Double {
+        let length = player.currentItem?.duration.seconds ?? 0
+        if length.isFinite, length > 0 {
+            return length
+        }
+        return shown?.durationSec ?? 0
+    }
+
+    /// Breaks as marks in the Apple TV scrubber, and the show's parts and breaks in its chapter
+    /// list, so a swipe down jumps straight to Part 2. The Skip break button stays as it was.
+    /// iOS has no way to set either: AVPlayerViewController there only draws a stream's own interstitials.
+    private func showBreaks() {
+        let length = itemLength
+        chaptersFor = length
+        #if os(tvOS)
+            guard let item = player.currentItem else { return }
+            let duration = length > 0 ? length : nil
+            func time(_ seconds: Double) -> CMTime {
+                CMTime(seconds: seconds, preferredTimescale: 600)
+            }
+            item.interstitialTimeRanges = BreakChapters.breaks(markers, duration: duration).map {
+                AVInterstitialTimeRange(timeRange: CMTimeRange(start: time($0.lowerBound), end: time($0.upperBound)))
+            }
+            let chapters = BreakChapters.make(markers, duration: duration, creditsStart: shown?.creditsStart)
+            guard !chapters.isEmpty else {
+                item.navigationMarkerGroups = []
+                return
+            }
+            let marks = chapters.map { chapter in
+                let title = AVMutableMetadataItem()
+                title.identifier = .commonIdentifierTitle
+                title.value = chapter.title as NSString
+                title.extendedLanguageTag = "und"
+                let span = chapter.end.map { CMTimeRange(start: time(chapter.start), end: time($0)) }
+                    ?? CMTimeRange(start: time(chapter.start), duration: .zero)
+                return AVTimedMetadataGroup(items: [title], timeRange: span)
+            }
+            item.navigationMarkerGroups = [AVNavigationMarkersGroup(title: String(localized: "Chapters"), timedNavigationMarkers: marks)]
+        #endif
     }
 
     private func skipPast(_ marker: Marker) async {

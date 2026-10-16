@@ -224,6 +224,37 @@ struct RecordShowIntent: AppIntent {
     }
 }
 
+/// Records what a channel shows now, as the player's Record button does.
+struct RecordChannelIntent: AppIntent {
+    static let title: LocalizedStringResource = "Record a channel"
+    static let description = IntentDescription("Records what a channel shows now.")
+
+    @Parameter(title: "Channel", requestValueDialog: "Which channel?") var channel: ChannelEntity
+
+    init() {}
+
+    init(channel: ChannelEntity) {
+        self.channel = channel
+    }
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let api = try intentAPI()
+        let id = Int64(channel.id)
+        let now = Date()
+        let (airings, recordings) = try await ask {
+            async let airings = api.airings(from: now, to: now.addingTimeInterval(60))
+            async let recordings = api.recordings()
+            return try await (airings, recordings)
+        }
+        if let active = recordings.first(where: { $0.channelId == id && $0.isRecording }) {
+            return .result(dialog: "Already recording \(active.title).")
+        }
+        let title = TopShelf.onNow(airings, at: now)[id]?.title ?? channel.name
+        _ = try await ask { try await api.record(channelID: id, title: title) }
+        return .result(dialog: "Recording \(title) on \(channel.number).")
+    }
+}
+
 struct WhatsOnIntent: AppIntent {
     static let title: LocalizedStringResource = "What's on"
     static let description = IntentDescription("Says what your favorite channels show now.")
@@ -253,13 +284,15 @@ struct MultiviewIntent: AppIntent {
     }
 }
 
-/// The Control Center control's setting: a channel, or none for the guide.
-struct WatchControlIntent: ControlConfigurationIntent {
-    static let title: LocalizedStringResource = "Watch"
-    static let isDiscoverable = false
+#if os(iOS)
+    /// The Control Center control's setting: a channel, or none for the guide.
+    struct WatchControlIntent: ControlConfigurationIntent {
+        static let title: LocalizedStringResource = "Watch"
+        static let isDiscoverable = false
 
-    @Parameter(title: "Channel") var channel: ChannelEntity?
-}
+        @Parameter(title: "Channel") var channel: ChannelEntity?
+    }
+#endif
 
 /// What the control's button runs.
 struct OpenChannelIntent: AppIntent {

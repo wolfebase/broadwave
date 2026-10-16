@@ -2,14 +2,27 @@ import BroadwaveKit
 import Foundation
 @preconcurrency import TVServices
 
-/// Fills the Top Shelf when Broadwave sits in the top row of the Apple TV home screen.
+/// Fills the Top Shelf when Broadwave sits in the top row of the Apple TV home screen:
+/// a full-screen carousel of what is on now, each slide a live still from the channel.
 final class ContentProvider: TVTopShelfContentProvider {
     override func loadTopShelfContent(completionHandler: @escaping ((any TVTopShelfContent)?) -> Void) {
         // The system takes the answer on any thread. The async override cannot hand back a
         // non-Sendable value, and Xcode 26's isolation checker fails on a Sendable wrapper.
         nonisolated(unsafe) let reply = completionHandler
         Task {
-            guard let sections = await Self.sections() else {
+            guard let (snap, api) = await Self.snapshot() else {
+                reply(nil)
+                return
+            }
+            let now = Date()
+            let slides = TopShelf.carousel(snap, api: api, now: now, recent: SharedRecents.load())
+            if !slides.isEmpty {
+                reply(TVTopShelfCarouselContent(style: .details, items: slides.map(Self.item)))
+                return
+            }
+            // Nothing on now with a picture: the rows of channels and recordings, as before.
+            let sections = TopShelf.sections(snap, api: api, now: now)
+            guard !sections.isEmpty else {
                 reply(nil)
                 return
             }
@@ -21,7 +34,7 @@ final class ContentProvider: TVTopShelfContentProvider {
         }
     }
 
-    private static func sections() async -> [TopShelf.Section]? {
+    private static func snapshot() async -> (TopShelf.Snapshot, APIClient)? {
         guard let base = SharedServer.load() else { return nil }
         // A cap on each whole request. APIClient's own 30 s request timeout only limits idle time.
         let config = URLSessionConfiguration.ephemeral
@@ -38,8 +51,28 @@ final class ContentProvider: TVTopShelfContentProvider {
         let snap = await TopShelf.Snapshot(
             channels: lineup, airings: airings ?? [], recordings: recordings ?? [], framed: Set(frames?.channels ?? [])
         )
-        let sections = TopShelf.sections(snap, api: api, now: now)
-        return sections.isEmpty ? nil : sections
+        return (snap, api)
+    }
+
+    private static func item(_ slide: TopShelf.Slide) -> TVTopShelfCarouselItem {
+        let item = TVTopShelfCarouselItem(identifier: slide.id)
+        item.title = slide.title
+        item.contextTitle = slide.context
+        item.summary = slide.summary
+        item.genre = slide.genre
+        if slide.duration > 0 {
+            item.duration = slide.duration
+        }
+        item.namedAttributes = slide.facts.map { TVTopShelfNamedAttribute(name: $0.name, values: [$0.value]) }
+        item.mediaOptions = slide.hd ? .videoResolutionHD : []
+        if let image = slide.image {
+            item.setImageURL(image, for: [.screenScale1x, .screenScale2x])
+        }
+        // Only a recording's own file: a live channel's would take a tuner for a home screen.
+        item.previewVideoURL = slide.preview
+        item.playAction = TVTopShelfAction(url: slide.play)
+        item.displayAction = TVTopShelfAction(url: slide.info)
+        return item
     }
 
     private static func item(_ entry: TopShelf.Item) -> TVTopShelfSectionedItem {

@@ -131,6 +131,9 @@ targets:
   BroadwaveTV:
     templates: [App]
     platform: tvOS
+    sources:
+      # Siri on Apple TV: "Watch channel 4 on Broadwave". The Control Center pieces are iOS only.
+      - path: App/Intents
     dependencies:
       - target: BroadwaveTopShelf
     settings:

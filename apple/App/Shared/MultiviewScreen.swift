@@ -1100,6 +1100,29 @@ struct MultiviewScreen: View {
         .onChange(of: session.focusID) { _, id in
             session.noteSound(id)
         }
+        .onChange(of: session.focusID, initial: true) { _, id in
+            nowPlaying.soundChannel = id == 0 ? nil : id
+        }
+        .onChange(of: session.paused, initial: true) { _, paused in
+            nowPlaying.multiviewPaused = paused
+        }
+        .onAppear {
+            // The system's next and previous move the sound along the tiles; play and pause the grid.
+            nowPlaying.multiviewRemote = SystemNowPlaying.Commands(
+                step: { dir in
+                    let tiles = slotted
+                    guard !tiles.isEmpty else { return }
+                    let index = tiles.firstIndex { $0.id == session.focusID } ?? 0
+                    session.focusID = tiles[(index + dir + tiles.count) % tiles.count].id
+                },
+                toggle: { session.togglePause() }
+            )
+        }
+        .onDisappear {
+            nowPlaying.multiviewRemote = nil
+            nowPlaying.soundChannel = nil
+            nowPlaying.multiviewPaused = false
+        }
         .task {
             await watchPictureOrder()
         }
