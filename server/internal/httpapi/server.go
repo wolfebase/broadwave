@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"broadwave/internal/cloudflare"
 	"broadwave/internal/discovery"
 	"broadwave/internal/dvr"
 	"broadwave/internal/guide"
@@ -108,7 +109,17 @@ type Server struct {
 	revokeMu sync.Mutex
 
 	// Tunnel runs cloudflared for a saved token. Nil in tests.
-	Tunnel    Tunnel
+	Tunnel Tunnel
+	// Vault keeps the tunnel's token outside the catalog. Nil keeps it in
+	// memory, for tests.
+	Vault *cloudflare.Vault
+	// Cloudflare is Sign in with Cloudflare. Nil makes one on first use.
+	Cloudflare *cloudflare.Manager
+	// Origin is where cloudflared on this machine reaches the server, such
+	// as http://127.0.0.1:8477.
+	Origin    string
+	cfOnce    sync.Once
+	vaultOnce sync.Once
 	remoteMu  sync.Mutex
 	remoteVal string
 	remoteAt  time.Time
@@ -178,6 +189,11 @@ func (s *Server) Handler() http.Handler {
 	api("GET /clients/me", s.clientMe)
 	api("DELETE /clients/{id}", s.revokeClient)
 	api("GET /remote", s.remoteStatus)
+	api("GET /remote/cloudflare", s.cloudflareStatus)
+	api("DELETE /remote/cloudflare", s.cloudflareRemove)
+	api("POST /remote/cloudflare/login", s.cloudflareLogin)
+	api("DELETE /remote/cloudflare/login", s.cloudflareCancel)
+	api("POST /remote/cloudflare/setup", s.cloudflareSetup)
 	api("POST /media/link", s.mediaLink)
 	api("GET /invites", s.listInvites)
 	api("POST /invites", s.createInvite)
@@ -711,10 +727,9 @@ func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
 		values["sportsdbKeySet"] = "0"
 	}
 	delete(values, "sportsdbKey")
-	if strings.TrimSpace(values[store.SettingTunnelToken]) != "" {
+	values["tunnelTokenSet"] = "0"
+	if saved, err := s.vault().Load(); err == nil && saved.Token != "" {
 		values["tunnelTokenSet"] = "1"
-	} else {
-		values["tunnelTokenSet"] = "0"
 	}
 	delete(values, store.SettingTunnelToken)
 	delete(values, store.SettingUpdateVersion)
@@ -774,6 +789,15 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			delete(body, "guideUrl")
 		}
 	}
+	// The token goes to the secrets file, never the catalog.
+	rawToken, tokenSent := body[store.SettingTunnelToken]
+	delete(body, store.SettingTunnelToken)
+	if tokenSent {
+		if _, err := store.CleanTunnelToken(rawToken); err != nil {
+			httpError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
 	var minted string
 	turningOn := body[store.SettingDeviceAuth] == "1" && !wasOn
 	alreadyAdmin := false
@@ -791,11 +815,17 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	_, tokenSent := body[store.SettingTunnelToken]
+	if tokenSent {
+		if err := s.savePastedToken(rawToken); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
 	_, addressSent := body[store.SettingRemoteURL]
 	if tokenSent || addressSent {
 		s.forgetRemote()
 		s.applyTunnel(r.Context())
+		s.RemoteChanged()
 	}
 	// Turning the check back on looks now. A check that already ran today is reused.
 	if body["checkUpdates"] == "1" && s.Updates != nil {

@@ -175,7 +175,7 @@ paths:
         WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
 
         Server to client: `hello` {serverTime, boot, versions} (boot names the server process; a new one means it restarted and every watch and room is gone; versions are the data counters {guide, channels, recordings, schedule, settings}, so a reconnecting app refetches only what moved), `clock` {t0, t1}, `activity` (Event),
-        `live.changed` (refetch tuners and sessions), `guide.changed`, `channels.changed`, `recordings.changed`, `schedule.changed`, `settings.changed` {version} (that data changed; refetch it; a burst of writes is one event), `sources.found` {found} (discovery found a different set of tuners or lineups; not sent when nothing changed), `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `screen.remote` {action, from} (a remote pressed a button for this screen; see `/screens/{id}/remote`), `client.revoked` {id} (a paired device was revoked; the device with that id is signed out and should show the sign-in screen), `error` {code, message}.
+        `live.changed` (refetch tuners and sessions), `guide.changed`, `channels.changed`, `recordings.changed`, `schedule.changed`, `settings.changed` {version} (that data changed; refetch it; a burst of writes is one event), `sources.found` {found} (discovery found a different set of tuners or lineups; not sent when nothing changed), `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `screen.remote` {action, from} (a remote pressed a button for this screen; see `/screens/{id}/remote`), `client.revoked` {id} (a paired device was revoked; the device with that id is signed out and should show the sign-in screen), `remote.changed` (Away from home changed; an admin reads `/remote` and `/remote/cloudflare` again), `error` {code, message}.
 
         Client to server: `here` {id, name, kind, channelId} (names this screen; `id` is the app's own stable id, 1-64 letters, digits, or `-`; kind is iphone, ipad, appletv, or web; `channelId` is the channel it plays alone, sent again on each change, so a screen with sync off still shows what it watches in `/screens`), `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
         `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
@@ -710,10 +710,11 @@ paths:
     get:
       tags: [channels]
       operationId: listFrames
-      summary: Channels that already have a fresh preview.
+      summary: Channels that already have a fresh preview, and channels with no signal.
       description: |
         A channel is listed when its preview JPEG exists and is newer than 10 minutes.
         Nothing is tuned to make one. Cards ask for `/channels/{id}/frame` only for these ids.
+        `noSignal` lists the channels a tune found off the air in the last 10 minutes.
       responses:
         "200":
           description: Channel ids with a preview
@@ -949,7 +950,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "503":
-          description: "`no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. `stream_down`: the channel's source (for example a playlist URL) answered with an error or not at all. `tuner_refused`: the tuner answered the stream request with an error, such as another app holding it. `tuner_silent`: no tuner answered at all."
+          description: "`no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. `stream_down`: the channel's source (for example a playlist URL) answered with an error or not at all. `tuner_refused`: the tuner answered the stream request with an error, such as another app holding it. `tuner_silent`: no tuner answered at all. `start_failed`: the picture wrote nothing to play before the wait ran out, or failed every restart; trying again usually works, and the server log says why."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -2173,6 +2174,118 @@ paths:
               schema: { $ref: "#/components/schemas/RemoteStatus" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+  /remote/cloudflare:
+    get:
+      tags: [pairing]
+      operationId: getCloudflare
+      description: |
+        Sign in with Cloudflare. The sign-in, the setup steps, or the tunnel it made.
+        Admin, and only from the home network: a request through the tunnel or the
+        public name is refused with `not_home`. A `remote.changed` event on the
+        socket says to read it again.
+      responses:
+        "200":
+          description: Where the sign-in stands
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CloudflareStatus" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [pairing]
+      operationId: removeCloudflare
+      description: |
+        Stops the tunnel Broadwave runs and forgets its token. The public address is
+        cleared when it is the tunnel's. With `cloudflare=1` and a fresh sign-in
+        (`state` authorized), the tunnel is also deleted in Cloudflare, and its DNS
+        name when the sign-in may. `dnsLeft` names a DNS entry that may remain.
+      parameters:
+        - name: cloudflare
+          in: query
+          required: false
+          schema: { type: string, enum: ["1"] }
+      responses:
+        "200":
+          description: Turned off
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CloudflareStatus" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+  /remote/cloudflare/login:
+    post:
+      tags: [pairing]
+      operationId: startCloudflareLogin
+      description: |
+        Starts a sign-in. Open `loginUrl` in a browser, pick a domain, and authorize.
+        The server waits for Cloudflare in the background until `expiresAt` (about 9
+        minutes), then the state is authorized. The certificate it gets controls every
+        tunnel in the account, so it stays in memory and is dropped after setup, after
+        15 minutes unused, or on cancel. Purpose `remove` deletes the tunnel in
+        Cloudflare as soon as the sign-in finishes.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purpose: { type: string, enum: [setup, remove], description: "Omitted is setup." }
+      responses:
+        "200":
+          description: Waiting for the owner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CloudflareStatus" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [pairing]
+      operationId: cancelCloudflareLogin
+      description: Stops waiting, drops the certificate, and clears an error. Setup that is running finishes on its own.
+      responses:
+        "200":
+          description: Stopped
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CloudflareStatus" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /remote/cloudflare/setup:
+    post:
+      tags: [pairing]
+      operationId: setupCloudflare
+      description: |
+        After the sign-in: makes a tunnel named `broadwave-` and the start of the
+        server's id (or uses this server's own again), points `label.<domain>` at it,
+        saves the tunnel's run token in the config folder (never the catalog), sets the
+        public address, starts cloudflared, and drops the certificate. It runs in the
+        background through the steps tunnel, dns, and connect. A name already in DNS
+        comes back as state authorized with error `name_taken`; send `overwrite` to
+        replace it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: { type: string, description: "The first part of the name, such as tv. When zone.name is empty, the whole name, such as tv.example.com." }
+                overwrite: { type: boolean, description: "Replace a DNS entry that already has this name." }
+      responses:
+        "202":
+          description: Setup started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CloudflareStatus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /invites:
     get:
       tags: [pairing]
@@ -2785,6 +2898,33 @@ components:
           description: Public hostnames on the tunnel, as Cloudflare reported them.
         connections: { type: integer }
         since: { type: string, format: date-time }
+    CloudflareStatus:
+      type: object
+      required: [state, managed, tunnel]
+      properties:
+        state: { type: string, enum: [idle, waiting, authorized, provisioning, connected, error] }
+        purpose: { type: string, enum: [setup, remove] }
+        loginUrl: { type: string, description: "Open this to sign in. While waiting." }
+        expiresAt: { type: string, format: date-time, description: "When waiting or the held sign-in ends." }
+        zone: { $ref: "#/components/schemas/CloudflareZone" }
+        hostname: { type: string, description: "The name being set up, or the one in use." }
+        step: { type: string, enum: [tunnel, dns, connect], description: "While provisioning." }
+        error: { $ref: "#/components/schemas/CloudflareProblem" }
+        dnsLeft: { type: string, description: "After turning off: a DNS name that may still point at the removed tunnel." }
+        managed: { type: boolean, description: "A tunnel Broadwave made is saved and runs." }
+        tunnel: { $ref: "#/components/schemas/TunnelStatus" }
+    CloudflareZone:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
+        name: { type: string, description: "The domain. Empty when the sign-in may not read it; then setup takes the whole name." }
+    CloudflareProblem:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, description: "timeout, login_failed, no_zone, bad_cert, name_taken, not_permitted, setup_failed, wrong_account, remove_failed." }
+        message: { type: string }
     RemoteStatus:
       type: object
       required: [remoteUrl, configured, tokenSet, tunnel, deviceAuth, invites, here]
@@ -2838,7 +2978,7 @@ components:
           type: string
           description: |
             Stable machine code. An unknown code is still a failure.
-            Known codes: bad_request, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, no_signal, no_source, not_found, pictures_full, rate_limited, recording_soon, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable.
+            Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
         message: { type: string, description: Short text safe to show a user. }
         tuners:
           type: array
@@ -3056,6 +3196,13 @@ components:
       properties:
         channels:
           type: array
+          items: { type: integer, format: int64 }
+        noSignal:
+          type: array
+          description: |
+            Channels whose last tune in the past 10 minutes found no signal. A watch of
+            one fails with `no_signal` after a short check (about 2 s) instead of the full
+            wait, and a tune of it that locks takes it off this list.
           items: { type: integer, format: int64 }
     Airing:
       type: object
@@ -3658,7 +3805,7 @@ components:
         hdhrEmulate: { type: string, enum: ["0", "1"] }
         deviceAuth: { type: string, enum: ["0", "1"], description: "1 requires a device token on the API and on /media. 0, the default, leaves the home network open. A presented token is still recognized while this is off." }
         remoteUrl: { type: string, description: "The https address that reaches this server from outside, such as https://tv.example.com. A bare name gets https. Empty clears it." }
-        tunnelToken: { type: string, writeOnly: true, description: "A Cloudflare tunnel token, or the install command that contains it. The server runs cloudflared with it. Never returned. Empty clears it and stops the tunnel." }
+        tunnelToken: { type: string, writeOnly: true, description: "A Cloudflare tunnel token, or the install command that contains it. The server keeps it in the config folder, not the catalog, and runs cloudflared with it. Never returned. Empty clears it and stops the tunnel." }
         tunnelTokenSet: { type: string, enum: ["0", "1"], readOnly: true }
         deviceToken: { type: string, description: "Returned once, on the response that turns deviceAuth on, when the request did not already use an admin token. Not stored. Not returned by GET." }
         exportMosaics: { type: string, description: "Mosaics listed as channels of their own in the M3U, XMLTV, and HDHomeRun exports: mosaic keys joined by commas, for example 4-12,1-2-3 (at most 8). They are numbered 990.1 and up in this order; a mosaic with a channel no longer in the lineup is left out." }

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"broadwave/internal/backup"
+	"broadwave/internal/cloudflare"
 	"broadwave/internal/discovery"
 	"broadwave/internal/doctor"
 	"broadwave/internal/dvr"
@@ -197,7 +198,11 @@ func main() {
 	api.Hosts = strings.Split(os.Getenv("BROADWAVE_HOSTS"), ",")
 	api.CastAppID = os.Getenv("BROADWAVE_CAST_APP_ID")
 	tunnels := tunnel.New()
+	tunnels.OnChange = api.RemoteChanged
 	api.Tunnel = tunnels
+	api.Vault = cloudflare.NewVault(*configDir)
+	api.Origin = httpapi.LoopbackOrigin(*addr)
+	api.UseCloudflare(cloudflare.NewManager(nil))
 	api.StartTunnel(context.Background())
 	hub.OnPSIP = func(_ int, g psip.Guide) {
 		n, err := api.ApplyBroadcast(context.Background(), g)

@@ -59,7 +59,7 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 	}
 	cmd := exec.CommandContext(ctx, h.FFmpeg, exportCopyArgs(f.program, ch.AudioCodec)...)
 	cmd.Stdout = w
-	logCommand(cmd)
+	logCommand(cmd, "export "+ch.GuideNumber)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		h.dropIfUnusedLocked(f)

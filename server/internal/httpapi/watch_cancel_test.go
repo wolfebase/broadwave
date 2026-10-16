@@ -32,6 +32,13 @@ func TestWaitServableReturnsWhenTheViewerLeaves(t *testing.T) {
 // request holds its counted viewer until cancel.
 func watchInFlight(t *testing.T, api *Server) (hub *live.Hub, id int64, key string, cancel context.CancelFunc, done chan struct{}) {
 	t.Helper()
+	hub, id, key, cancel, done, _ = watchStarting(t, api)
+	return hub, id, key, cancel, done
+}
+
+// watchStarting is watchInFlight with the response the watch writes.
+func watchStarting(t *testing.T, api *Server) (hub *live.Hub, id int64, key string, cancel context.CancelFunc, done chan struct{}, rec *httptest.ResponseRecorder) {
+	t.Helper()
 	dir := t.TempDir()
 	script := filepath.Join(dir, "ffmpeg")
 	// exec replaces the shell so Shutdown's kill reaches the sleeper, not a child
@@ -66,7 +73,7 @@ func watchInFlight(t *testing.T, api *Server) (hub *live.Hub, id int64, key stri
 	t.Cleanup(cancel)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/watch", strings.NewReader(fmt.Sprintf(`{"channelId":%d}`, id)))
 	req = req.WithContext(reqCtx)
-	rec := httptest.NewRecorder()
+	rec = httptest.NewRecorder()
 	done = make(chan struct{})
 	go func() {
 		defer close(done)
@@ -92,7 +99,7 @@ func watchInFlight(t *testing.T, api *Server) (hub *live.Hub, id int64, key stri
 	if !ok || sess.Viewers == 0 {
 		t.Fatalf("watch did not take a viewer (key %q)", key)
 	}
-	return hub, id, key, cancel, done
+	return hub, id, key, cancel, done, rec
 }
 
 func TestWatchDropsTheViewerWhenTheClientLeaves(t *testing.T) {
@@ -142,5 +149,28 @@ func TestStopFromAnotherServerProcessKeepsTheViewer(t *testing.T) {
 	stop(api.Bus.Boot)
 	if n := viewers(); n != 0 {
 		t.Fatalf("a stop from this process kept the viewer: %d left", n)
+	}
+}
+
+// A picture that never writes a segment used to answer 200 with an empty
+// playlist after 12 s, and the player sat on black for its own timeout.
+// The watch now says it did not start.
+func TestAWatchThatNeverStartsSaysSo(t *testing.T) {
+	prev := servableWait
+	servableWait = 800 * time.Millisecond
+	t.Cleanup(func() { servableWait = prev })
+	api := &Server{}
+	hub, id, key, cancel, done, rec := watchStarting(t, api)
+	defer cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watch did not give up")
+	}
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"code":"start_failed"`) {
+		t.Fatalf("watch answered %d %s", rec.Code, rec.Body.String())
+	}
+	if sess, ok := hub.Session(id, key); ok && sess.Viewers != 0 {
+		t.Fatalf("the failed watch kept its viewer: %d", sess.Viewers)
 	}
 }

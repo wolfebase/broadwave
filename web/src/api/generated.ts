@@ -112,6 +112,30 @@ export type ClientSeat = {
   device?: ClientDevice;
 };
 
+export type CloudflareProblem = {
+  code: string;
+  message: string;
+};
+
+export type CloudflareStatus = {
+  state: string;
+  purpose?: string;
+  loginUrl?: string;
+  expiresAt?: string;
+  zone?: CloudflareZone;
+  hostname?: string;
+  step?: string;
+  error?: CloudflareProblem;
+  dnsLeft?: string;
+  managed: boolean;
+  tunnel: TunnelStatus;
+};
+
+export type CloudflareZone = {
+  id: string;
+  name?: string;
+};
+
 export type Device = {
   deviceId: string;
   friendlyName: string;
@@ -146,6 +170,7 @@ export type Event = {
 
 export type FrameList = {
   channels: number[];
+  noSignal?: number[];
 };
 
 export type Game = {
