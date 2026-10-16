@@ -546,7 +546,7 @@ func (h *Hub) startLadderLocked(f *feed, specs []Rendition, frame time.Time) (*r
 		gate := newPlaylistGate()
 		done := make(chan struct{})
 		h.seedLong(f, gate)
-		packIn := startPack(dirs[i], pipes[i], gate, done, captionLine(f))
+		packIn := startPack(dirs[i], pipes[i], gate, done, captionLine(f), false)
 		r := &rendition{
 			spec: spec, dir: dirs[i], seen: now, began: now, args: args,
 			gate: gate, packDone: done, input: packIn, group: group, ladderChild: i > 0,
@@ -593,7 +593,7 @@ func (h *Hub) openLadder(args []string, n int, dir string) (*exec.Cmd, io.WriteC
 			return nil, nil, nil, err
 		}
 	}
-	logCommand(cmd)
+	logCommand(cmd, "ladder")
 	if err := cmd.Start(); err != nil {
 		closeLadderPipes(pipes)
 		if stdin != nil {
@@ -745,7 +745,7 @@ func (h *Hub) restartLadderLocked(f *feed, primary *rendition, software bool) bo
 		gate := newPlaylistGate()
 		done := make(chan struct{})
 		h.seedLong(f, gate)
-		r.input = startPack(r.dir, pipes[i], gate, done, captionLine(f))
+		r.input = startPack(r.dir, pipes[i], gate, done, captionLine(f), false)
 		r.gate = gate
 		r.packDone = done
 		r.args = args
@@ -863,7 +863,7 @@ func (h *Hub) followLadderBreak(f *feed, primary *rendition, p *programPipe) {
 		fail(err)
 		return
 	}
-	logCommand(cmd)
+	logCommand(cmd, "ladder")
 	if err := cmd.Start(); err != nil {
 		closeLadderPipes(pipes)
 		_ = stdin.Close()

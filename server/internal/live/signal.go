@@ -28,6 +28,11 @@ var ErrTunerSilent = errors.New("This tuner did not answer. Check that it is on.
 // The status and body follow it for the log. The words are the player's.
 var ErrTunerRefused = errors.New("The tuner would not start this channel. Try again.")
 
+// ErrNoPicture is a picture that did not start: the encode wrote nothing
+// before the watch's wait ran out, or failed every restart. The words are
+// the player's; the log says why.
+var ErrNoPicture = errors.New("This channel didn't start. Try again.")
+
 var errNoLock = errors.New("no lock")
 
 // errDark is a probe whose tuner read the frequency and never locked.

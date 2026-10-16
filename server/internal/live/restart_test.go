@@ -1,6 +1,7 @@
 package live
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,10 +47,17 @@ exit 1
 		first = "exit 0\n"
 	}
 	again := ""
+	if mode == "sound" {
+		first = `
+echo '[mp4 @ 0x1] sample rate not set' >&3
+echo '[out#0/mp4 @ 0x1] Could not write header (incorrect codec parameters ?): Invalid argument' >&3
+exit 1
+`
+	}
 	if mode == "twice" {
 		again = `if [ "$n" -eq 2 ]; then echo fresh > init.mp4; printf '%s\n' "$@" > "$mark.args.$n"; exit 1; fi`
 	}
-	return "#!/bin/sh\nexec >/dev/null 2>&1\nmark=" + strconv.Quote(mark) + `
+	return "#!/bin/sh\nexec 3>&2 >/dev/null 2>&1\nmark=" + strconv.Quote(mark) + `
 n=0
 if [ -f "$mark.count" ]; then n=$(cat "$mark.count"); fi
 n=$((n+1))
@@ -256,36 +264,66 @@ func TestFailedLadderRebuildReleasesAnEmptyTune(t *testing.T) {
 	}
 }
 
-func TestEarlyHEVCFallbackUsesLibx265(t *testing.T) {
+// libx265 runs a 1080 picture far slower than real time: on 29.4 it never
+// wrote a fragment and the Apple TV waited 12 s for nothing. A GPU HEVC
+// encode that fails at its start moves to the processor as H.264.
+func TestEarlyHEVCFallbackIsH264(t *testing.T) {
 	h, f, mark := restartHub(t, time.Hour, "once")
 	h.HEVC = true
 	startRendition(t, h, f, "1080.aac2.broadcast.hevc")
 	args := waitMark(t, mark, ".args.2")
-	if !strings.Contains(args, "libx265") || strings.Contains(args, "hevc_vaapi") {
+	if !strings.Contains(args, "libx264") || strings.Contains(args, "libx265") || strings.Contains(args, "hevc_vaapi") {
 		t.Fatalf("hevc fallback args:\n%s", args)
 	}
 }
 
-func TestLateVAAPIDeathRebuildsWithoutTheOldInit(t *testing.T) {
+// A copied AC-3 track the probe saw no rate for stops the muxer's header.
+// That is the sound, not the GPU: the encode starts again on the GPU with
+// the sound converted.
+func TestASoundHeaderFailureConvertsTheSound(t *testing.T) {
+	bin, mark := writeFakeFFmpeg(t, "sound")
+	h, f, _ := restartHub(t, time.Hour, "hold")
+	h.FFmpeg = bin
+	h.HEVC = true
+	startRendition(t, h, f, "1080.copy.broadcast.hevc")
+	args := waitMark(t, mark, ".args.2")
+	if !strings.Contains(args, "hevc_vaapi") || strings.Contains(args, "libx26") {
+		t.Fatalf("a sound failure moved the picture:\n%s", args)
+	}
+	if !strings.Contains(args, "-c:a\naac\n") || strings.Contains(args, "-c:a\ncopy\n") {
+		t.Fatalf("the restart still copies the sound:\n%s", args)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if r := f.renditions["1080.copy.broadcast.hevc"]; r == nil || !r.aac || r.fallback {
+		t.Fatalf("rendition %+v", r)
+	}
+}
+
+// A late death runs the same command line into the same packager, so the
+// players' playlist keeps its numbers and its gate.
+func TestLateVAAPIDeathContinuesTheSamePlaylist(t *testing.T) {
 	h, f, mark := restartHub(t, time.Nanosecond, "once")
+	h.mu.Lock()
+	r := f.renditions["1080.aac2.broadcast"]
+	h.mu.Unlock()
+	if r != nil {
+		t.Fatal("started early")
+	}
 	startRendition(t, h, f, "1080.aac2.broadcast")
+	h.mu.Lock()
+	r = f.renditions["1080.aac2.broadcast"]
+	gate, in := r.gate, r.input
+	h.mu.Unlock()
 	args := waitMark(t, mark, ".args.2")
 	if !strings.Contains(args, "h264_vaapi") {
 		t.Fatalf("a late failure should rebuild the same encoder:\n%s", args)
 	}
-	logBody, _ := os.ReadFile(mark + ".log")
-	if strings.Contains(string(logBody), "saw-init") {
-		t.Fatal("rebuild saw the broken init.mp4")
-	}
-	init, err := os.ReadFile(filepath.Join(h.Dir, "live", "1", "1080.aac2.broadcast", "init.mp4"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.TrimSpace(string(init)) != "fresh" {
-		t.Fatalf("init.mp4 is %q", init)
-	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if r.gate != gate || r.input != in || len(r.restarts) != 1 {
+		t.Fatalf("the restart replaced the playlist: gate %v input %v restarts %d", r.gate == gate, r.input == in, len(r.restarts))
+	}
 	if h.channels[1] == nil || h.muxes[575000000] == nil {
 		t.Fatal("a rebuilt rendition should keep the tuner")
 	}
@@ -294,21 +332,19 @@ func TestLateVAAPIDeathRebuildsWithoutTheOldInit(t *testing.T) {
 	}
 }
 
-func TestSecondDeathReleasesTheTuner(t *testing.T) {
+// An encode that dies at every start is started again restartBudget times,
+// then gives the tuner back.
+func TestDeathsPastTheBudgetReleaseTheTuner(t *testing.T) {
 	h, f, mark := restartHub(t, time.Nanosecond, "always")
 	startRendition(t, h, f, "1080.aac2.broadcast")
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		h.mu.Lock()
 		gone := h.channels[1] == nil && h.muxes[575000000] == nil
 		h.mu.Unlock()
 		if gone {
-			if markCount(t, mark) != 2 {
-				t.Fatalf("released without one rebuild, starts = %d", markCount(t, mark))
-			}
-			logBody, _ := os.ReadFile(mark + ".log")
-			if strings.Contains(string(logBody), "saw-init") {
-				t.Fatal("the rebuild reused init.mp4")
+			if n := markCount(t, mark); n != restartBudget+1 {
+				t.Fatalf("released after %d starts, want %d", n, restartBudget+1)
 			}
 			return
 		}
@@ -324,14 +360,14 @@ func TestDeathDuringARecordingReleasesTheRenditionOnly(t *testing.T) {
 	f.recording = &recording{id: 7}
 	h.mu.Unlock()
 	startRendition(t, h, f, "1080.aac2.broadcast")
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		h.mu.Lock()
 		renditions := len(f.renditions)
 		held := h.channels[1] != nil && h.muxes[575000000] != nil
 		h.mu.Unlock()
 		if renditions == 0 && held {
-			if markCount(t, mark) != 2 {
+			if markCount(t, mark) != restartBudget+1 {
 				t.Fatalf("starts = %d", markCount(t, mark))
 			}
 			return
@@ -360,8 +396,10 @@ func TestCleanExitReleasesTheTuner(t *testing.T) {
 	t.Fatal("a finished encode should release the tuner")
 }
 
+// A restart in a new directory (here the software fallback) reuses
+// seg00001.m4s for a new file; the old time must not date it.
 func TestRestartDropsStaleSegmentTimes(t *testing.T) {
-	h, f, mark := restartHub(t, time.Nanosecond, "hold")
+	h, f, mark := restartHub(t, time.Hour, "hold")
 	startRendition(t, h, f, "1080.aac2.broadcast")
 	waitMark(t, mark, ".count")
 	h.mu.Lock()
@@ -441,16 +479,55 @@ func TestEarlyFallbackCoversEveryGPU(t *testing.T) {
 	}
 }
 
-// An HEVC encode on VideoToolbox that fails at its start is tried again on
-// the GPU, not moved to libx265, which cannot keep up with a 1080 picture on
-// most CPUs.
+// An HEVC encode on VideoToolbox that fails at its start moves to the
+// processor as H.264, never to libx265, which cannot keep up with a 1080
+// picture on most CPUs.
 func TestAnHEVCGPUStartFailureStaysOffLibx265(t *testing.T) {
 	h, f, mark := restartHub(t, time.Hour, "once")
 	h.HEVC = true
 	h.Encoder = "h264_videotoolbox"
 	startRendition(t, h, f, "1080.aac2.broadcast.hevc")
 	args := waitMark(t, mark, ".args.2")
-	if strings.Contains(args, "libx265") || !strings.Contains(args, "hevc_videotoolbox") {
+	if strings.Contains(args, "libx265") || strings.Contains(args, "hevc_videotoolbox") || !strings.Contains(args, "libx264") {
 		t.Fatalf("restart args:\n%s", args)
+	}
+}
+
+func TestPlanRestart(t *testing.T) {
+	now := time.Now()
+	spent := []time.Time{now.Add(-time.Minute), now.Add(-2 * time.Minute), now.Add(-3 * time.Minute)}
+	old := []time.Time{now.Add(-6 * time.Minute), now.Add(-7 * time.Minute), now.Add(-8 * time.Minute)}
+	died := errors.New("exit status 1")
+	copySpec, _ := ParseRenditionKey("1080.copy.broadcast.hevc")
+	aacSpec, _ := ParseRenditionKey("1080.aac2.broadcast")
+	cases := []struct {
+		name    string
+		r       *rendition
+		err     error
+		cause   exitCause
+		early   bool
+		stalled bool
+		encoder string
+		want    restartPlan
+	}{
+		{"clean exit", &rendition{spec: aacSpec}, nil, causeUnknown, false, false, "h264_vaapi", planRelease},
+		{"budget spent", &rendition{spec: aacSpec, restarts: spent}, died, causeUnknown, false, false, "h264_vaapi", planRelease},
+		{"old restarts do not count", &rendition{spec: aacSpec, restarts: old}, died, causeUnknown, false, false, "h264_vaapi", planSame},
+		{"late death", &rendition{spec: aacSpec}, died, causeGPU, false, false, "h264_vaapi", planSame},
+		{"sound header on a copy", &rendition{spec: copySpec}, died, causeParams, true, false, "hevc_vaapi", planAAC},
+		{"sound header after converting", &rendition{spec: copySpec, aac: true}, died, causeParams, true, false, "hevc_vaapi", planSame},
+		{"sound header is not the GPU", &rendition{spec: aacSpec}, died, causeParams, true, false, "h264_vaapi", planSame},
+		{"gpu at its start", &rendition{spec: copySpec}, died, causeGPU, true, false, "hevc_vaapi", planSoftware},
+		{"unknown at its start", &rendition{spec: aacSpec}, died, causeUnknown, true, false, "h264_vaapi", planSoftware},
+		{"already on the processor", &rendition{spec: aacSpec, fallback: true}, died, causeUnknown, true, false, "libx264", planSame},
+		{"extras first", &rendition{spec: aacSpec, extras: []AudioTrack{{PID: 258}}}, died, causeUnknown, true, false, "h264_vaapi", planPlain},
+		{"extras and the gpu", &rendition{spec: aacSpec, extras: []AudioTrack{{PID: 258}}}, died, causeGPU, true, false, "h264_vaapi", planSoftware},
+		{"one stalled start", &rendition{spec: aacSpec, stalls: 1}, died, causeUnknown, true, true, "h264_vaapi", planSame},
+		{"two stalled starts", &rendition{spec: aacSpec, stalls: 2}, died, causeUnknown, true, true, "h264_vaapi", planSoftware},
+	}
+	for _, c := range cases {
+		if got := planRestart(c.r, c.err, c.cause, c.early, c.stalled, c.encoder, now); got != c.want {
+			t.Errorf("%s: %s, want %s", c.name, got, c.want)
+		}
 	}
 }
