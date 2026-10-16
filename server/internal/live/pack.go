@@ -691,7 +691,8 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 
 	var hold playlistCeiling
 	flush := func() error {
-		return writePackedOpen(dir, init, closed, open, msn-len(closed), allSync, openBreak{gap: segGap, cont: segGap && segCont, step: segStep}, &hold, gate)
+		brk := openBreak{gap: segGap, cont: segGap && segCont, step: segStep, hint: fmt.Sprintf("part%05d.m4s", partN)}
+		return writePackedOpen(dir, init, closed, open, msn-len(closed), allSync, brk, &hold, gate)
 	}
 	closeSeg := func(end int64) error {
 		if len(open) == 0 {
@@ -1051,6 +1052,8 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 type openBreak struct {
 	gap, cont bool
 	step      int64
+	// hint is the next part's name, for EXT-X-PRELOAD-HINT. Empty writes none.
+	hint string
 }
 
 func writePackedOpen(dir string, init []byte, closed []packedSeg, open []packedPart, origin int, allSync bool, brk openBreak, hold *playlistCeiling, gate *playlistGate) error {
@@ -1169,6 +1172,12 @@ func writePackedOpen(dir string, init []byte, closed []packedSeg, open []packedP
 	for _, p := range open {
 		b = appendPackedPTS(b, p.name, p.pts, p.timed)
 		partLine(p.name, p.dur, p.sync)
+	}
+	// The part being written now. AVPlayer plays low latency only with this
+	// hint; it asks for the part early and the server holds the request until
+	// the part is on disk (httpapi waitPart). HTTP/1.1 answers leave it out.
+	if brk.hint != "" {
+		b = append(b, "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\""+brk.hint+"\"\n"...)
 	}
 	tmp := filepath.Join(dir, "index.m3u8.tmp")
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {

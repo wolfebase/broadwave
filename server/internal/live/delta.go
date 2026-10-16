@@ -102,7 +102,15 @@ func DeltaPlaylist(body []byte) []byte {
 
 	out := make([]byte, 0, 4096)
 	wrote := false
+	// The skip goes after the header, EXT-X-MAP included. AVPlayer in
+	// low-latency mode reads a skip before the map as dropping the map: it
+	// keeps reloading and never loads another part.
+	header := !blocks[0].seg && blockHas(body, lines, blocks[0], "#EXT-X-MEDIA-SEQUENCE:")
 	for i, block := range blocks {
+		if header && i == 1 {
+			out = appendSkip(out, start)
+			wrote = true
+		}
 		if block.seg && i < keep {
 			continue
 		}
@@ -118,10 +126,8 @@ func DeltaPlaylist(body []byte) []byte {
 				out = append(out, line...)
 				out = append(out, '\n')
 			}
-			if !wrote && bytes.HasPrefix(trim, []byte("#EXT-X-MEDIA-SEQUENCE:")) {
-				out = append(out, "#EXT-X-SKIP:SKIPPED-SEGMENTS="...)
-				out = strconv.AppendInt(out, int64(start), 10)
-				out = append(out, '\n')
+			if !wrote && !header && bytes.HasPrefix(trim, []byte("#EXT-X-MEDIA-SEQUENCE:")) {
+				out = appendSkip(out, start)
 				wrote = true
 			}
 		}
@@ -130,6 +136,21 @@ func DeltaPlaylist(body []byte) []byte {
 		return body
 	}
 	return out
+}
+
+func appendSkip(out []byte, skipped int) []byte {
+	out = append(out, "#EXT-X-SKIP:SKIPPED-SEGMENTS="...)
+	out = strconv.AppendInt(out, int64(skipped), 10)
+	return append(out, '\n')
+}
+
+func blockHas(body []byte, lines []lineRef, block deltaBlock, prefix string) bool {
+	for n := block.a; n < block.b; n++ {
+		if bytes.HasPrefix(bytes.TrimSpace(body[lines[n].a:lines[n].b]), []byte(prefix)) {
+			return true
+		}
+	}
+	return false
 }
 
 type lineRef struct {
