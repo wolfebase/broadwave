@@ -144,11 +144,51 @@ final class TVPagesTests: XCTestCase {
         for show in ["SportsPulse", "Stay Fierce", "El pelotazo", "In Depth With Graham Bensinger"] {
             XCTAssertFalse(app.buttons.containing(NSPredicate(format: "label BEGINSWITH %@", show)).firstMatch.exists, "\(show) is not a game")
         }
-        let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'sports-l'")).allElementsBoundByIndex.map(\.label)
+        var labels: [String] = []
+        for card in app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'sports-l'")).allElementsBoundByIndex {
+            labels.append(card.label)
+        }
         XCTAssertEqual(labels.count, Set(labels).count, "a game is listed twice: \(labels)")
         XCUIRemote.shared.press(.down)
         pause(1)
         shot("sports-1-down")
+    }
+
+    /// Home opens on the hero's Watch button, under a title that scrolls with the page.
+    func testHomeOpensOnTheHero() throws {
+        let server = try serverURL()
+        let app = XCUIApplication()
+        app.launchArguments = ["-BroadwaveServerURL", server, "-BroadwaveTab", "home", "-lastChannel", "0", "-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        let title = app.descendants(matching: .any)["page-title"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 30), app.debugDescription)
+        XCTAssertTrue(until(10) { focusedLabel(app) == "Watch" }, "Home did not open on Watch: \(focused(app))")
+        pause(2)
+        shot("home-0")
+        XCUIRemote.shared.press(.down)
+        pause(1)
+        shot("home-1-down")
+    }
+
+    /// A server that stops answering: the note sits along the bottom, off the guide's chips,
+    /// and Down reaches Try again. Nothing is changed on any server.
+    func testOfflineNoteOffersAWayOut() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-BroadwaveServerURL", "http://127.0.0.1:9", "-lastChannel", "0", "-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        let note = app.staticTexts["offline-banner"]
+        XCTAssertTrue(note.waitForExistence(timeout: 30), app.debugDescription)
+        XCTAssertGreaterThan(note.frame.minY, 800, "the note is not along the bottom: \(note.frame)")
+        shot("offline-0")
+        let retry = app.buttons["offline-retry"]
+        XCTAssertTrue(retry.exists)
+        XCTAssertTrue(app.buttons["offline-choose"].exists)
+        for _ in 0 ..< 12 where !retry.hasFocus && !app.buttons["offline-choose"].hasFocus {
+            XCUIRemote.shared.press(.down)
+            pause(0.4)
+        }
+        XCTAssertTrue(retry.hasFocus || app.buttons["offline-choose"].hasFocus, "Down did not reach the note's buttons: \(focused(app))")
+        shot("offline-1-buttons")
     }
 
     private func focusedLabel(_ app: XCUIApplication) -> String {
