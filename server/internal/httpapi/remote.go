@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -21,7 +23,7 @@ const remoteTTL = 5 * time.Second
 
 // Tunnel is the cloudflared runner. Tests leave it nil.
 type Tunnel interface {
-	Apply(token string)
+	Apply(token, origin string)
 	Status() tunnel.Status
 }
 
@@ -132,10 +134,15 @@ func (s *Server) remoteStatus(w http.ResponseWriter, r *http.Request) {
 	if s.Tunnel != nil {
 		st = s.Tunnel.Status()
 	}
+	saved, err := s.vault().Load()
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, remoteStatus{
 		RemoteURL:  s.remoteURL(r.Context()),
 		Configured: values[store.SettingRemoteURL],
-		TokenSet:   strings.TrimSpace(values[store.SettingTunnelToken]) != "",
+		TokenSet:   saved.Token != "" && !saved.Made(),
 		Tunnel:     st,
 		DeviceAuth: values[store.SettingDeviceAuth] == "1",
 		Invites:    invites,
@@ -184,21 +191,32 @@ func (s *Server) deleteInvite(w http.ResponseWriter, r *http.Request) {
 	s.listInvites(w, r)
 }
 
-// applyTunnel starts or stops cloudflared for the saved token.
+// applyTunnel starts or stops cloudflared for the token in the secrets file.
+// A token in the catalog came back with a restored backup and is not used.
 func (s *Server) applyTunnel(ctx context.Context) {
-	if s.Tunnel == nil || s.Store == nil {
+	s.dropCatalogToken(ctx)
+	if s.Tunnel == nil {
 		return
 	}
-	values, err := s.Store.Settings(ctx)
+	saved, err := s.vault().Load()
 	if err != nil {
+		slog.Error(fmt.Sprintf("tunnel: %v", err))
 		return
 	}
-	s.Tunnel.Apply(strings.TrimSpace(values[store.SettingTunnelToken]))
+	origin := ""
+	if saved.Made() && saved.Routes != "cloudflare" {
+		origin = s.origin()
+	}
+	s.Tunnel.Apply(saved.Token, origin)
 	s.forgetRemote()
 }
 
-// StartTunnel runs cloudflared when a token is saved. main calls it once.
-func (s *Server) StartTunnel(ctx context.Context) { s.applyTunnel(ctx) }
+// StartTunnel moves an older catalog's token into the secrets file, then runs
+// cloudflared when a token is saved. main calls it once.
+func (s *Server) StartTunnel(ctx context.Context) {
+	s.migrateTunnelToken(ctx)
+	s.applyTunnel(ctx)
+}
 
 // privateCache keeps a CDN from storing a response that answered a signed-in
 // request from outside. A zone rule such as Cache Everything would otherwise

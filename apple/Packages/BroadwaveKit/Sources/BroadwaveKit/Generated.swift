@@ -226,6 +226,54 @@ public struct ClientSeat: Codable, Sendable, Hashable {
     }
 }
 
+public struct CloudflareProblem: Codable, Sendable, Hashable {
+    public var code: String
+    public var message: String
+
+    public init(code: String, message: String) {
+        self.code = code
+        self.message = message
+    }
+}
+
+public struct CloudflareStatus: Codable, Sendable, Hashable {
+    public var state: String
+    public var purpose: String?
+    public var loginUrl: String?
+    public var expiresAt: Date?
+    public var zone: CloudflareZone?
+    public var hostname: String?
+    public var step: String?
+    public var error: CloudflareProblem?
+    public var dnsLeft: String?
+    public var managed: Bool
+    public var tunnel: TunnelStatus
+
+    public init(state: String, purpose: String? = nil, loginUrl: String? = nil, expiresAt: Date? = nil, zone: CloudflareZone? = nil, hostname: String? = nil, step: String? = nil, error: CloudflareProblem? = nil, dnsLeft: String? = nil, managed: Bool, tunnel: TunnelStatus) {
+        self.state = state
+        self.purpose = purpose
+        self.loginUrl = loginUrl
+        self.expiresAt = expiresAt
+        self.zone = zone
+        self.hostname = hostname
+        self.step = step
+        self.error = error
+        self.dnsLeft = dnsLeft
+        self.managed = managed
+        self.tunnel = tunnel
+    }
+}
+
+public struct CloudflareZone: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String?
+
+    public init(id: String, name: String? = nil) {
+        self.id = id
+        self.name = name
+    }
+}
+
 public struct Device: Codable, Sendable, Hashable {
     public var deviceId: String
     public var friendlyName: String
