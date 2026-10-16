@@ -87,7 +87,7 @@ func startDirect(ctx context.Context, st *store.Store, api *httpapi.Server, conf
 		return nil
 	}
 	server := &http.Server{
-		Handler:           handler,
+		Handler:           traceMedia(handler),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		TLSConfig:         &tls.Config{GetCertificate: svc.GetCertificate, MinVersion: tls.VersionTLS12},
@@ -114,3 +114,34 @@ func (quietTLS) Write(p []byte) (int, error) {
 	}
 	return len(p), nil
 }
+
+// traceMedia logs each media request on the secure name at Debug
+// (BROADWAVE_LOG=debug): the low-latency player's blocking reloads and
+// hinted parts, with how long each was held.
+func traceMedia(next http.Handler) http.Handler {
+	if !slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/media/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		start := time.Now()
+		rec := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		slog.Debug(fmt.Sprintf("direct: %s %s %s %d %dms", r.Proto, r.Method, r.URL.RequestURI(), rec.status, time.Since(start).Milliseconds()))
+	})
+}
+
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
