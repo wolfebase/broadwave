@@ -212,10 +212,11 @@ final class LibraryFilter {
 
 #if os(iOS)
     /// Six tabs leave Recordings under More, and More's bar stacks on the page.
-    /// A compact iPhone keeps five tabs. Settings is pushed on the tab that is open.
+    /// An iPhone keeps five tabs in either orientation: a large one turns regular-width
+    /// in landscape, and the sixth tab then put More in the bar. Settings is pushed on the tab that is open.
     @MainActor
-    func usesPhoneTabs(_ width: UserInterfaceSizeClass?) -> Bool {
-        UIDevice.current.userInterfaceIdiom == .phone && width == .compact
+    func usesPhoneTabs(_: UserInterfaceSizeClass?) -> Bool {
+        UIDevice.current.userInterfaceIdiom == .phone
     }
 
     @MainActor
@@ -271,31 +272,6 @@ final class LibraryFilter {
 
         /// Opens a page over the guide; `.guide` goes back to it.
         @Entry var tvGo: @MainActor (AppTab) -> Void = { _ in }
-    }
-#endif
-
-#if os(iOS)
-    /// The iPhone tab bar floats over the page. Pull the page up so a row is not sliced behind it.
-    private extension View {
-        func phoneTabClearance() -> some View {
-            modifier(PhoneTabClearance())
-        }
-    }
-
-    private struct PhoneTabClearance: ViewModifier {
-        @Environment(\.verticalSizeClass) private var height
-
-        /// In landscape the safe area already ends above the tab bar, and 88 more points
-        /// left the guide no room for a channel row.
-        func body(content: Content) -> some View {
-            content.padding(.bottom, UIDevice.current.userInterfaceIdiom == .phone && height != .compact ? 88 : 0)
-        }
-    }
-#else
-    private extension View {
-        func phoneTabClearance() -> some View {
-            self
-        }
     }
 #endif
 
@@ -809,7 +785,6 @@ struct RootView: View {
                 content()
             #endif
         }
-        .phoneTabClearance()
     }
 
     /// Apple TV has no tab sidebar: it opened as a menu in the corner. The guide is
@@ -831,7 +806,8 @@ struct RootView: View {
                 Tab("Guide", systemImage: "square.grid.3x3.topleft.filled", value: AppTab.guide) {
                     stack(.guide) { GuideView() }
                 }
-                Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
+                // The system search tab: its own glass button, and the field rises with the keyboard.
+                Tab("Search", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                     stack(.search) { SearchView() }
                 }
                 Tab("Sports", systemImage: "sportscourt.fill", value: AppTab.sports) {
@@ -842,14 +818,12 @@ struct RootView: View {
                 }
                 if !phoneTabs {
                     Tab("Settings", systemImage: "gearshape.fill", value: AppTab.settings) {
-                        NavigationStack {
-                            SettingsView().safeAreaInset(edge: .top, spacing: 0) {
-                                if bannersInTabs {
-                                    banners
-                                }
+                        // Settings brings its own split view: the list on the left, a page on the right.
+                        SettingsView().safeAreaInset(edge: .top, spacing: 0) {
+                            if bannersInTabs {
+                                banners
                             }
                         }
-                        .phoneTabClearance()
                     }
                 }
             }

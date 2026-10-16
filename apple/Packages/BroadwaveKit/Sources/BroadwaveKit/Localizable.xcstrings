@@ -1585,13 +1585,24 @@
         }
       }
     },
-    "demo.missing" : {
+    "The demo can't do that." : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The demo has no %@."
+            "value" : "The demo can't do that."
+          }
+        }
+      }
+    },
+    "This recording can't play in the demo." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This recording can't play in the demo."
           }
         }
       }
