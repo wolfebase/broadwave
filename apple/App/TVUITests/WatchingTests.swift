@@ -367,3 +367,42 @@ final class ChannelStartTests: WatchingCase {
         print("TIMING all \(times.joined(separator: " "))")
     }
 }
+
+/// Back from the player keeps the channel playing beside the guide; Back again is instant.
+final class GuideLivePaneTests: WatchingCase {
+    func testBackKeepsTheChannelInTheGuideAndBackAgainResumes() throws {
+        try launch(["-BroadwaveChannelNow", "YES"])
+        XCTAssertTrue(until(30) { self.focused().exists && self.focused().frame.minX < 120 }, "no guide focus")
+        press(.down, wait: 0.5)
+        press(.select, wait: 0.5)
+        let tuning = element("tuning")
+        let player = element("player-channel")
+        XCTAssertTrue(until(30) { player.exists && !tuning.exists }, "the picture never started")
+        let playing = player.value as? String ?? ""
+        wait(3)
+        shot("pane-0-playing")
+
+        press(.menu, wait: 1.5)
+        shot("pane-1-back")
+        let pane = element("guide-live-pane")
+        XCTAssertTrue(until(4) { pane.exists }, "Back left no live pane in the guide")
+        XCTAssertFalse(player.exists, "the player is still full screen")
+        XCTAssertTrue(pane.label.hasPrefix("Playing \(playing) "), "pane shows \(pane.label), played \(playing)")
+        XCTAssertTrue(focused().frame.minX < 120, "focus on \(focusedLabel())")
+
+        wait(2)
+        let start = Date()
+        press(.menu, wait: 0)
+        XCTAssertTrue(until(5) { player.exists }, "Back on the guide did not resume")
+        let shown = Date().timeIntervalSince(start)
+        wait(0.4)
+        shot("pane-2-resumed")
+        XCTAssertFalse(tuning.exists, "resuming tuned again")
+        print("TIMING resume from pane \(String(format: "%.2f", shown))s")
+        XCTAssertEqual(player.value as? String, playing)
+
+        // One Back still leaves the resumed player.
+        press(.menu, wait: 1.5)
+        XCTAssertFalse(player.exists, "one Back did not leave the resumed player")
+    }
+}

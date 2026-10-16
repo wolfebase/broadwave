@@ -1315,7 +1315,7 @@ struct PlayerScreen: View {
                 nowPlaying.expanded = false
             }
         #else
-            nowPlaying.stop()
+            nowPlaying.dock()
         #endif
     }
 

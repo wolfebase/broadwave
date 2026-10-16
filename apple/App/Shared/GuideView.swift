@@ -50,8 +50,22 @@ struct GuideView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            filters
-            dayJump
+            #if os(tvOS)
+                filters
+                // The channel the player stepped away from plays on at the end of the day row.
+                HStack(alignment: .center, spacing: 0) {
+                    dayJump
+                    if nowPlaying.docked, let channel = nowPlaying.channel {
+                        GuideLivePane(channel: channel)
+                            .padding(.trailing, 60)
+                            .padding(.bottom, 8)
+                            .transition(.opacity)
+                    }
+                }
+            #else
+                filters
+                dayJump
+            #endif
             #if os(tvOS)
                 // Select plays what is on now, as on any TV guide; a later program opens its
                 // details. A long press opens the details of anything.
@@ -124,7 +138,7 @@ struct GuideView: View {
         .onAppear { claimGuideFocus() }
         .onChange(of: tvSelectedTab) { _, _ in claimGuideFocus() }
         // Closing the player lands back on the channel that played.
-        .onChange(of: nowPlaying.channel == nil) { _, closed in
+        .onChange(of: nowPlaying.channel == nil || !nowPlaying.expanded) { _, closed in
             if closed {
                 claimGuideFocus()
             }
@@ -165,8 +179,15 @@ struct GuideView: View {
         /// a channel), so the press went to the row under it. That Back leaves the player,
         /// so one press always does. Otherwise Back plays the last channel again.
         private var backAction: (() -> Void)? {
-            if nowPlaying.channel != nil, nowPlaying.together.isEmpty, nowPlaying.recordingScreens.isEmpty, !nowPlaying.live.pictureInPicture {
-                return { nowPlaying.stop() }
+            if nowPlaying.channel != nil, nowPlaying.expanded, nowPlaying.together.isEmpty, nowPlaying.recordingScreens.isEmpty, !nowPlaying.live.pictureInPicture {
+                return { nowPlaying.dock() }
+            }
+            // The channel plays on in the preview: Back brings it back full screen at once.
+            if nowPlaying.docked {
+                return {
+                    guard Date().timeIntervalSince(nowPlaying.stoppedAt ?? .distantPast) > 1.5 else { return }
+                    nowPlaying.expanded = true
+                }
             }
             guard let last = resumable else { return nil }
             return {

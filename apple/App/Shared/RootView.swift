@@ -125,6 +125,14 @@ final class NowPlaying {
         expanded = true
     }
 
+    /// Apple TV: the player steps aside and the channel plays on in the guide's preview,
+    /// so Back on the guide brings it back at once.
+    func dock() {
+        guard channel != nil else { return }
+        stoppedAt = Date()
+        expanded = false
+    }
+
     func stop() {
         if channel != nil {
             stoppedAt = Date()
@@ -814,9 +822,13 @@ struct RootView: View {
             playingCover
         }
         #else
-        .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil }, set: {
+        .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil && nowPlaying.expanded }, set: {
             if !$0 {
-                nowPlaying.stop()
+                if nowPlaying.together.isEmpty {
+                    nowPlaying.dock()
+                } else {
+                    nowPlaying.stop()
+                }
             }
         })) {
             playingCover
@@ -943,7 +955,7 @@ struct RootView: View {
 
     private var playerCovers: Bool {
         #if os(tvOS)
-            nowPlaying.channel != nil
+            nowPlaying.channel != nil && nowPlaying.expanded
         #else
             nowPlaying.channel != nil && nowPlaying.expanded
         #endif

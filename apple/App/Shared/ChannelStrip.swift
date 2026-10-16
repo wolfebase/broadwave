@@ -168,3 +168,35 @@
         }
     }
 #endif
+
+#if os(tvOS)
+    /// The channel the player stepped away from, still playing beside the guide's header.
+    /// Select (or Back anywhere in the guide) brings it back full screen.
+    struct GuideLivePane: View {
+        @Environment(AppStore.self) private var store
+        @Environment(NowPlaying.self) private var nowPlaying
+        let channel: Channel
+
+        var body: some View {
+            Button { nowPlaying.expanded = true } label: {
+                ZStack(alignment: .bottomLeading) {
+                    PlayerLayerBox(player: nowPlaying.live.player, gravity: .resizeAspect)
+                        .background(.black)
+                    LinearGradient(colors: [.clear, .black.opacity(0.8)], startPoint: .center, endPoint: .bottom)
+                    VStack(alignment: .leading, spacing: 2) {
+                        LiveDot()
+                        Text("\(channel.displayNumber)  \(store.index.on(channel.id, at: store.now)?.title ?? channel.displayName)")
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                    }
+                    .padding(10)
+                }
+                .frame(width: 256, height: 144)
+            }
+            .buttonStyle(.card)
+            .accessibilityLabel("Playing \(channel.displayNumber) \(channel.displayName)")
+            .accessibilityHint("Back to full screen")
+            .accessibilityIdentifier("guide-live-pane")
+        }
+    }
+#endif
