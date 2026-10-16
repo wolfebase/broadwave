@@ -14,12 +14,16 @@ struct JoinView: View {
     @State private var shownCode: String?
     @State private var codeAsk = 0
     var showsHeading = true
+    /// Opens with the address field focused, as a page of its own on Apple TV.
+    var focusAddress = false
     var onJoined: (() -> Void)?
+    @FocusState private var addressFocused: Bool
 
-    init(address: String = "", code: String = "", showsHeading: Bool = true, onJoined: (() -> Void)? = nil) {
+    init(address: String = "", code: String = "", showsHeading: Bool = true, focusAddress: Bool = false, onJoined: (() -> Void)? = nil) {
         _address = State(initialValue: address)
         _code = State(initialValue: code)
         self.showsHeading = showsHeading
+        self.focusAddress = focusAddress
         self.onJoined = onJoined
     }
 
@@ -31,6 +35,7 @@ struct JoinView: View {
             Text("Ask the owner for an invite code. It works once and lasts a week.")
                 .foregroundStyle(.secondary)
             field("tv.example.com", text: $address, id: "join-address")
+                .focused($addressFocused)
             #if os(iOS)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
@@ -58,6 +63,7 @@ struct JoinView: View {
                     .accessibilityIdentifier("join-problem")
             }
         }
+        .defaultFocus($addressFocused, focusAddress)
         .task(id: codeAsk) {
             guard codeAsk > 0 else { return }
             await waitForApproval()
@@ -65,11 +71,18 @@ struct JoinView: View {
     }
 
     private func field(_ prompt: LocalizedStringKey, text: Binding<String>, id: String) -> some View {
-        TextField(prompt, text: text)
-            .autocorrectionDisabled()
-            .padding(12)
-            .background(Tokens.ColorToken.surface2, in: .rect(cornerRadius: Tokens.Radius.sm))
-            .accessibilityIdentifier(id)
+        #if os(tvOS)
+            // The system field already draws its own plate and focus.
+            TextField(prompt, text: text)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier(id)
+        #else
+            TextField(prompt, text: text)
+                .autocorrectionDisabled()
+                .padding(12)
+                .background(Tokens.ColorToken.surface2, in: .rect(cornerRadius: Tokens.Radius.sm))
+                .accessibilityIdentifier(id)
+        #endif
     }
 
     #if os(tvOS)
@@ -206,6 +219,33 @@ struct SignedOutView: View {
     var message: String
 
     var body: some View {
+        #if os(tvOS)
+            TVConnectLayout {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 120, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text("This Apple TV isn't signed in")
+                    .font(.system(size: 64, weight: .heavy))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(message)
+                    .font(.title3.weight(.semibold))
+                    .accessibilityIdentifier("signed-out-message")
+                if let name = store.info?.name ?? store.server?.name, !name.isEmpty {
+                    Text(name).font(.title3).foregroundStyle(.secondary)
+                }
+            } content: {
+                JoinView(address: store.server?.url.absoluteString ?? "", showsHeading: false)
+                Button("Use a different server", role: .destructive) { store.forget() }
+                    .padding(.top, 20)
+            }
+            .accessibilityIdentifier("signed-out")
+        #else
+            phone
+        #endif
+    }
+
+    private var phone: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 10) {

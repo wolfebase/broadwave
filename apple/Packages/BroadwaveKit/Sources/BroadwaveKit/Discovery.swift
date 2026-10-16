@@ -47,6 +47,14 @@ public struct FoundServer: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+public extension FoundServer {
+    /// A server at this device's own address. An Apple TV never runs one, so it is not offered there.
+    var isLoopback: Bool {
+        let host = (url.host() ?? "").lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        return host == "localhost" || host == "::1" || host.hasPrefix("127.")
+    }
+}
+
 /// Finds Broadwave servers advertised over Bonjour as `_broadwave._tcp`.
 @MainActor
 @Observable
