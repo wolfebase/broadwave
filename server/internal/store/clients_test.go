@@ -285,7 +285,7 @@ func TestPendingPairingCodesCannotCollide(t *testing.T) {
 	}
 	stamp := now.UTC().Format(time.RFC3339)
 	_, err = st.db.Exec(`INSERT INTO pairings (id, mode, code_hash, scopes, created_at, expires_at, state)
-VALUES ('dup', 'claim', ?, 'watch', ?, ?, 'pending')`, hashSecret(code), stamp, now.Add(time.Minute).UTC().Format(time.RFC3339))
+VALUES ('dup', 'claim', ?, 'watch', ?, ?, 'pending')`, st.hashCode(code), stamp, now.Add(time.Minute).UTC().Format(time.RFC3339))
 	if err == nil {
 		t.Fatal("two pending rows stored one code")
 	}

@@ -47,6 +47,15 @@ func (s *Server) withDeviceAuth(next http.Handler) http.Handler {
 			clearDeviceCookie(w)
 			dev = store.ClientDevice{}
 		}
+		if dev.ID == "" && token == "" {
+			// A receiver handed a media link, such as AirPlay or Cast.
+			if keyed, mk, clone, ok := s.mediaKey(r); ok {
+				dev, r = keyed, clone
+				kp := &keyedPlaylist{ResponseWriter: w, mk: mk}
+				defer kp.finish()
+				w = kp
+			}
+		}
 		if dev.ID != "" {
 			r = r.WithContext(withClient(r.Context(), dev))
 			s.noteClient(r.Context(), dev.ID, s.now())
@@ -65,6 +74,7 @@ func (s *Server) withDeviceAuth(next http.Handler) http.Handler {
 		}
 		if remote {
 			w = privateCache{w}
+			r = r.WithContext(withOutside(r.Context()))
 		}
 		if !(on || remote) || need == "public" {
 			next.ServeHTTP(w, r)
@@ -260,7 +270,7 @@ func watchScope(method, path string) (string, bool) {
 	}
 	if method == http.MethodPost {
 		switch path {
-		case "/watch", "/multiview/plan", "/mosaic":
+		case "/watch", "/multiview/plan", "/mosaic", "/media/link":
 			return store.ScopeWatch, true
 		}
 		if _, action, ok := recordingAction(path); ok && action == "play" {

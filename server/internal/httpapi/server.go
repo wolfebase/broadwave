@@ -171,6 +171,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /clients/me", s.clientMe)
 	api("DELETE /clients/{id}", s.revokeClient)
 	api("GET /remote", s.remoteStatus)
+	api("POST /media/link", s.mediaLink)
 	api("GET /invites", s.listInvites)
 	api("POST /invites", s.createInvite)
 	api("DELETE /invites/{id}", s.deleteInvite)

@@ -248,6 +248,9 @@ func (s *Server) revokeClient(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	if s.Bus != nil {
+		s.Bus.Publish("client.revoked", map[string]string{"id": r.PathValue("id")})
+	}
 	s.listClients(w, r)
 }
 

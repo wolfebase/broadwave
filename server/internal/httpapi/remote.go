@@ -241,3 +241,15 @@ func (p privateCache) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 func (p privateCache) Unwrap() http.ResponseWriter { return p.ResponseWriter }
+
+type outsideKey struct{}
+
+func withOutside(ctx context.Context) context.Context {
+	return context.WithValue(ctx, outsideKey{}, true)
+}
+
+// outside reports a request that came in through the tunnel or the public name.
+func outside(ctx context.Context) bool {
+	v, _ := ctx.Value(outsideKey{}).(bool)
+	return v
+}

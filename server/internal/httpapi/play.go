@@ -62,7 +62,12 @@ func (s *Server) decide(ctx context.Context, body watchBody) (live.Decision, boo
 	return live.ApplyLadder(adaptive, caps, prefs, s.Hub.Host, d), false, nil
 }
 
+// adaptive is the setting at home. Away from home it is always on: a phone on
+// cellular or hotel Wi-Fi needs the player to be able to step down.
 func (s *Server) adaptive(ctx context.Context) bool {
+	if outside(ctx) {
+		return true
+	}
 	if s.Store == nil {
 		return false
 	}

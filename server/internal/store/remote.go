@@ -165,7 +165,7 @@ func (s *Store) CreateInvite(ctx context.Context, name string, scopes []string, 
 		_, err = s.db.ExecContext(ctx, `INSERT INTO pairings (
 id, mode, code_hash, name, kind, scopes, created_at, expires_at, state
 ) VALUES (?, 'invite', ?, ?, 'other', ?, ?, ?, 'pending')`,
-			id, hashSecret(code), name, joinScopes(scopes),
+			id, s.hashCode(code), name, joinScopes(scopes),
 			now.UTC().Format(time.RFC3339), expires.Format(time.RFC3339))
 		if err == nil {
 			created, _ := time.Parse(time.RFC3339, now.UTC().Format(time.RFC3339))
