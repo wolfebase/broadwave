@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { TOKEN_KEY, authHeaders, isForbidden, isUnauthorized, mediaURL, noteIfUnauthorized, onUnauthorized, readToken, settingsForWatcher, writeToken } from "./src/lib/deviceToken.ts";
-import { canEditSignIn, codeAfterPoll, formatPairCode, kindLabel, normalizeClaimCode, normalizeInviteCode, normalizePairCode, pairPollStep, scopeLabel, scopesForAccess } from "./src/features/settings/pairCode.ts";
+import { canEditSignIn, codeAfterPoll, codeLooksLikeInvite, detectKind, formatPairCode, kindLabel, normalizeClaimCode, normalizeInviteCode, normalizePairCode, pairPollStep, scopeLabel, scopesForAccess } from "./src/features/settings/pairCode.ts";
 
 test("a pair code is six digits, with spaces and dashes ignored", () => {
   assert.equal(normalizePairCode("482913"), "482913");
@@ -202,4 +202,24 @@ test("an invite is twelve letters and digits, grouped in fours", () => {
   assert.equal(normalizeClaimCode("482 913"), "482913");
   assert.equal(normalizeClaimCode("k7qm-4xpa-9rtw"), "K7QM-4XPA-9RTW");
   assert.equal(normalizeClaimCode("hello"), null);
+});
+
+test("the device kind is guessed from the browser and the layout", () => {
+  const mac = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36";
+  const iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+  const android = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Mobile Safari/537.36";
+  const tizen = "Mozilla/5.0 (SMART-TV; Linux; Tizen 7.0) AppleWebKit/537.36 (KHTML, like Gecko) Version/7.0 TV Safari/537.36";
+  assert.equal(detectKind(mac, 0), "web");
+  assert.equal(detectKind(mac, 5), "phone", "an iPad asks for the desktop page");
+  assert.equal(detectKind(iphone, 5), "phone");
+  assert.equal(detectKind(android, 5), "phone");
+  assert.equal(detectKind(tizen, 0), "tv");
+  assert.equal(detectKind(mac, 0, "tv"), "tv", "the 10-foot layout is a TV");
+});
+
+test("letters in the code field mean an invite", () => {
+  assert.equal(codeLooksLikeInvite("482 913"), false);
+  assert.equal(codeLooksLikeInvite(""), false);
+  assert.equal(codeLooksLikeInvite("ABCD-EFGH-JK"), true);
+  assert.equal(codeLooksLikeInvite("abcd"), true);
 });

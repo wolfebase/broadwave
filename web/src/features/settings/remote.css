@@ -386,50 +386,6 @@ li[data-mark="now"] .cf-step-icon {
   min-width: 0;
 }
 
-.remote > h2,
-.remote > p {
-  margin: 0;
-}
-
-/* Advanced: the pasted token and an address for your own cloudflared. */
-.remote-advanced {
-  display: grid;
-  gap: var(--space-3);
-  border-top: 1px solid var(--color-line);
-  padding-top: var(--space-4);
-}
-
-.remote-advanced > summary {
-  cursor: pointer;
-  width: fit-content;
-  font-size: var(--type-headline-size);
-  font-weight: 700;
-  padding: var(--space-1) var(--space-2);
-  margin-left: calc(var(--space-2) * -1);
-  border-radius: var(--radius-sm);
-}
-
-.remote-advanced[open] > summary {
-  margin-bottom: var(--space-2);
-}
-
-/* details does not lay out its content as a grid everywhere. */
-.remote-advanced > .hint {
-  margin: 0 0 var(--space-3);
-}
-
-.remote-advanced form {
-  display: grid;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
-}
-
-.remote-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
 /* Phone: buttons fill the row, so a thumb finds them. */
 .layout-phone .cf-card {
   padding: var(--space-5);

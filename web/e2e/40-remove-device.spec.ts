@@ -3,7 +3,6 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { copy } from "../src/strings";
 import { lastSeenPhrase } from "../src/time";
 import { expect, test } from "./fixture";
 import { settle } from "./snap";
@@ -60,11 +59,12 @@ test("Remove takes a playlist and its channels off the server", async ({ page })
   }
   await remove.focus();
   await expect(remove).toBeFocused();
-  page.once("dialog", (dialog) => {
-    expect(dialog.message()).toContain("Recordings stay.");
-    void dialog.accept();
-  });
   await page.keyboard.press("Enter");
+  const ask = page.getByRole("dialog", { name: "Remove Old Box" });
+  await expect(ask).toContainText("Recordings stay.");
+  // Cancel has focus first, so a second press of OK removes nothing.
+  await expect(ask.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await ask.getByRole("button", { name: "Remove", exact: true }).click();
   await expect(remove).toHaveCount(0);
 
   const after = await devices();
@@ -96,13 +96,11 @@ test("an offline playlist says so on its card", async ({ page }) => {
   try {
     await page.goto("/settings#sources");
     await settle(page);
-    const card = page.locator(".device-card", { has: page.getByRole("heading", { name: "Quiet Box" }) });
-    const line = copy.sources.offline(lastSeenPhrase(seen));
+    const card = page.locator(".tuner-row").filter({ has: page.locator(".tuner-name", { hasText: "Quiet Box" }) });
     await expect(card).toBeVisible();
-    await expect(card.getByText(line)).toBeVisible();
-    await expect(card.getByRole("button").first()).toHaveAccessibleName("Remove Quiet Box");
-    await expect(page.locator(".source-row", { hasText: "Quiet Box" }).filter({ hasText: "Offline" })).toHaveCount(0);
-    const tuner = page.locator(".device-card", { has: page.getByRole("heading", { name: "Fake HDHomeRun" }) });
+    await expect(card.locator(".state-pill")).toHaveText("Offline");
+    await expect(card.getByRole("button", { name: "Remove Quiet Box" })).toBeVisible();
+    const tuner = page.locator(".tuner-row").filter({ has: page.locator(".tuner-name", { hasText: "Fake HDHomeRun" }) });
     await expect(tuner.getByText(/Offline/)).toHaveCount(0);
     mkdirSync(offlineShots, { recursive: true });
     for (const [name, width, height] of [["phone", 390, 844], ["desktop", 1440, 900], ["tv", 1920, 1080]] as const) {
@@ -137,17 +135,17 @@ test("a playlist card skips scan and firmware", async ({ page }) => {
   try {
     await page.goto("/settings#sources");
     await settle(page);
-    const card = page.locator(".device-card", { has: page.getByRole("heading", { name: "Night List" }) });
+    const card = page.locator(".tuner-row").filter({ has: page.locator(".tuner-name", { hasText: "Night List" }) });
     await expect(card).toBeVisible();
     await expect(card.getByRole("button", { name: "Scan channels" })).toHaveCount(0);
     await expect(card.getByText("Firmware")).toHaveCount(0);
     await expect(card.getByText("0 tuners")).toHaveCount(0);
     await expect(card.getByRole("button", { name: "Remove Night List" })).toBeVisible();
-    const tuner = page.locator(".device-card", { has: page.getByRole("heading", { name: "Fake HDHomeRun" }) });
+    const tuner = page.locator(".tuner-row").filter({ has: page.locator(".tuner-name", { hasText: "Fake HDHomeRun" }) });
     await expect(tuner.getByRole("button", { name: "Scan channels" })).toBeVisible();
     await expect(tuner.getByText("Firmware 20260101")).toBeVisible();
     await page.setViewportSize({ width: 1440, height: 900 });
-    const grid = page.locator(".device-grid");
+    const grid = page.locator(".tuner-row").first();
     await grid.scrollIntoViewIfNeeded();
     mkdirSync(playlistShots, { recursive: true });
     await page.screenshot({ path: path.join(playlistShots, "cards.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
@@ -217,17 +215,23 @@ test("a tuner that stopped answering says so on its card", async ({ page }) => {
     expect(setup.ok).toBe(true);
     await page.goto("/settings#sources");
     await settle(page);
-    const card = page.locator(".device-card", { has: page.getByRole("heading", { name: "HDHomeRun DUAL" }) });
-    const line = copy.sources.offline(lastSeenPhrase(seen));
+    const card = page.locator(".tuner-row").filter({ has: page.locator(".tuner-name", { hasText: "HDHomeRun DUAL" }) });
     await expect(card).toBeVisible();
-    await expect(card.getByText(line)).toBeVisible();
-    await expect(card.getByRole("button").first()).toHaveAccessibleName("Remove HDHomeRun DUAL");
-    const live = page.locator(".device-card", { has: page.getByRole("heading", { name: "Fake HDHomeRun" }) });
+    await expect(card.getByText(`Last answered ${lastSeenPhrase(seen)}.`)).toBeVisible();
+    await expect(card.locator(".state-pill")).toHaveText("Offline");
+    const live = page.locator(".tuner-row").filter({ has: page.locator(".tuner-name", { hasText: "Fake HDHomeRun" }) });
     await expect(live.getByText(/Offline/)).toHaveCount(0);
     mkdirSync(tunerOfflineShots, { recursive: true });
     await page.setViewportSize({ width: 1440, height: 900 });
     await card.scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(tunerOfflineShots, "desktop.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
+    // Removing a tuner that is away retires it: it stays listed, no longer offline, with a way back.
+    await card.getByRole("button", { name: "Remove HDHomeRun DUAL" }).click();
+    await page.getByRole("dialog", { name: "Remove HDHomeRun DUAL" }).getByRole("button", { name: "Remove", exact: true }).click();
+    await expect(card.locator(".state-pill")).toHaveText("Removed");
+    await expect(card.getByRole("button", { name: /HDHomeRun DUAL is back/ })).toBeVisible();
+    expect((await devices()).find((device) => device.deviceId === id)?.retired).toBe(true);
+    await page.screenshot({ path: path.join(tunerOfflineShots, "retired.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
   } finally {
     fake.child.kill("SIGKILL");
     if (id) await fetch(`${base}/api/v1/devices/${encodeURIComponent(id)}`, { method: "DELETE" });

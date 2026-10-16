@@ -30,7 +30,8 @@ import { navigate } from "./router";
 import { events } from "../lib/events";
 import { beginSave, commitSave, followUpRead, LatestReads, type SaveSeq } from "../lib/latest";
 import { guideSpan, indexAirings, keptGuideWindow, sortChannels, type AiringIndex } from "../lib/guide";
-import { hasSnapshotFlag, loadSnapshot, saveSnapshot } from "../lib/snapshot";
+import { hasSnapshotFlag, loadSnapshot, saveSnapshot, type Snapshot } from "../lib/snapshot";
+import { rememberServer, unreachableLine } from "./offline";
 import { changedEvents, movedSince, readVersions, type DataVersions } from "../lib/dataVersions";
 import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Recording, ServerInfo, Settings, StorageInfo, VirtualChannel } from "../types";
 
@@ -235,8 +236,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (loading.current) return;
     loading.current = true;
     void (async () => {
+      let snap: Snapshot | null = null;
       try {
-        const snap = await loadSnapshot();
+        snap = await loadSnapshot();
         if (snap) {
           setChannels(sortChannels(snap.channels, snap.allChannels));
           setAllChannels(sortChannels(snap.allChannels));
@@ -268,6 +270,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const info = await getServer().catch(() => null);
         if (stillBoot("settings")) setSettings(nextSettings);
         if (info && stillBoot("server")) {
+          rememberServer(info.name);
           setServer(info);
           setUpdate(info.update);
         }
@@ -373,7 +376,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setBooting(false);
           return;
         }
-        setError(err instanceof Error ? err.message : shell("shell.unreachable"));
+        setError(unreachableLine(err, Boolean(snap)) ?? (err instanceof Error ? err.message : shell("shell.unreachable")));
+        // The saved guide's progress bars are a guess until the server answers.
+        if (snap) document.documentElement.dataset.stale = "1";
         loadFailed.current = true;
         setReady(true);
         setChannelsReady(true);
@@ -413,6 +418,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setFreshAt(Date.now());
       if (loadFailed.current) {
         loadFailed.current = false;
+        delete document.documentElement.dataset.stale;
         setError("");
       }
     };

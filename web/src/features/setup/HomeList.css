@@ -1,0 +1,145 @@
+/* Around the house: a compact list of what answered on this network. */
+.home-places {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.home-places-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.home-places-head :is(h2, h3) {
+  margin: 0;
+  font-size: var(--type-headline-size);
+  font-weight: 700;
+}
+
+.home-places-head p {
+  margin-top: 2px;
+  font-size: var(--type-footnote-size);
+}
+
+.home-places-head .btn {
+  flex: none;
+}
+
+.home-places-empty {
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote-size);
+}
+
+.home-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.home-group-title {
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+/* One card, one line per thing: a list to scan, not a wall of tiles. */
+.home-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
+  overflow: hidden;
+}
+
+.home-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 14px;
+}
+
+.home-row + .home-row {
+  border-top: 1px solid var(--color-line);
+}
+
+.home-row.fresh {
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface1));
+}
+
+.home-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--color-surface3);
+  color: var(--color-text-secondary);
+  font-size: 18px;
+}
+
+.home-text {
+  display: grid;
+  min-width: 0;
+}
+
+.home-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+  font-size: var(--type-footnote-size);
+  overflow-wrap: anywhere;
+}
+
+.home-name .tag {
+  flex: none;
+}
+
+.home-detail {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-caption-size);
+  overflow-wrap: anywhere;
+}
+
+.home-state {
+  font-size: var(--type-caption-size);
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.home-state.ok {
+  color: var(--color-success);
+}
+
+.home-more {
+  justify-self: start;
+}
+
+html[data-layout="tv"] .home-row {
+  min-height: 72px;
+  padding: 10px 16px;
+}
+
+html[data-layout="tv"] .home-icon {
+  width: 44px;
+  height: 44px;
+  font-size: 24px;
+}
+
+html[data-layout="tv"] :is(.home-places-head, .home-row, .home-group) .btn {
+  min-height: 56px;
+  padding-inline: 24px;
+  font-size: var(--type-footnote-size);
+}

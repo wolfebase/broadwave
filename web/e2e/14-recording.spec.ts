@@ -46,11 +46,13 @@ test("a recording stops from the library and plays back at its full length", asy
   const row = page.locator(".media-card").filter({ has: page.locator(`img[src="/media/poster/${id}"]`) });
   await expect(row.getByText(/Recording/)).toBeVisible();
   await row.getByRole("button", { name: "Stop recording" }).click();
+  await row.getByRole("button", { name: "Stop now" }).click();
   await expect(page.getByText(/Stopped .*What it recorded is kept\./)).toBeVisible();
   await expect(row.getByRole("button", { name: "Stop recording" })).toHaveCount(0);
   await expect(row.locator(".ch-tags")).not.toContainText(/complete|stopped\b/);
+  // The server reads a new file's length in the background, not in the list request.
+  await expect.poll(async () => (await recordings()).find((item) => item.id === id)?.durationSec ?? 0, { message: "the stopped recording has a length", timeout: 30_000 }).toBeGreaterThan(15);
   const rec = (await recordings()).find((item) => item.id === id)!;
-  expect(rec.durationSec ?? 0, "the stopped recording has a length").toBeGreaterThan(15);
 
   await row.getByRole("button", { name: "Play" }).click();
   const player = page.getByRole("region", { name: "Player" });

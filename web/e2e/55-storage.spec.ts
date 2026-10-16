@@ -33,10 +33,10 @@ test.afterAll(async () => {
 });
 
 test("clean-up settings save and a recording is kept forever", async ({ page }) => {
-  await page.goto("/settings");
-  const room = page.getByLabel("When space runs low");
-  await expect(room).toHaveValue("0");
-  await room.selectOption("1");
+  await page.goto("/settings/recording");
+  const room = page.getByRole("radiogroup", { name: "When space runs low" });
+  await expect(room.getByRole("radio", { name: "Skip new recordings" })).toHaveAttribute("aria-checked", "true");
+  await room.getByRole("radio", { name: "Delete the oldest watched" }).click();
   const days = page.getByLabel("Delete watched recordings");
   await expect(days).toHaveValue("0");
   await days.selectOption("14");
@@ -88,8 +88,8 @@ test("clean-up settings save and a recording is kept forever", async ({ page }) 
   const after = await api<{ recordings: { id: number; file?: string }[] }>("/recordings");
   expect(after.recordings.find((r) => r.id === id)?.file).toBe("Harbor Watch/The Keepsake.ts");
 
-  await page.goto("/settings");
-  await page.getByLabel("When space runs low").selectOption("0");
+  await page.goto("/settings/recording");
+  await page.getByRole("radiogroup", { name: "When space runs low" }).getByRole("radio", { name: "Skip new recordings" }).click();
   await page.getByLabel("Delete watched recordings").selectOption("0");
   await expect
     .poll(async () => {

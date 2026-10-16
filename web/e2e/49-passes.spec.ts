@@ -34,7 +34,7 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   // A category pass held to the hour of the basketball game: the game already on stays out.
   await page.getByRole("button", { name: "New pass" }).click();
   const draft = page.getByRole("form", { name: "New pass" });
-  await draft.getByRole("combobox", { name: "Match" }).selectOption("category");
+  await draft.getByRole("group", { name: "Match", exact: true }).getByRole("button", { name: "Category", exact: true }).click();
   await draft.getByLabel("Category", { exact: true }).fill("Sports");
   await expect(draft.getByRole("status")).toContainText("NFL: Bears at Bills");
   const nba = seeded + 3 * 60 * 60_000;
@@ -51,7 +51,7 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   const other = (late + 3) % 7;
   const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   await page.getByRole("button", { name: "New pass" }).click();
-  await draft.getByRole("combobox", { name: "Match" }).selectOption("contains");
+  await draft.getByRole("group", { name: "Match", exact: true }).getByRole("button", { name: "Title has", exact: true }).click();
   await draft.getByLabel("Words", { exact: true }).fill("late local");
   await draft.getByRole("button", { name: names[other], exact: true }).click();
   await expect(draft.getByRole("button", { name: names[other], exact: true })).toHaveAttribute("aria-pressed", "true");
@@ -88,8 +88,8 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   // Edit keep rules.
   await rows.filter({ hasText: "late local" }).getByRole("button", { name: /^Edit / }).click();
   const edit = page.getByRole("form", { name: "Edit late local" });
-  await edit.getByRole("combobox", { name: "Keep" }).selectOption("last");
-  await edit.getByLabel("How many", { exact: true }).fill("3");
+  await edit.getByRole("group", { name: "Keep", exact: true }).getByRole("button", { name: "The newest", exact: true }).click();
+  await edit.getByLabel("How many to keep", { exact: true }).fill("3");
   await edit.getByRole("button", { name: "Save" }).click();
   await expect(rows.filter({ hasText: "late local" })).toContainText("Keeps the newest 3");
   saved = await passes(page);

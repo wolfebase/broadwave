@@ -54,9 +54,9 @@ test("days collapse to weekdays, weekends, or the whole week", () => {
 
 test("the detail line keeps the rules a viewer would check", () => {
   const channels = [channel(4, "4.1", "Den TV")];
-  expect(passDetails(pass({ kind: "once", channelId: 4, padBefore: 1, padAfter: 2 }), channels)).toBe("1 min early, 2 after");
-  expect(passDetails(pass({ channelId: 9 }), channels)).toBe("Any channel · 0 min early, 0 after");
-  expect(passDetails(pass(), [])).toBe("Any channel · 0 min early, 0 after");
+  expect(passDetails(pass({ kind: "once", channelId: 4, padBefore: 1, padAfter: 2 }), channels)).toBe("Starts 1 min early, ends 2 min late");
+  expect(passDetails(pass({ channelId: 9 }), channels)).toBe("Any channel");
+  expect(passDetails(pass(), [])).toBe("Any channel");
   const full = pass({
     channelId: 4,
     days: [1, 2, 3, 4, 5],
@@ -70,7 +70,7 @@ test("the detail line keeps the rules a viewer would check", () => {
     padAfter: 10,
   });
   expect(passDetails(full, channels)).toBe(
-    `4.1 Den TV · Weekdays · ${clock("19:00")}–${clock("22:30")} · New only · Keeps the newest 1 · Stops at 3 unwatched · 5 min early, 10 after`,
+    `4.1 Den TV · Weekdays · ${clock("19:00")}–${clock("22:30")} · New only · Keeps the newest 1 · Pauses at 3 unwatched · Starts 5 min early, ends 10 min late`,
   );
-  expect(passDetails(pass({ keepMode: "unwatched", timeStart: "19:00" }), [])).toBe("Any channel · Keeps unwatched · 0 min early, 0 after");
+  expect(passDetails(pass({ keepMode: "unwatched", timeStart: "19:00" }), [])).toBe("Any channel · Keeps unwatched");
 });

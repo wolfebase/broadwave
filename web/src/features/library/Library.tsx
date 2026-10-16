@@ -13,6 +13,7 @@ import { signalLine } from "./health";
 import { MoveFile } from "./MoveFile";
 import { RecordAgain, recordAgainOffered } from "./RecordAgain";
 import { actionName } from "../../lib/actionName";
+import "./library.css";
 import { buildLibrary, continueWatching, episodeTag, filterRecordings, recordingSubject, totalBytes, watched, type Kind, type Show, type Sort } from "./model";
 
 const t = bind(libraryMessages);
@@ -145,18 +146,24 @@ export function Library({
       onStop={onStop}
     />
   );
-  const headline = show ? (shows[0]?.title ?? movies[0]?.title ?? show) : copy.library.title;
+  const headline = show ? (shows[0]?.title ?? movies[0]?.title ?? show) : "";
+  const chip = (on: boolean, label: string, onClick: () => void) => (
+    <button type="button" className={on ? "chip on" : "chip"} aria-pressed={on} onClick={onClick}>
+      {label}
+    </button>
+  );
+  // The page already says Recordings. A show's own page names the show.
   return (
-    <section className="page" ref={rootRef}>
-      <div className="page-head">
-        {show ? (
+    <section className="page library" ref={rootRef}>
+      {show ? (
+        <div className="page-head">
           <button type="button" className="text-btn" onClick={() => navigate("/recordings")}>
             {t("library.allRecordings")}
           </button>
-        ) : null}
-        <h2>{headline}</h2>
-        {recordings.length > 0 ? <p className="ch-tags">{summary(recordings)}</p> : null}
-      </div>
+          <h2>{headline}</h2>
+        </div>
+      ) : null}
+      {recordings.length > 0 && !show ? <p className="ch-tags library-sum">{summary(recordings)}</p> : null}
       {note ? (
         <p className="lede" role="status">
           {note}
@@ -169,27 +176,23 @@ export function Library({
           ))}
         </Shelf>
       ) : null}
-      <div className="library-tools sheet-actions">
-        <div className="segmented" role="tablist" aria-label={t("library.filter")}>
-          <button type="button" role="tab" aria-selected={libraryFilter === "all"} className={libraryFilter === "all" ? "seg on" : "seg"} onClick={() => setLibraryFilter("all")}>
-            {t("library.all")}
-          </button>
-          <button type="button" role="tab" aria-selected={libraryFilter === "unwatched"} className={libraryFilter === "unwatched" ? "seg on" : "seg"} onClick={() => setLibraryFilter("unwatched")}>
-            {t("library.unwatchedTab")}
-          </button>
+      {recordings.length === 0 ? null : (
+      <div className="library-tools">
+        <div className="library-chips" role="group" aria-label={t("library.filter")}>
+          {chip(libraryFilter === "all" && kind === "all", t("library.all"), () => {
+            setLibraryFilter("all");
+            setKind("all");
+          })}
+          {chip(libraryFilter === "unwatched", t("library.unwatchedTab"), () => setLibraryFilter(libraryFilter === "unwatched" ? "all" : "unwatched"))}
+          {show
+            ? null
+            : (["shows", "movies", "sports"] as const).map((item) => (
+                <span key={item} className="library-chip">
+                  {chip(kind === item, t(`library.${item}`), () => setKind(kind === item ? "all" : item))}
+                </span>
+              ))}
         </div>
-        {show ? null : (
-          <label>
-            {t("library.show")}
-            <select value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-              <option value="all">{t("library.everything")}</option>
-              <option value="shows">{t("library.shows")}</option>
-              <option value="movies">{t("library.movies")}</option>
-              <option value="sports">{t("library.sports")}</option>
-            </select>
-          </label>
-        )}
-        <label>
+        <label className="library-sort">
           {t("library.sort")}
           <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
             <option value="newest">{t("library.newest")}</option>
@@ -204,6 +207,7 @@ export function Library({
           </button>
         ) : null}
       </div>
+      )}
       {selecting ? (
         <div className="sheet-actions" role="toolbar" aria-label={t("library.selected")} aria-busy={busy}>
           <span aria-live="polite">{t("library.selectedCount", { count: chosen.length })}</span>
@@ -239,9 +243,17 @@ export function Library({
           )}
         </div>
       ) : null}
-      {shows.length === 0 && movies.length === 0 ? (
+      {recordings.length === 0 ? (
+        <article className="quiet-card wide library-empty">
+          <h2>{t("library.emptyTitle")}</h2>
+          <p>{copy.library.body}</p>
+          <button type="button" className="btn primary" onClick={() => navigate("/guide")}>
+            {t("library.openGuide")}
+          </button>
+        </article>
+      ) : shows.length === 0 && movies.length === 0 ? (
         <article className="quiet-card wide">
-          <p>{recordings.length === 0 ? copy.library.body : libraryFilter === "unwatched" ? t("library.allWatched") : t("library.nothingMatches")}</p>
+          <p>{libraryFilter === "unwatched" ? t("library.allWatched") : t("library.nothingMatches")}</p>
         </article>
       ) : (
         <div className="show-grid">
@@ -335,11 +347,24 @@ function LibraryRow({
   const subject = recordingSubject(rec);
   const named = (action: string) => actionName(action, subject);
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const stopRef = useRef<HTMLButtonElement>(null);
+  const [stopping, setStopping] = useState(false);
+  const live = rec.status === "recording";
   useEffect(() => {
     if (armed === rec.id) focusRing(confirmRef.current);
   }, [armed, rec.id]);
+  useEffect(() => {
+    if (stopping) focusRing(stopRef.current);
+  }, [stopping]);
+  const title = (
+    <strong>
+      {name}
+      {live ? <span className="live-chip">{t("library.statusRecording")}</span> : null}
+    </strong>
+  );
+  const cut = cutLine(rec);
   return (
-    <li className="media-card">
+    <li className={live ? "media-card live" : "media-card"}>
       <span className="poster-wrap">
         <img
           className="poster"
@@ -360,10 +385,10 @@ function LibraryRow({
       <div>
         {selecting && rec.status !== "recording" ? (
           <label>
-            <input type="checkbox" checked={picked} onChange={(e) => onPick(e.target.checked)} aria-label={t("library.selectNamed", { name: `${tag ? `${tag} ` : ""}${name}` })} /> <strong>{name}</strong>
+            <input type="checkbox" checked={picked} onChange={(e) => onPick(e.target.checked)} aria-label={t("library.selectNamed", { name: `${tag ? `${tag} ` : ""}${name}` })} /> {title}
           </label>
         ) : (
-          <strong>{name}</strong>
+          title
         )}
         {rec.missing ? (
           <span className="ch-tags">
@@ -383,6 +408,7 @@ function LibraryRow({
             {rec.error ? ` · ${rec.error}` : ""}
           </span>
         )}
+        {cut && !rec.missing ? <span className="ch-tags cut">{cut}</span> : null}
         {line && !rec.missing ? <span className="ch-tags">{line}</span> : null}
         {selecting ? null : rec.missing ? (
           <div className="sheet-actions">
@@ -420,10 +446,24 @@ function LibraryRow({
             <DownloadLink id={rec.id} status={rec.status} name={subject} />
             {rec.file && rec.status !== "recording" ? <MoveFile rec={rec} /> : null}
             {recordAgainOffered(rec) ? <RecordAgain rec={rec} /> : null}
-            {rec.status === "recording" ? (
-              <button type="button" className="btn" aria-label={named(t("library.stopRecording"))} onClick={() => onStop(rec)}>
-                {t("library.stopRecording")}
-              </button>
+            {live ? (
+              <span className="stop-zone">
+                {stopping ? (
+                  <>
+                    <span className="stop-ask">{t("library.stopAsk")}</span>
+                    <button type="button" className="btn danger" aria-label={named(t("library.stopNow"))} onClick={() => onStop(rec)}>
+                      {t("library.stopNow")}
+                    </button>
+                    <button ref={stopRef} type="button" className="btn" onClick={() => setStopping(false)}>
+                      {t("library.keepRecording")}
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="btn ghost" aria-label={named(t("library.stopRecording"))} onClick={() => setStopping(true)}>
+                    {t("library.stopRecording")}
+                  </button>
+                )}
+              </span>
             ) : null}
             {rec.status === "recording" ? null : armed === rec.id ? (
               <button ref={confirmRef} type="button" className="btn primary" aria-label={named(t("library.deleteFile"))} onClick={() => onDelete(rec)}>
@@ -441,11 +481,16 @@ function LibraryRow({
   );
 }
 
+/** A piece of an airing says so, plainly. */
+function cutLine(rec: Recording): string {
+  if (rec.status === "interrupted") return t("library.cutShort");
+  if (rec.partial) return t("library.partOf");
+  return "";
+}
+
 /** Nothing for a finished recording; the others say what happened. */
 function statusLabel(status: Recording["status"]) {
   switch (status) {
-    case "recording":
-      return t("library.statusRecording");
     case "failed":
       return t("library.statusFailed");
     case "stopped":

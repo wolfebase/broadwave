@@ -376,6 +376,6 @@ test("the page paints the saved appearance before the app loads", () => {
   assert.match(html, /data-theme/);
   assert.match(html, /#F4F6FA/);
   assert.match(appearance, /role="radiogroup"/);
-  assert.match(appearance, /copy\.settings\.appearance/);
-  assert.match(appearance, /copy\.settings\.accent/);
+  assert.match(appearance, /appearance\.theme/);
+  assert.match(appearance, /appearance\.accentLabel/);
 });

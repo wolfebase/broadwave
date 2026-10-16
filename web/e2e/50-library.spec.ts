@@ -88,14 +88,14 @@ test("the library groups seasons, resumes, filters, and changes many at once", a
   await expect(show.locator(".media-card").first()).toContainText("S2 E3");
   await page.screenshot({ path: path.join(evidence, "desktop.png") });
 
-  const kind = page.getByRole("combobox", { name: "Show" });
-  await kind.selectOption("movies");
+  const chips = page.getByRole("group", { name: "Library filter" });
+  await chips.getByRole("button", { name: "Movies" }).click();
   await expect(page.getByRole("heading", { name: "Movies" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Mystery Hour", exact: true })).toHaveCount(0);
-  await kind.selectOption("sports");
+  await chips.getByRole("button", { name: "Sports" }).click();
   await expect(page.getByRole("heading", { name: "NFL: Rivertown at Lakeside" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Movies" })).toHaveCount(0);
-  await kind.selectOption("all");
+  await chips.getByRole("button", { name: "All" }).click();
   await page.getByRole("combobox", { name: "Sort" }).selectOption("title");
   await expect(page.locator(".show-title").first()).toHaveText("Mystery Hour");
 
@@ -123,12 +123,12 @@ test("the library groups seasons, resumes, filters, and changes many at once", a
 
   // Select all takes only what the filter shows: 2 of the 5 are unwatched now.
   const bar = page.getByRole("toolbar", { name: "Selected recordings" });
-  await page.getByRole("tab", { name: "Unwatched" }).click();
+  await page.getByRole("group", { name: "Library filter" }).getByRole("button", { name: "Unwatched" }).click();
   await page.getByRole("button", { name: "Select" }).click();
   await bar.getByRole("button", { name: "Select all" }).click();
   await expect(bar).toContainText("2 selected");
   await page.getByRole("button", { name: "Done" }).click();
-  await page.getByRole("tab", { name: "All" }).click();
+  await page.getByRole("group", { name: "Library filter" }).getByRole("button", { name: "All" }).click();
 
   // Delete asks in place, then removes every file of the show.
   await page.getByRole("button", { name: "Select" }).click();
