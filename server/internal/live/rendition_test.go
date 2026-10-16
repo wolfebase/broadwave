@@ -260,6 +260,28 @@ func TestAFullBudgetFreesAPictureNobodyFetches(t *testing.T) {
 	}
 }
 
+// A mosaic nobody watches makes room for a watch of one of its own channels.
+// The mosaic lets go of its tunes, but not the one the watch is about to
+// encode: stopping it would start the encode on a closed tune, which ends at
+// once and says the channel didn't start.
+func TestAnIdleMosaicMakesRoomWithoutStoppingTheTuneAskingForIt(t *testing.T) {
+	now := time.Now()
+	asking := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "4.1"}}, renditions: map[string]*rendition{}, mosaics: 1}
+	other := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 3, GuideNumber: "5.1"}}, renditions: map[string]*rendition{}, mosaics: 1}
+	mo := &mosaic{key: "3-1", ids: []int64{3, 1}, feeds: []*feed{other, asking}, out: &rendition{seen: now.Add(-time.Minute)}}
+	h := &Hub{Host: Host{Tiles: 2}, channels: map[int64]*feed{1: asking, 3: other}, mosaics: map[string]*mosaic{mo.key: mo}}
+	h.releaseIdleTranscodesLocked(asking, now)
+	if h.mosaics[mo.key] != nil {
+		t.Fatal("the idle mosaic still holds the picture budget")
+	}
+	if h.channels[1] != asking {
+		t.Fatal("the tune the watch asked on was stopped with the mosaic")
+	}
+	if h.channels[3] != nil {
+		t.Fatal("the mosaic's other tune is still held")
+	}
+}
+
 // A full budget frees one picture for the next channel: the one left longest
 // ago. The channel left a moment ago stays warm, so flipping back is instant.
 func TestAFullBudgetFreesOnlyTheOldestIdlePicture(t *testing.T) {
