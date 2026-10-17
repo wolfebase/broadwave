@@ -27,7 +27,7 @@ final class AccessibilityAuditTests: XCTestCase {
 
     @MainActor func testSettings() throws {
         let app = launch(tab: "settings")
-        XCTAssertTrue(app.descendants(matching: .any)["home-scan"].waitForExistence(timeout: 25), app.debugDescription)
+        XCTAssertTrue(app.descendants(matching: .any)["settings-screen"].waitForExistence(timeout: 25), app.debugDescription)
         scroll(app)
         // About sits at the bottom of a long form. The audit still runs if it has not been built.
         _ = app.buttons["About Broadwave"].waitForExistence(timeout: 5)
@@ -134,7 +134,7 @@ final class AccessibilityAuditTests: XCTestCase {
         switch page {
         case "home": app.buttons["Watch"]
         case "guide": app.descendants(matching: .any)["guide-now"]
-        case "settings": app.descendants(matching: .any)["home-scan"]
+        case "settings": app.descendants(matching: .any)["settings-screen"]
         default: app.staticTexts["Recordings"]
         }
     }

@@ -176,12 +176,12 @@
 
         private func firstChannelID() throws -> String {
             struct Page: Decodable {
-                struct Item: Decodable { let id: Int64 }
+                struct Item: Decodable { let id: Int64; let hidden: Bool? }
                 let channels: [Item]
             }
             let url = try XCTUnwrap(URL(string: server + "/api/v1/channels"))
             let page = try JSONDecoder().decode(Page.self, from: Data(contentsOf: url))
-            return try String(XCTUnwrap(page.channels.first?.id, "no channels"))
+            return try String(XCTUnwrap(page.channels.first { $0.hidden != true }?.id, "no channels"))
         }
 
         /// The button with this name or identifier that is drawn on screen; the zoom leaves a copy behind.
