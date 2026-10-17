@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  max-width: 640px;
+  max-width: 760px;
   padding: 10px 14px;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
@@ -193,4 +193,10 @@ button.search-main {
 .layout-phone .sg-actions .btn {
   flex: 1 1 auto;
   min-height: 44px;
+}
+
+/* Ten feet away the rows carry three big buttons; give the title room beside them. */
+.layout-tv .search-form,
+.layout-tv .search-list {
+  max-width: 1120px;
 }
