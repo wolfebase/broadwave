@@ -46,13 +46,13 @@ func TestFrameArgsSampleTheOpenMux(t *testing.T) {
 	if !strings.Contains(text, "0:p:3:v:0") || !strings.Contains(text, "0:p:4:v:0") {
 		t.Fatal("each program on the mux needs a frame")
 	}
-	if !strings.Contains(text, "scale=480:-2") || !strings.Contains(text, "scale=1280:-2") {
-		t.Fatal("both sizes are written")
+	if !strings.Contains(text, "scale=480:-2") || !strings.Contains(text, "scale=1280:-2") || !strings.Contains(text, "scale=1920:-2") {
+		t.Fatal("every size is written")
 	}
-	if strings.Count(text, "-f image2") != 4 {
+	if strings.Count(text, "-f image2") != 6 {
 		t.Fatal("a .part path needs an image format or ffmpeg will not write it")
 	}
-	if !strings.Contains(text, "/work/frames/4.jpg.part") || !strings.Contains(text, "/work/frames/5-1280.jpg.part") {
+	if !strings.Contains(text, "/work/frames/4.jpg.part") || !strings.Contains(text, "/work/frames/5-1280.jpg.part") || !strings.Contains(text, "/work/frames/5-1920.jpg.part") {
 		t.Fatalf("paths = %s", text)
 	}
 	if strings.Contains(text, "-analyzeduration") || strings.Contains(text, "-nofind_stream_info") {

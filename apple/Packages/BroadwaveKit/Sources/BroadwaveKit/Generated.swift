@@ -362,12 +362,24 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+public struct FrameListFrames: Codable, Sendable, Hashable, Identifiable {
+    public var at: Int64
+    public var id: Int64
+
+    public init(at: Int64, id: Int64) {
+        self.at = at
+        self.id = id
+    }
+}
+
 public struct FrameList: Codable, Sendable, Hashable {
     public var channels: [Int64]
+    public var frames: [FrameListFrames]?
     public var noSignal: [Int64]?
 
-    public init(channels: [Int64], noSignal: [Int64]? = nil) {
+    public init(channels: [Int64], frames: [FrameListFrames]? = nil, noSignal: [Int64]? = nil) {
         self.channels = channels
+        self.frames = frames
         self.noSignal = noSignal
     }
 }

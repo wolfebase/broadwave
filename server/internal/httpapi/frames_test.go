@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,5 +108,50 @@ func TestFrameIsStaleAfterTenMinutes(t *testing.T) {
 	h.ServeHTTP(missing, missingReq)
 	if missing.Code != 404 {
 		t.Fatalf("missing %d", missing.Code)
+	}
+}
+
+func TestAFullScreenStillAndItsStamp(t *testing.T) {
+	dir := t.TempDir()
+	writePreview(t, dir, 7, 480, 0)
+	writePreview(t, dir, 7, 1280, 0)
+	full := live.FramePath(dir, 7, 1920)
+	if err := os.WriteFile(full, []byte{0xff, 0xd8, 0x19, 0x20, 0xff, 0xd9}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writePreview(t, dir, 9, 480, 0)
+	writePreview(t, dir, 9, 1280, 0)
+	h := (&Server{Hub: &live.Hub{Dir: dir}}).Handler()
+	if got := get(t, h, "/api/v1/channels/7/frame?w=1920"); got.Code != 200 || got.Body.Len() != 6 {
+		t.Fatalf("1920: %d, %d bytes", got.Code, got.Body.Len())
+	}
+	// A grab from before the full-screen size answers with the wide one.
+	if got := get(t, h, "/api/v1/channels/9/frame?w=1920"); got.Code != 200 || got.Body.Len() != 4 {
+		t.Fatalf("1920 without one: %d", got.Code)
+	}
+	res := get(t, h, "/api/v1/frames")
+	var body struct {
+		Channels []int64 `json:"channels"`
+		Frames   []struct {
+			ID int64 `json:"id"`
+			At int64 `json:"at"`
+		} `json:"frames"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(live.FramePath(dir, 7, 480))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Frames) != 2 || body.Frames[0].ID != 7 || body.Frames[0].At != info.ModTime().Unix() || len(body.Channels) != 2 {
+		t.Fatalf("frames %s", res.Body.String())
+	}
+	at := strconv.FormatInt(body.Frames[0].At, 10)
+	if c := get(t, h, "/api/v1/channels/7/frame?w=1920&at="+at).Header().Get("Cache-Control"); !strings.Contains(c, "immutable") {
+		t.Fatalf("a stamped still is not cached: %q", c)
+	}
+	if c := get(t, h, "/api/v1/channels/7/frame?w=1920&at=12").Header().Get("Cache-Control"); c != "no-cache" {
+		t.Fatalf("an old stamp is cached: %q", c)
 	}
 }

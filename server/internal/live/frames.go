@@ -59,13 +59,32 @@ func FrameStale(modified, now time.Time) bool {
 	return now.Sub(modified) > FrameStaleAfter
 }
 
-// FramePath is the JPEG for a channel. width 1280 is the large copy; anything else is 480.
-func FramePath(dir string, channelID int64, width int) string {
-	name := fmt.Sprintf("%d.jpg", channelID)
-	if width >= 1280 {
-		name = fmt.Sprintf("%d-1280.jpg", channelID)
+// FrameWidths are the sizes each grab writes. The first is the preview the
+// guide lists; 1920 is a full screen, as the Apple TV Top Shelf asks for.
+var FrameWidths = []int{480, 1280, 1920}
+
+// FrameWidth is the size kept for a request of w: the largest one not
+// wider than w, and 480 for anything smaller or unknown.
+func FrameWidth(w int) int {
+	out := FrameWidths[0]
+	for _, size := range FrameWidths {
+		if w >= size {
+			out = size
+		}
 	}
-	return filepath.Join(dir, "frames", name)
+	return out
+}
+
+// FramePath is the JPEG of one size for a channel (FrameWidth of width).
+func FramePath(dir string, channelID int64, width int) string {
+	return filepath.Join(dir, "frames", frameName(channelID, FrameWidth(width)))
+}
+
+func frameName(channelID int64, width int) string {
+	if width == FrameWidths[0] {
+		return fmt.Sprintf("%d.jpg", channelID)
+	}
+	return fmt.Sprintf("%d-%d.jpg", channelID, width)
 }
 
 // FrameArgs builds an ffmpeg command that reads the mux already on stdin and
@@ -89,14 +108,12 @@ func FrameArgs(jobs []FrameJob, dir string) []string {
 		if job.Program > 0 {
 			mapSpec = fmt.Sprintf("0:p:%d:v:0", job.Program)
 		}
-		small := filepath.Join(dir, fmt.Sprintf("%d.jpg.part", job.ChannelID))
-		large := filepath.Join(dir, fmt.Sprintf("%d-1280.jpg.part", job.ChannelID))
 		// .part is not an image extension, so the format has to be named or
 		// ffmpeg refuses the file and the still never lands.
-		args = append(args,
-			"-map", mapSpec, "-vf", "scale=480:-2", "-frames:v", "1", "-f", "image2", small,
-			"-map", mapSpec, "-vf", "scale=1280:-2", "-frames:v", "1", "-f", "image2", large,
-		)
+		for _, width := range FrameWidths {
+			part := filepath.Join(dir, frameName(job.ChannelID, width)+".part")
+			args = append(args, "-map", mapSpec, "-vf", fmt.Sprintf("scale=%d:-2", width), "-frames:v", "1", "-f", "image2", part)
+		}
 	}
 	return args
 }
@@ -214,10 +231,11 @@ func (h *Hub) grabFrames(ctx context.Context, m *mux) error {
 	return fmt.Errorf("channels %v: %w", missing, err)
 }
 
-// publishFrame reports whether both sizes landed.
+// publishFrame reports whether every size landed.
 func publishFrame(dir string, channelID int64) bool {
 	ok := true
-	for _, name := range []string{fmt.Sprintf("%d.jpg", channelID), fmt.Sprintf("%d-1280.jpg", channelID)} {
+	for _, width := range FrameWidths {
+		name := frameName(channelID, width)
 		part := filepath.Join(dir, name+".part")
 		info, err := os.Stat(part)
 		if err != nil || info.Size() == 0 {
