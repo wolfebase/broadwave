@@ -127,14 +127,14 @@ import XCTest
                     }
                 }
                 XCTAssertNotNil(cameBack, app.debugDescription)
-                XCTAssertEqual(cameBack, title, "came back on \(cameBack ?? "-"), left on \(title)")
+                XCTAssertEqual(cameBack.map(channelPart), channelPart(title), "came back on \(cameBack ?? "-"), left on \(title)")
                 XCTAssertTrue(waitForLog(timeout: 15) { $0.contains("pip restore") }, "a tap did not restore the player\n\(logTail())")
             } else {
                 XCTAssertTrue(logText().contains("pip supported no"), "Picture in Picture did not start\n\(logTail())")
                 shot("home")
                 app.activate()
                 XCTAssertTrue(program.waitForExistence(timeout: 15), app.debugDescription)
-                XCTAssertEqual(program.label, title, "came back on \(program.label), left on \(title)")
+                XCTAssertEqual(channelPart(program.label), channelPart(title), "came back on \(program.label), left on \(title)")
             }
             shot("restored")
             // The button asks the system. A simulator with no route view still
@@ -246,6 +246,11 @@ import XCTest
                 Thread.sleep(forTimeInterval: 0.4)
             }
             return false
+        }
+
+        /// The label ends in the minutes left, which can tick over while the app is away.
+        private func channelPart(_ label: String) -> String {
+            label.replacingOccurrences(of: #", \d+m left$"#, with: "", options: .regularExpression)
         }
 
         private func logText() -> String {

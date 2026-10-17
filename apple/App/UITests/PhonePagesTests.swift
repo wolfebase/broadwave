@@ -214,8 +214,10 @@
             recording.tap()
             let autoplay = app.switches.matching(NSPredicate(format: "label CONTAINS 'next episode'")).firstMatch
             XCTAssertTrue(autoplay.waitForExistence(timeout: 8), "Recording and Storage did not open\n\(app.navigationBars.allElementsBoundByIndex.map(\.identifier))")
-            let keep = app.staticTexts["Keep this much free"]
-            for _ in 0 ..< 4 where !keep.isHittable {
+            // The field, not the row's words: LabeledContent folds them into one element, and a
+            // long Space by show list scrolled the page past it.
+            let keep = app.textFields["keep-free"]
+            for _ in 0 ..< 8 where !(keep.exists && keep.isHittable) {
                 app.swipeUp(velocity: .slow)
             }
             XCTAssertTrue(app.textFields["keep-free"].exists, app.debugDescription)
