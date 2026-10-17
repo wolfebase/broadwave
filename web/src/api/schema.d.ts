@@ -2267,6 +2267,16 @@ export interface components {
         /** @description Channel ids whose preview JPEG exists and is newer than 10 minutes. */
         FrameList: {
             channels: number[];
+            /** @description The same channels, each with when its stills were written. Adding `at` to the still's address makes it cacheable. */
+            frames?: {
+                /** Format: int64 */
+                id: number;
+                /**
+                 * Format: int64
+                 * @description Unix seconds the grab was written.
+                 */
+                at: number;
+            }[];
             /**
              * @description Channels whose last tune in the past 10 minutes found no signal. A watch of
              *     one fails with `no_signal` after a short check (about 2 s) instead of the full
@@ -3922,8 +3932,10 @@ export interface operations {
     channelFrame: {
         parameters: {
             query?: {
-                /** @description Only the exact value 1280 returns the wide JPEG. Omitted, 480, and every other value return the 480 JPEG and are not an error. */
+                /** @description The width wanted. Each grab keeps 480, 1280, and 1920 wide JPEGs; the answer is the largest of those not wider than this (1920 for a full screen such as the Top Shelf, 1280 from 1280 up, 480 for anything less, omitted, or not a number, which is not an error). A grab made before 1920 existed answers 1920 with the 1280 JPEG. */
                 w?: string;
+                /** @description The grab this address names, the `at` of the channel in `/frames`. When it is the grab on disk the picture is answered with a day of private caching, since a newer grab is a new address. Any other value is answered as if it were left out. */
+                at?: string;
             };
             header?: never;
             path: {
@@ -3933,7 +3945,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description JPEG preview. X-Frame-Stale is 1 when the picture is older than 10 minutes. */
+            /** @description JPEG preview. X-Frame-Stale is 1 when the picture is older than 10 minutes. Cache-Control is no-cache unless `at` names this grab. */
             200: {
                 headers: {
                     "Last-Modified"?: string;

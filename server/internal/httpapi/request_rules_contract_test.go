@@ -78,6 +78,10 @@ func TestFrameWidthMatchesTheSpec(t *testing.T) {
 	if get("?w=1280") != string(wide) {
 		t.Fatal("1280 was not the wide frame")
 	}
+	// Past 1280 with no full-screen still, the wide one.
+	if get("?w=1600") != string(wide) || get("?w=1920") != string(wide) {
+		t.Fatal("1600 or 1920 was not the wide frame")
+	}
 }
 
 func TestEmptyPassOrderLeavesRank(t *testing.T) {

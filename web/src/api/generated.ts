@@ -180,8 +180,14 @@ export type Event = {
   message: string;
 };
 
+export type FrameListFrames = {
+  at: number;
+  id: number;
+};
+
 export type FrameList = {
   channels: number[];
+  frames?: FrameListFrames[];
   noSignal?: number[];
 };
 

@@ -731,10 +731,14 @@ paths:
         - in: query
           name: w
           schema: { type: string }
-          description: Only the exact value 1280 returns the wide JPEG. Omitted, 480, and every other value return the 480 JPEG and are not an error.
+          description: The width wanted. Each grab keeps 480, 1280, and 1920 wide JPEGs; the answer is the largest of those not wider than this (1920 for a full screen such as the Top Shelf, 1280 from 1280 up, 480 for anything less, omitted, or not a number, which is not an error). A grab made before 1920 existed answers 1920 with the 1280 JPEG.
+        - in: query
+          name: at
+          schema: { type: string }
+          description: The grab this address names, the `at` of the channel in `/frames`. When it is the grab on disk the picture is answered with a day of private caching, since a newer grab is a new address. Any other value is answered as if it were left out.
       responses:
         "200":
-          description: JPEG preview. X-Frame-Stale is 1 when the picture is older than 10 minutes.
+          description: JPEG preview. X-Frame-Stale is 1 when the picture is older than 10 minutes. Cache-Control is no-cache unless `at` names this grab.
           headers:
             Last-Modified: { schema: { type: string } }
             X-Frame-Stale: { schema: { type: string } }
@@ -3269,6 +3273,15 @@ components:
         channels:
           type: array
           items: { type: integer, format: int64 }
+        frames:
+          type: array
+          description: The same channels, each with when its stills were written. Adding `at` to the still's address makes it cacheable.
+          items:
+            type: object
+            required: [id, at]
+            properties:
+              id: { type: integer, format: int64 }
+              at: { type: integer, format: int64, description: Unix seconds the grab was written. }
         noSignal:
           type: array
           description: |
