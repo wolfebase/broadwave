@@ -533,7 +533,8 @@ struct TuneBackdrop: View {
                             Text(entry.title).tag(entry.id)
                         }
                     } label: {
-                        Label("Live delay", systemImage: "clock")
+                        // Only lined-up screens play at the chosen delay; alone, a channel plays about 5 s back.
+                        Label("Delay for lined-up screens", systemImage: "clock")
                     }
                     .pickerStyle(.menu)
                 }
