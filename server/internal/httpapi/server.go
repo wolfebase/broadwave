@@ -221,6 +221,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /recordings", s.recordings)
 	api("DELETE /recordings/{id}", s.deleteRecording)
 	api("GET /recordings/{id}/file", s.downloadRecording)
+	api("GET /recordings/{id}/still", s.recordingStill)
 	api("GET /airings", s.airings)
 	api("GET /schedule", s.schedule)
 	api("POST /schedule/skip", s.skipAiring)

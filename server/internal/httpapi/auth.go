@@ -263,7 +263,7 @@ func watchScope(method, path string) (string, bool) {
 		}
 		if id, action, ok := recordingAction(path); ok && id != "" {
 			switch action {
-			case "file", "markers", "again":
+			case "file", "markers", "again", "still":
 				return store.ScopeWatch, true
 			}
 		}
