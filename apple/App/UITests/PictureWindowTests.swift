@@ -59,9 +59,9 @@ import XCTest
             let airplay = app.buttons["airplay"]
             XCTAssertTrue(airplay.waitForExistence(timeout: 5), "AirPlay button missing\n\(app.debugDescription)")
             XCTAssertEqual(airplay.label, "AirPlay")
-            // The zoom leaves a zero-size copy behind; tap the one drawn on screen. Over the
-            // picture (iPad) the controls hide after 3 s, and a tap brings them back.
             func drawn() -> XCUIElement? {
+                // The zoom leaves a zero-size copy behind; tap the one drawn on screen. Over the
+                // picture (iPad) the controls hide after 3 s, and a tap brings them back.
                 app.buttons.matching(identifier: "airplay").allElementsBoundByIndex.first { $0.frame.width > 0 && $0.isHittable }
             }
             if drawn() == nil {
