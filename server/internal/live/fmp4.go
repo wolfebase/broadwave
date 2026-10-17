@@ -1,6 +1,7 @@
 package live
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/binary"
 	"io"
@@ -308,6 +309,68 @@ func fragmentPTS(seg []byte, track, scale uint32) (int64, bool) {
 		return base * 90000 / int64(scale), true
 	}
 	return 0, false
+}
+
+// fragmentDecode is where a fragment's video samples start and end in decode
+// order, in 90 kHz ticks. Pictures that a later one is shown before still
+// follow each other here, so an encode that continues another on the same
+// input picks up at the end of this.
+func fragmentDecode(frag []byte, track, scale uint32) (start, end int64, ok bool) {
+	if scale == 0 {
+		return 0, 0, false
+	}
+	for _, t := range boxes(child(frag, "moof")) {
+		if t.kind != "traf" {
+			continue
+		}
+		r, good := runTiming(t.body)
+		if !good || r.id != track || len(r.samples) == 0 {
+			continue
+		}
+		dts := r.decodeTime()
+		var dur int64
+		for _, s := range r.samples {
+			dur += r.sampleDur(s)
+		}
+		return dts * 90000 / int64(scale), (dts + dur) * 90000 / int64(scale), true
+	}
+	return 0, 0, false
+}
+
+// sameMedia reports headers that differ at most in their tracks' languages.
+func sameMedia(a, b []byte) bool {
+	return bytes.Equal(withoutLanguages(a), withoutLanguages(b))
+}
+
+// withoutLanguages is a copy of an init segment with every mdhd language
+// set to undetermined.
+func withoutLanguages(init []byte) []byte {
+	out := append([]byte(nil), init...)
+	var walk func(b []byte)
+	walk = func(b []byte) {
+		for len(b) >= 8 {
+			size := int(binary.BigEndian.Uint32(b[:4]))
+			if size < 8 || size > len(b) {
+				return
+			}
+			body := b[8:size]
+			switch string(b[4:8]) {
+			case "moov", "trak", "mdia":
+				walk(body)
+			case "mdhd":
+				at := 20
+				if len(body) > 0 && body[0] == 1 {
+					at = 32
+				}
+				if at+2 <= len(body) {
+					binary.BigEndian.PutUint16(body[at:], 0x55c4)
+				}
+			}
+			b = b[size:]
+		}
+	}
+	walk(out)
+	return out
 }
 
 // fragmentDuration is the video samples in one fragment, in 90 kHz ticks.

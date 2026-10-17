@@ -134,6 +134,9 @@ type Hub struct {
 	// in the recordings folder up to need bytes before a recording is refused.
 	// It reports how many bytes of recording files were actually removed.
 	MakeRoom func(ctx context.Context, need uint64) uint64
+	// NoLead starts an AC-4 channel's picture with its sound, without the
+	// silent lead (BROADWAVE_SOUND_LEAD=0).
+	NoLead bool
 	// NoAC4 is set when ffmpeg cannot decode AC-4: an ATSC 3.0 channel then
 	// plays its picture without sound instead of not at all.
 	NoAC4 bool
@@ -422,6 +425,9 @@ type rendition struct {
 	// that encode down, or count it once per rung.
 	ladderChild bool
 	group       *ladderGroup
+	// lead is the silent picture that plays while a converted AC-4 sound
+	// starts (lead.go). Kept after it ends, for its first picture's arrival.
+	lead *leadEncode
 }
 
 type recording struct {
@@ -498,6 +504,7 @@ func New(st *store.Store, dir, ffmpeg, encoder string) *Hub {
 		DeintBroadcast: broadcast, DeintSmooth: smooth,
 		RenditionIdle: 20 * time.Second,
 		TunerLinger:   lingerFromEnv(90 * time.Second),
+		NoLead:        os.Getenv("BROADWAVE_SOUND_LEAD") == "0",
 		muxes:         map[int]*mux{}, channels: map[int64]*feed{}, mosaics: map[string]*mosaic{}, reserved: map[int]bool{},
 	}
 }
@@ -1193,12 +1200,41 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 		h.startCaptionsLocked(f)
 	}
 	h.seedLong(f, gate)
-	packIn := startPack(dir, stdout, gate, done, captionLine(f), true)
+	var lead *leadEncode
+	if sounds, ok := h.leadSoundsLocked(f, spec, extras, input); ok && stdin != nil {
+		lead, _ = newLeadEncode(stdin, sounds)
+	} else if stdin != nil && codecName(f.sourceFor(spec).AudioCodec) == "ac4" && spec.Audio != "none" && spec.Audio != "copy" {
+		lead = datingOnly(stdin)
+	}
+	var packIn *packInput
+	if lead != nil && lead.out != nil {
+		// The lead's output comes first; the real encode's is read ahead
+		// from its start, and its first bytes cut the lead.
+		packIn = startPackOn(dir, lead.out, gate, done, captionLine(f), true)
+		packIn.onTakeover = func() { lead.tee.cut.Store(true) }
+		packIn.followTakeover(stdout)
+	} else {
+		packIn = startPack(dir, stdout, gate, done, captionLine(f), true)
+	}
 	NotePID(h.Dir, cmd.Process.Pid)
 	now := time.Now()
-	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, startAt: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn, log: plog, encoder: encoderOf(h.Encoder, want), mute: mute}
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, startAt: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn, log: plog, encoder: encoderOf(h.Encoder, want), mute: mute, lead: lead}
 	if stdin != nil {
-		r.sub = h.attachRenditionLocked(f, r, h.renditionPipe(f, r, stdin), frame, now)
+		var w io.WriteCloser = stdin
+		if lead != nil {
+			w = lead.tee
+		}
+		pipe := h.renditionPipe(f, r, w)
+		if lead != nil {
+			lead.tee.pipe = r.filter
+			if lead.out != nil {
+				lead.tee.onPicture = func(pts int64) { go h.startLead(f, r, lead, pts) }
+			}
+		}
+		r.sub = h.attachRenditionLocked(f, r, pipe, frame, now)
+		if lead != nil && (!r.ringFrom.IsZero() || r.filter == nil) {
+			h.endLeadLocked(r, lead)
+		}
 	}
 	f.renditions[key] = r
 	go h.watchRendition(f, r, cmd, encoderOf(h.Encoder, want), false)
@@ -1592,6 +1628,9 @@ func (h *Hub) followRestartLocked(f *feed, r *rendition) bool {
 	if r.input == nil || !r.input.holding() || len(r.args) == 0 {
 		return false
 	}
+	// The lead reads the input of the encode that ended; the next one
+	// follows it as after any other end.
+	h.endLeadLocked(r, r.lead)
 	m := muxOf(h, f)
 	if m != nil {
 		m.detach(r.sub)
@@ -1660,6 +1699,8 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition) bool {
 	// already owns that write end, so close it only when nothing else will.
 	old := r.cmd
 	live := old != nil && old.Process != nil && !r.waited.Load()
+	h.endLeadLocked(r, r.lead)
+	r.lead = nil
 	if m := muxOf(h, f); m != nil {
 		m.detach(r.sub)
 	} else if r.sub != nil {
@@ -2091,6 +2132,16 @@ func seedClockLocked(f *feed, r *rendition) {
 		r.clock.Start(r.ringFrom.Add(-ringDelay))
 		if r.roomStart {
 			slog.Warn(fmt.Sprintf("channel %s: %s started in the buffer with no encode to date it by; its dates may be a second or two off", f.channel.GuideNumber, r.spec.Key()))
+		}
+		return
+	}
+	// An AC-4 picture waits on its sound for a varying 2 to 4 s, with a
+	// lead or without one, so the clock on the wall when it first writes
+	// does not say how old its picture is. Its first picture's arrival does.
+	if pts, at, ok := r.lead.arrival(); ok && r.ringFrom.IsZero() && !r.dated && r.input.started() {
+		if own, known := r.input.broadcastOffset(); known {
+			r.dated = true
+			r.clock.Seed(((pts-own)%ptsWrap+ptsWrap)%ptsWrap, at.Add(-ringDelay))
 		}
 	}
 }
@@ -3446,6 +3497,7 @@ func (h *Hub) stopRenditionLocked(f *feed, key string) {
 	}
 	stopTimer(&r.idle)
 	muxOf(h, f).detach(r.sub)
+	h.endLeadLocked(r, r.lead)
 	if r.cmd != nil && r.cmd.Process != nil && !r.waited.Load() {
 		ForgetPID(h.Dir, r.cmd.Process.Pid)
 		if r.stdin != nil {

@@ -58,6 +58,9 @@ const (
 	splitMinTicks = (splitPartTicks*85 + 99) / 100
 	// splitGoalTicks is the part length a group is divided toward.
 	splitGoalTicks = 32400 // 0.36s
+	// spliceSlack is how far a takeover encode's keyframe may sit from the
+	// end of the lead's last picture and still continue it: half a picture.
+	spliceSlack = 750
 )
 
 // fragMicros is ffmpeg's -frag_duration for live encodes: short enough that
@@ -368,7 +371,13 @@ func newPackPipe(cmd *exec.Cmd) (*packPipe, error) {
 // each encode's output until the next one is queued (packInput.hold).
 func startPack(dir string, stdout *packPipe, gate *playlistGate, done chan struct{}, line func() int, hold bool) *packInput {
 	stdout.started()
-	in := &packInput{cur: stdout, line: line, hold: hold}
+	return startPackOn(dir, stdout, gate, done, line, hold)
+}
+
+// startPackOn is startPack on a first input that is not ffmpeg's stdout
+// yet: a sound lead's pipe, whose encode starts on the first picture.
+func startPackOn(dir string, first io.ReadCloser, gate *playlistGate, done chan struct{}, line func() int, hold bool) *packInput {
+	in := &packInput{cur: first, line: line, hold: hold}
 	go func() {
 		defer close(done)
 		defer in.close()
@@ -409,6 +418,12 @@ type packInput struct {
 	spans []encodeSpan
 	// firstRead is when the first encode first wrote.
 	firstRead stamp
+	// takeover is set while the packager reads an encode queued behind a
+	// sound lead (followTakeover): its output starts where the lead started,
+	// and the packager skips to where the lead ended.
+	takeover bool
+	// onTakeover is told when a queued takeover encode first writes.
+	onTakeover func()
 }
 
 // encodeSpan is one encode's place on the playlist: the sequence number of
@@ -429,9 +444,20 @@ func (in *packInput) noteEncodeStart(first float64, ok bool) {
 	in.mu.Lock()
 	defer in.mu.Unlock()
 	in.encodes++
-	in.known = ok && in.encodes == 1
+	offset := int64(math.Round(first*90000)) % ptsWrap
+	// An encode that takes over from a sound lead on the same fragment clock
+	// continues its playlist, so siblings can still be dated from it.
+	same := in.takeover && in.known && in.startOK && ok && offset == in.offset
+	in.known = ok && (in.encodes == 1 || same)
 	in.startOK = ok
-	in.offset = int64(math.Round(first*90000)) % ptsWrap
+	in.offset = offset
+}
+
+// takingOver reports whether the encode being read took over from a lead.
+func (in *packInput) takingOver() bool {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	return in.takeover
 }
 
 // noteFirstSegment is told the sequence number of the segment the latest
@@ -532,7 +558,8 @@ func (in *packInput) Read(b []byte) (int, error) {
 		return 0, err
 	}
 	_ = cur.Close()
-	in.cur, in.next = in.next[0], in.next[1:]
+	next := in.next[0]
+	in.cur, in.next, in.takeover = next, in.next[1:], next.takeover
 	return 0, errNextEncode
 }
 
@@ -546,6 +573,17 @@ func (in *packInput) condLocked() *sync.Cond {
 // follow queues the next encode's output. False means the packager has
 // already stopped reading, or was told to.
 func (in *packInput) follow(p *packPipe) bool {
+	return in.followAs(p, false)
+}
+
+// followTakeover queues an encode that started with a sound lead on the same
+// input. Its first output tells onTakeover, and the packager drops what it
+// wrote before the lead's last picture.
+func (in *packInput) followTakeover(p *packPipe) bool {
+	return in.followAs(p, true)
+}
+
+func (in *packInput) followAs(p *packPipe, takeover bool) bool {
 	if in == nil {
 		return false
 	}
@@ -555,7 +593,13 @@ func (in *packInput) follow(p *packPipe) bool {
 		return false
 	}
 	p.started()
-	in.next = append(in.next, newReadAhead(p))
+	var first func()
+	if takeover {
+		first = in.onTakeover
+	}
+	ra := newReadAhead(p, first)
+	ra.takeover = takeover
+	in.next = append(in.next, ra)
 	in.condLocked().Broadcast()
 	return true
 }
@@ -623,20 +667,26 @@ const readAheadCap = 64 << 20
 // packager gets to it, ffmpeg would otherwise block on a full pipe and stop
 // reading the tuner.
 type readAhead struct {
-	src  *packPipe
-	mu   sync.Mutex
-	cond *sync.Cond
-	buf  []byte
-	err  error
+	src      *packPipe
+	mu       sync.Mutex
+	cond     *sync.Cond
+	buf      []byte
+	err      error
+	takeover bool
 }
 
-func newReadAhead(p *packPipe) *readAhead {
+// newReadAhead starts reading p. first, when set, is called on its first bytes.
+func newReadAhead(p *packPipe, first func()) *readAhead {
 	r := &readAhead{src: p}
 	r.cond = sync.NewCond(&r.mu)
 	go func() {
 		chunk := make([]byte, 64<<10)
 		for {
 			n, err := p.Read(chunk)
+			if n > 0 && first != nil {
+				first()
+				first = nil
+			}
 			r.mu.Lock()
 			if n > 0 && len(r.buf)+n <= readAheadCap {
 				r.buf = append(r.buf, chunk[:n]...)
@@ -727,6 +777,14 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	// fresh is set by each encode's header. That encode's first fragment
 	// opens a segment, and the reader learns its sequence number.
 	var fresh bool
+	// takeover is set for an encode that started beside a sound lead on the
+	// same input. Until it reaches the decode time where the lead's pictures
+	// ended (skipTo, on its own fragment clock), its fragments are dropped;
+	// it then continues on its next keyframe, with no break when that
+	// keyframe is the lead's next picture.
+	var takeover, skipping bool
+	var skipTo, decEnd int64
+	var haveDec bool
 	allSync := true
 	split := gate != nil && gate.split
 
@@ -1069,6 +1127,21 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				frag := append(append([]byte{}, moof...), box...)
 				moof = nil
 				shiftTracks(frag, shifts)
+				if skipping {
+					dec, _, ok := fragmentDecode(frag, track, scale)
+					if !ok || ptsDiff(dec, skipTo) < -spliceSlack || !fragmentIndependent(frag, track) {
+						break
+					}
+					skipping = false
+					// The lead already played the opening; this is mid-stream.
+					leadIn, leadFloor = false, -1
+					if gap := ptsDiff(dec, skipTo); gap <= spliceSlack {
+						handover = false
+						slog.Info(fmt.Sprintf("pack %s: sound joins the picture on its next keyframe", dir))
+					} else {
+						slog.Warn(fmt.Sprintf("pack %s: the encode with sound takes over %.3fs after the lead's last picture", dir, float64(gap)/90000))
+					}
+				}
 				if _, ok := fragmentPTS(frag, track, scale); (leadIn || leadFloor >= 0) && ok {
 					floor := leadFloor
 					if leadIn {
@@ -1081,6 +1154,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 					if gone {
 						leadFloor = picture
 					}
+				}
+				if _, end, ok := fragmentDecode(frag, track, scale); ok {
+					decEnd, haveDec = end, true
 				}
 				if err := take(frag); err != nil {
 					return err
@@ -1098,9 +1174,14 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 						fresh = true
 						reinit = nil
 						// Players keep init.mp4. A new encode that describes its
-						// streams differently needs a new playlist.
-						if !bytes.Equal(next, init) {
+						// streams differently needs a new playlist. A lead's
+						// silence names no language; the sound it stood in for may.
+						if !bytes.Equal(next, init) && !(takeover && sameMedia(next, init)) {
 							return fmt.Errorf("pack: the next encode's header differs")
+						}
+						if takeover && haveDec {
+							skipping = true
+							skipTo = ((decEnd+prevStart-encStart)%ptsWrap + ptsWrap) % ptsWrap
 						}
 						shifts = nextShifts
 						scales = trackScales(next)
@@ -1137,6 +1218,10 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if errors.Is(err, errNextEncode) {
 			buf, moof, reinit = buf[:0], nil, nil
 			handover = true
+			takeover, skipping = false, false
+			if t, ok := r.(interface{ takingOver() bool }); ok {
+				takeover = t.takingOver()
+			}
 			continue
 		}
 		if err != nil {
