@@ -1426,11 +1426,12 @@ export interface paths {
         /**
          * @description The secure name on the home network: `lan.<label>.direct.wolfeup.com`, pointed
          *     at this server's home address with a Let's Encrypt certificate, served with
-         *     HTTP/2 on its own port (8443 by default). Nothing to set up. Off by default for now
-         *     (`BROADWAVE_DIRECT=1` turns it on) until the packager makes sub-second parts.
+         *     HTTP/2 on its own port (8443 by default). Nothing to set up; `BROADWAVE_DIRECT=0`
+         *     turns it off. Over it Apple players get low-latency HLS (sub-second parts and a
+         *     preload hint), about three seconds closer to live than over plain HTTP.
          *     Requests by this name are home requests, like the server's address.
          *     `state` is `off`, `starting`, `ready`, `error`, or `unavailable` (the server
-         *     was started without `BROADWAVE_DIRECT=1`).
+         *     was started with `BROADWAVE_DIRECT=0`).
          */
         get: operations["getDirect"];
         /** @description Turns the secure name on or off. Off stops serving it at once and leaves `secureUrl` out of `/server`. */
@@ -4160,6 +4161,8 @@ export interface operations {
                     confirmLive?: boolean;
                     /** @description The sync room the player joins, for a player that starts on the room's frame. A new encode for a room that plays well behind live starts in the buffer at that frame, and the reply waits until the playlist holds it (a few seconds at most). */
                     room?: string;
+                    /** @description A name the client picks for this request. A page that leaves before it reads the answer stops the viewer this watch may have counted by sending the same ticket to /watch/{id}/stop. */
+                    ticket?: string;
                 };
             };
         };
@@ -4231,6 +4234,13 @@ export interface operations {
                      *     process is ignored: that process and its viewers are gone.
                      */
                     boot?: string;
+                    /**
+                     * @description The `ticket` of a watch whose answer this page never read. It releases
+                     *     the viewer that watch counted on this channel, or, when the watch has
+                     *     not counted one yet, makes it release its viewer as soon as it does.
+                     *     `rendition` and `boot` are not read with it.
+                     */
+                    ticket?: string;
                 };
             };
         };

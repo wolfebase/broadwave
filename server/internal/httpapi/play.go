@@ -36,6 +36,9 @@ type watchBody struct {
 	ConfirmLive bool       `json:"confirmLive"`
 	// Room is the sync room a player that starts on the room's frame joins.
 	Room string `json:"room"`
+	// Ticket names this request, so a page that leaves before reading the
+	// answer can stop the viewer it may have been counted as.
+	Ticket string `json:"ticket"`
 }
 
 // decide picks the rendition a watch plays: the one the player named, or the
@@ -145,6 +148,19 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		watchError(w, err)
 		return
 	}
+	// The viewer this request counted, released once: here or by the page's
+	// stop by ticket, whichever comes first.
+	counted, key0 := session.ChannelID, session.Rendition
+	release := func() {
+		if s.tickets.take(body.Ticket) {
+			s.Hub.Release(counted, key0)
+		}
+	}
+	if !s.tickets.count(body.Ticket, counted, key0) {
+		// The page stopped this watch before it was counted.
+		s.Hub.Release(counted, key0)
+		return
+	}
 	session.Stream.Reason = decision.Reason
 	if ch, err := s.Store.SourceChannel(r.Context(), body.ChannelID); err == nil && ch.PlaysAs != 0 {
 		session.Stream.Reason = "The 3.0 version is encrypted. Showing the regular broadcast."
@@ -152,12 +168,12 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	// The viewer is counted before a segment exists. A channel change closes
 	// this request; waiting out the deadline would keep that tuner.
 	if r.Context().Err() != nil {
-		s.Hub.Release(session.ChannelID, session.Rendition)
+		release()
 		return
 	}
 	state := waitServable(r.Context(), s.Hub, session.ChannelID, session.Rendition, servableWait)
 	if r.Context().Err() != nil || state != startServable {
-		s.Hub.Release(session.ChannelID, session.Rendition)
+		release()
 		switch {
 		case r.Context().Err() != nil:
 		case state == startDark:
@@ -180,7 +196,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	if inRoom && s.Hub.FromBuffer(session.ChannelID, session.Rendition) {
 		waitFrame(r.Context(), s.Hub, session.ChannelID, session.Rendition, room, roomFrameWait)
 		if r.Context().Err() != nil {
-			s.Hub.Release(session.ChannelID, session.Rendition)
+			release()
 			return
 		}
 	}
@@ -207,7 +223,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	// after the first segment already exists, so the player cannot start.
 	writeJSON(w, http.StatusOK, watchReply{Session: session, Boot: s.boot()})
 	if r.Context().Err() != nil {
-		s.Hub.Release(session.ChannelID, session.Rendition)
+		release()
 	}
 }
 
@@ -267,8 +283,20 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Rendition string `json:"rendition"`
 		Boot      string `json:"boot"`
+		Ticket    string `json:"ticket"`
 	}
 	_ = decodeJSON(r, &body)
+	// A page that left before reading its watch answer names the request.
+	// Tickets live in this process, so no boot check applies.
+	if body.Ticket != "" {
+		if s.Hub != nil {
+			if key, ok := s.tickets.stop(body.Ticket, id); ok {
+				s.Hub.Release(id, key)
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
 	// A watch counted by a process that has since restarted is gone with it.
 	// Releasing by rendition here would take someone else's viewer.
 	if s.Hub != nil && (body.Boot == "" || body.Boot == s.boot()) {
@@ -1187,23 +1215,25 @@ func decodeJSON(r *http.Request, dest any) error {
 // most a target duration, four seconds on a station with long groups.
 var partWait = 6 * time.Second
 
-// lowLatencyHints sends EXT-X-PRELOAD-HINT to HTTP/2 clients
-// (BROADWAVE_LL_HINTS=1). Off by default: the hint puts AVPlayer in
-// low-latency mode, and with this packager's parts (one keyframe group each,
-// about a second, so a segment is usually a single part and PART-TARGET is
-// near the target duration) AVPlayer often loads the first two seconds and
-// then waits at its live edge for good. Real low latency needs parts well
-// under a second, several to a segment.
-var lowLatencyHints = os.Getenv("BROADWAVE_LL_HINTS") == "1"
+// lowLatencyHints sends EXT-X-PRELOAD-HINT to HTTP/2 clients, which is what
+// puts AVPlayer in low-latency mode: on Apple TV it plays about 1.4 s from the
+// newest part instead of the six-second hold-back. BROADWAVE_LL_HINTS=0 turns
+// it off, and AVPlayer plays the segments as it does over HTTP/1.1.
+var lowLatencyHints = os.Getenv("BROADWAVE_LL_HINTS") != "0"
 
 // preloadFor keeps EXT-X-PRELOAD-HINT only for HTTP/2 clients, and only with
 // lowLatencyHints. AVPlayer's low-latency mode needs both; a browser on
 // HTTP/1.1 would spend one of its six connections holding each hinted part.
 func preloadFor(r *http.Request, body []byte) []byte {
-	if r.ProtoMajor >= 2 && lowLatencyHints {
+	if hinted(r) {
 		return body
 	}
 	return live.StripPreloadHint(body)
+}
+
+// hinted reports whether this request's playlists keep the preload hint.
+func hinted(r *http.Request) bool {
+	return r.ProtoMajor >= 2 && lowLatencyHints
 }
 
 // blockReload reads an LL-HLS blocking playlist request. A missing part waits
@@ -1253,7 +1283,10 @@ func (s startState) String() string {
 
 // waitServable returns once the playlist has a segment a player can fetch.
 // A playlist that lists only parts is not enough: hls.js treats that as empty
-// and waits out its retry. The first part still anchors the clock while this waits.
+// and waits out its retry, and AVPlayer in low-latency mode reads the captions
+// playlist, which lists whole segments only: with none it has no date, and
+// AVPlayer falls back to three target durations behind live for good
+// (CoreMedia -15412). The first part still anchors the clock while this waits.
 // A cancelled watch returns immediately so the handler can drop that viewer.
 // It reports startDark, and stops waiting, when the tuner has sent nothing for
 // darkAfter and says it has no lock: that channel is not coming in. It

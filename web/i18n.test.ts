@@ -232,6 +232,6 @@ test("a recording count of one uses the catalog plural", () => {
   }
   assert.match(view, /"Delete \\\(chosen\.count\) files\?"/);
   assert.match(view, /Button\("Delete \\\(chosen\.count\) files"/);
-  assert.match(view, /"Plays \\\(channel\.recordings\.count\) recordings in turn\. Uses no tuner\."/);
+  assert.match(view, /"Plays \\\((?:count|channel\.recordings\.count)\) recordings in turn\. Uses no tuner\."/);
   assert.match(view, /"\\\(chosen\.count\) selected"/);
 });

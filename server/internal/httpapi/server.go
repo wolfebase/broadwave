@@ -34,6 +34,8 @@ import (
 type Server struct {
 	// scans holds the base URL of each tuner this server asked to scan until a status read sees it finish.
 	scans sync.Map
+	// tickets are the watch requests a leaving page can stop by name.
+	tickets ticketBook
 
 	Store   *store.Store
 	HDHR    *hdhr.Client

@@ -129,6 +129,35 @@ test("a page kept for Back lets its watch go and watches again", async ({ page }
   await page.screenshot({ path: path.join(evidence, "back.jpg") });
 });
 
+// A start holds its retry flag until play() settles, and play() can stay
+// pending on a playing picture (a synced start the room holds). The hide let
+// that watch go, so pageshow has to start one anyway: it used to wait on the
+// flag, and Back left the page on the tuning card with no viewer.
+test("a page kept for Back watches again when its start had not settled", async ({ page }) => {
+  const diag = (await (await fetch(`${base}/api/v1/diagnostics`)).json()) as { encoder?: { tiles?: number } };
+  test.skip((diag.encoder?.tiles ?? 0) < 2, "needs two pictures");
+  expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
+  await page.addInitScript(() => {
+    const play = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      void play.call(this).catch(() => undefined);
+      return new Promise<void>(() => undefined);
+    };
+  });
+
+  await page.goto("/watch?channel=1");
+  await expect.poll(viewers, { timeout: 30_000, message: "one viewer on the channel" }).toBe(1);
+  await expect.poll(() => pictureMoving(page), { timeout: 20_000, message: "the channel is playing" }).toBe(true);
+
+  await page.goto("/multiview?ch=1,3&layout=2up&focus=1");
+  await expect.poll(viewers, { timeout: 30_000, message: "the kept page let its viewer go" }).toBe(2);
+  await expect.poll(() => tilesMoving(page), { timeout: 30_000, message: "both tiles are playing" }).toBe(2);
+
+  await page.goBack({ waitUntil: "commit" });
+  await expect.poll(viewers, { timeout: 5_000, message: "one viewer after Back" }).toBe(1);
+  await expect.poll(() => pictureMoving(page), { timeout: 25_000, message: "the channel is playing again" }).toBe(true);
+});
+
 // Side by side was one page with one watch. A quad is one page with a watch
 // per tile. Leaving has to stop all of them, and Back has to start all of them.
 test("a quad kept for Back lets every tile go and watches again", async ({ page }) => {

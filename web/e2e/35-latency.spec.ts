@@ -83,7 +83,7 @@ test("each Live delay plays at its distance from live", async ({ page }, info) =
     // A drift just past the trim band once kept Chrome trimming for good at Lowest: 5 % dropped.
     expect(dropped / frames, lines.at(-1)).toBeLessThan(0.03);
   }
-  await page.goto("/settings");
+  await page.goto("/settings/playback");
   await settle(page);
   const setting = page.getByRole("group", { name: "Live delay" });
   // The last pick in Options is this device's default now.

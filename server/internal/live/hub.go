@@ -1287,7 +1287,7 @@ func (h *Hub) releaseIdlePicturesLocked(asking *feed, now time.Time, need int) {
 		}
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].seen.Before(list[j].seen) })
-	defer h.releaseIdleMosaicsLocked(now, need)
+	defer h.releaseIdleMosaicsLocked(asking, now, need)
 	for _, item := range list {
 		if h.Host.Tiles > 0 && h.transcodesLocked()+need <= h.Host.Tiles {
 			return
