@@ -11,7 +11,7 @@ import { actionName } from "../../lib/actionName";
 import { cappedCss } from "../../lib/art";
 import { categoryOf, dayLabel, minutesLeft, searchRows, spanLabel, timeLabel } from "../../lib/guide";
 import { noteTone, searchFieldValue } from "./field";
-import { groupByShow, type ShowGroup } from "./groups";
+import { groupByShow, seriesChannelId, type ShowGroup } from "./groups";
 import type { Recording, SearchAiring } from "../../types";
 import { PlayIcon, RecordIcon, SearchIcon } from "../../ui/icons";
 import { Atsc3Tag, Empty } from "../../ui/primitives";
@@ -144,7 +144,7 @@ export function SearchPage() {
             </button>
           ) : null}
           {leadChannel ? (
-            <button type="button" className="btn" disabled={series} aria-label={actionName(series ? t("search.seriesSet") : everyLabel, g.title)} onClick={() => void recordSeries(g.title, leadChannel)}>
+            <button type="button" className="btn" disabled={series} aria-label={actionName(series ? t("search.seriesSet") : everyLabel, g.title)} onClick={() => void recordSeries(g.title, seriesChannelId(g, leadChannel.id))}>
               {series ? t("search.seriesSet") : everyLabel}
             </button>
           ) : null}

@@ -17,6 +17,8 @@ export const shellMessages = {
   "shell.notFoundBody": "The link may be old. Here's where to go next.",
   "shell.offlineSaved": "Can't reach the server. Showing what was saved at {time}.",
   "shell.offline": "Can't reach the server. Trying again.",
+  "shell.offlineShort": "Offline",
+  "shell.offlineShortSaved": "Offline · saved {time}",
   "shell.booting": "Finding your tuner…",
   "shell.releaseNotes": "Release notes",
   "shell.notNow": "Not now",

@@ -90,3 +90,26 @@ test("a TV remote keeps a visible ring on the guide and the mini player", async 
   expect(ring).not.toBe(rest);
   expect(ring).toContain("61, 123, 255");
 });
+
+test("an empty Recordings page starts on Open the guide, and a key press keeps its place", async ({ page }) => {
+  await tvRemote(page);
+  expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBeTruthy();
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  // The list arrives after the shell has already put focus on the first button it found.
+  await page.route("**/api/v1/recordings", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await new Promise((done) => setTimeout(done, 600));
+    await route.fulfill({ json: { recordings: [] } });
+  });
+  await page.goto("/recordings");
+  await expect(page.getByRole("heading", { name: "No recordings yet" })).toBeVisible();
+  await expect.poll(async () => (await focused(page)).label).toBe("Open the guide");
+
+  await page.goto("/recordings");
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Recordings", exact: true }).evaluate((el) => (el as HTMLElement).focus({ focusVisible: true }));
+  await page.keyboard.press("Tab");
+  const landed = (await focused(page)).label;
+  await expect(page.getByRole("heading", { name: "No recordings yet" })).toBeVisible();
+  await page.waitForTimeout(1000);
+  expect((await focused(page)).label).toBe(landed);
+});
