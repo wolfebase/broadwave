@@ -34,9 +34,18 @@ html:root[data-layout="tv"] section.mv:focus-visible {
 
 .mv-top h1 {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
   font-size: 1rem;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+.mv-top .btn { flex: none; }
+
+/* On a phone the bottom bar already names the layout; the buttons need the row. */
+.layout-phone .mv-top h1 { display: none; }
 
 .mv-spacer { flex: 1; }
 
@@ -274,6 +283,12 @@ html:root[data-layout="tv"] section.mv:focus-visible {
   font-size: 2.4rem;
   font-weight: 300;
   line-height: 1;
+}
+
+.mv-add-note {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .mv-add:hover {

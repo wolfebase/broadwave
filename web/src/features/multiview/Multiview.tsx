@@ -530,11 +530,10 @@ export function Multiview() {
         </p>
       ) : null}
       {banner ? <p className="mv-banner" role="status">{banner}</p> : null}
-      {hint ? <p className="mv-note" role="status">{t("mv.hint")}</p> : null}
+      {hint && ordered.length > 1 ? <p className="mv-note" role="status">{t("mv.hint")}</p> : null}
       {notice ? <p className="mv-note" role="status">{notice}</p> : null}
       <div className="mv-fit">
       <div className={`mv-grid${layoutMode === "phone" && layout === "2up" ? " stacked" : ""}`} data-layout={layout}>
-        {waiting ? null : ordered.length === 0 ? <p className="mv-empty">{t("mv.pickTwo")}</p> : null}
         {ordered.map((channel) => (
           <Tile
             key={channel.id}
@@ -569,6 +568,7 @@ export function Multiview() {
               }}
             >
               <span aria-hidden="true">+</span> {t("mv.addChannel")}
+              {ordered.length === 0 ? <small className="mv-add-note">{t("mv.pickTwo")}</small> : null}
             </button>
           </div>
         ) : null}
