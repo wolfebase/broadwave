@@ -295,10 +295,22 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
 }
 
 .gc-logo {
-  width: 28px;
-  height: 18px;
+  box-sizing: border-box;
+  width: 34px;
+  height: 22px;
+  padding: 2px 3px;
   object-fit: contain;
   flex: none;
+  border-radius: 5px;
+}
+
+/* A white logo vanishes on the light theme and a black one on the dark theme. */
+html[data-theme="light"] .gc-logo[data-tone="light"] {
+  background: #2a3242;
+}
+
+html[data-theme="dark"] .gc-logo[data-tone="dark"] {
+  background: rgb(255 255 255 / 0.88);
 }
 
 .gc-fav {
