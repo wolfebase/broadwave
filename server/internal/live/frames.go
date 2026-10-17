@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -21,12 +22,21 @@ const (
 	// A grab waits for the next keyframe, which can be a couple of seconds
 	// away. -skip_frame nokey does not decode the frames in between, so the
 	// wait is not a busy core. Anything longer is stopped.
-	frameGrabLimit = 4 * time.Second
+	frameGrabLimit = 6 * time.Second
 	// Every program on a mux waits for its own keyframe, so the grab ends on
-	// the slowest one: five programs on one 1.0 mux took 3.8-4.8 s.
-	frameGrabPerProgram = time.Second
-	frameGrabMax        = 10 * time.Second
+	// the slowest one: five programs on one 1.0 mux took 3.8-4.8 s, one of
+	// them 4 s after the rest, and five and six were killed at 8 and 9 s.
+	frameGrabPerProgram = 1500 * time.Millisecond
+	frameGrabMax        = 16 * time.Second
+	// frameRetries is how many times a grab tries again, frameRetry apart,
+	// for the channels it missed before the next FrameEvery. A guide scan
+	// holds a frequency for 40 s and its tune is gone by the next minute.
+	frameRetries = 3
 )
+
+// frameFirst is the wait from a tune to its first grab; frameRetry is
+// the wait before a grab tries again for the channels it missed.
+var frameFirst, frameRetry = 2 * time.Second, 4 * time.Second
 
 // grabLimit is how long a grab for these jobs may run.
 func grabLimit(jobs []FrameJob) time.Duration {
@@ -141,22 +151,33 @@ func (h *Hub) startFrames(ctx context.Context, m *mux) {
 }
 
 func (h *Hub) watchFrames(ctx context.Context, m *mux) {
-	timer := time.NewTimer(2 * time.Second)
+	timer := time.NewTimer(frameFirst)
 	defer timer.Stop()
 	var last time.Time
+	// missing are the channels the last grab did not get, tried again soon.
+	var missing []int64
+	tries := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case now := <-timer.C:
-			if FrameDue(last, now) {
-				if err := h.grabFrames(ctx, m); err != nil {
+			next := FrameEvery
+			if FrameDue(last, now) || len(missing) > 0 {
+				left, err := h.grabFramesOf(ctx, m, missing)
+				switch {
+				case err == nil:
+					last, missing, tries = now, nil, 0
+				case tries < frameRetries && ctx.Err() == nil:
+					tries++
+					missing = left
+					next = frameRetry
+				default:
 					slog.Warn(fmt.Sprintf("frames freq %d: %v", m.freq, err))
-				} else {
-					last = now
+					last, missing, tries = now, nil, 0
 				}
 			}
-			timer.Reset(FrameEvery)
+			timer.Reset(next)
 		}
 	}
 }
@@ -191,30 +212,52 @@ func (h *Hub) frameJobs(m *mux) []FrameJob {
 }
 
 func (h *Hub) grabFrames(ctx context.Context, m *mux) error {
+	_, err := h.grabFramesOf(ctx, m, nil)
+	return err
+}
+
+// grabFramesOf grabs the mux's channels, only those in only when it is not
+// empty, and reports the ones it did not get.
+func (h *Hub) grabFramesOf(ctx context.Context, m *mux, only []int64) ([]int64, error) {
 	jobs := h.frameJobs(m)
+	if len(only) > 0 {
+		jobs = slices.DeleteFunc(jobs, func(j FrameJob) bool { return !slices.Contains(only, j.ChannelID) })
+	}
 	if len(jobs) == 0 {
-		return nil
+		return nil, nil
 	}
 	dir := filepath.Join(h.Dir, "frames")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+		return nil, err
 	}
 	grabCtx, cancel := context.WithTimeout(ctx, grabLimit(jobs))
 	defer cancel()
 	pr, pw := io.Pipe()
 	sub := h.attachPipeLocked(m, pw)
 	defer m.detach(sub)
-	// Wait does not return until the stdin copy finishes. Closing the pipe
-	// when the grab ends unblocks that copy if the mux has gone quiet.
+	// Closing the pipe when the grab ends unblocks the copy below if the
+	// mux has gone quiet.
 	go func() {
 		<-grabCtx.Done()
 		_ = pw.Close()
 	}()
 	cmd := exec.CommandContext(grabCtx, h.FFmpeg, FrameArgs(jobs, dir)...)
-	cmd.Stdin = pr
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
-	err := cmd.Run()
+	// The copy into ffmpeg is ours, not exec's: an ffmpeg that has written
+	// every still and exited is done, without a wait for the next read.
+	stdin, err := cmd.StdinPipe()
+	if err == nil {
+		err = cmd.Start()
+	}
+	if err == nil {
+		go func() {
+			_, _ = io.Copy(stdin, pr)
+			_ = stdin.Close()
+		}()
+		err = cmd.Wait()
+	}
+	_ = pr.Close()
 	var missing []int64
 	for _, job := range jobs {
 		if job.ChannelID > 0 && !publishFrame(dir, job.ChannelID) {
@@ -223,12 +266,12 @@ func (h *Hub) grabFrames(ctx context.Context, m *mux) error {
 	}
 	// ffmpeg can be stopped after the last still is written; that grab worked.
 	if len(missing) == 0 {
-		return nil
+		return nil, nil
 	}
 	if err == nil {
 		err = errors.New("no keyframe")
 	}
-	return fmt.Errorf("channels %v: %w", missing, err)
+	return missing, fmt.Errorf("channels %v: %w", missing, err)
 }
 
 // publishFrame reports whether every size landed.
