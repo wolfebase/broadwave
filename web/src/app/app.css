@@ -183,6 +183,27 @@ main.content:focus {
   color: var(--color-warning);
 }
 
+.offline-short {
+  display: none;
+  white-space: nowrap;
+}
+
+/* A tablet-width bar has no room for the sentence beside the tabs. Screen readers still get it. */
+@media (max-width: 1100px) {
+  .layout-desktop .offline-full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .layout-desktop .offline-short {
+    display: inline;
+  }
+}
+
 .content {
   flex: 1;
   min-height: 0;

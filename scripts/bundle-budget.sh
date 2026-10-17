@@ -50,13 +50,17 @@
 # stale guide), Safari on iPhone gets a Home Screen hint whose check runs
 # before the app loads, and accent and red fills under white text are darkened
 # to 4.5:1. Measured entry gzip JS 101790 and CSS 13408, plus 300 and 200 bytes.
+# JS raised 2026-10-16: guide logos are read once for a light or dark plate, TV
+# start focus waits for the page and yields to the viewer's keys, the remote
+# skips the skip link, and the top bar has a short offline note. The guide and
+# shell load up front. Measured entry gzip 102563, plus 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=102090
+JS_GZIP_MAX=102863
 CSS_GZIP_MAX=13608
 
 if [[ ! -f "$INDEX" ]]; then
