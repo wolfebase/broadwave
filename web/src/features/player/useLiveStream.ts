@@ -530,7 +530,10 @@ export function useLiveStream(
     };
     const onShow = (event: PageTransitionEvent) => {
       if (!event.persisted || dead) return;
-      if (retrying.current) return;
+      // The hide let this watch go: a start still on its way was given up, and
+      // one answered but not yet playing was stopped. Either can still hold the
+      // retry flag when the page comes back, and neither will play.
+      if (retrying.current && !leaving && !released) return;
       retrying.current = true;
       quietRetry.current = id;
       pageKept.current = true;
