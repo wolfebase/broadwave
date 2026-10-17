@@ -191,11 +191,11 @@ func TestSearchNamesTheShowBeforeAMention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hits) < 2 || hits[0].GuideNumber != "4.1" || hits[0].Title != "Quiz Night" || hits[1].Title != "Quiz Night" {
-		t.Fatalf("hits %+v", titles(hits))
+	if len(hits) != perShow+1 || hits[0].GuideNumber != "4.1" || hits[perShow].Title != "Wolves" {
+		t.Fatalf("the show's airings, then the mention: %+v", titles(hits))
 	}
-	for _, hit := range hits {
-		if hit.GuideNumber == "4.2" || hit.Title == "Wolves" {
+	for _, hit := range hits[:perShow] {
+		if hit.GuideNumber == "4.2" || hit.Title != "Quiz Night" {
 			t.Fatalf("hidden channel or a mention sorted in: %+v", titles(hits))
 		}
 	}
@@ -210,8 +210,60 @@ func TestSearchNamesTheShowBeforeAMention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(capped) != 40 {
-		t.Fatalf("default cap %d", len(capped))
+	if len(capped) != perShow+1 {
+		t.Fatalf("one show and a mention returned %v, want %d airings of the show", titles(capped), perShow)
+	}
+}
+
+// A two-week guide: a word every news hour matches must not hide the one show
+// that mentions it next week, and each show still comes back soonest first.
+func TestSearchReachesTheWholeGuide(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if err := s.UpsertDevice(ctx, hdhr.Device{DeviceID: "D", FriendlyName: "Duo", BaseURL: "http://127.0.0.1", TunerCount: 2}, []hdhr.Channel{
+		{GuideNumber: "4.1", GuideName: "Harbor"},
+		{GuideNumber: "4.2", GuideName: "Cedar"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := byNumber(t, s, ctx)
+	harbor, cedar := got["4.1"][0], got["4.2"][0]
+	now := time.Date(2026, 10, 9, 18, 0, 0, 0, time.UTC)
+	var rows []Airing
+	for h := range 14 * 24 {
+		at := now.Add(time.Duration(h) * time.Hour)
+		rows = append(rows, Airing{ChannelID: harbor.ID, Title: "Harbor News", Description: "Weather and sports", Start: at, End: at.Add(time.Hour)})
+	}
+	late := now.Add(9 * 24 * time.Hour)
+	rows = append(rows,
+		Airing{ChannelID: cedar.ID, Title: "Sanford and Son", Start: late, End: late.Add(30 * time.Minute)},
+		Airing{ChannelID: cedar.ID, Title: "Weather Week", Start: late.Add(24 * time.Hour), End: late.Add(25 * time.Hour)},
+		Airing{ChannelID: cedar.ID, Title: "Big Game", Subtitle: "Cedar at Harbor", GameID: "g1", Description: "Weather permitting", Start: late, End: late.Add(3 * time.Hour)},
+		Airing{ChannelID: cedar.ID, Title: "Big Game", Subtitle: "Pine at Oak", GameID: "g2", Description: "Weather permitting", Start: late.Add(time.Hour), End: late.Add(4 * time.Hour)},
+	)
+	if err := s.ReplaceAirings(ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	hits, _, err := s.Search(ctx, "sanford", now, 40)
+	if err != nil || len(hits) != 1 || !hits[0].Start.Equal(late) {
+		t.Fatal(err, titles(hits))
+	}
+	hits, _, err = s.Search(ctx, "weather", now, 40)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := map[string]int{}
+	for i, hit := range hits {
+		count[hit.Title]++
+		if i > 0 && hit.Title == hits[i-1].Title && hit.Start.Before(hits[i-1].Start) {
+			t.Fatalf("not soonest first: %v", titles(hits))
+		}
+	}
+	if hits[0].Title != "Weather Week" || count["Weather Week"] != 1 {
+		t.Fatalf("the show named by the word leads: %v", titles(hits))
+	}
+	if count["Harbor News"] != perShow || count["Big Game"] != 2 {
+		t.Fatalf("each show capped, each game its own: %v", count)
 	}
 }
 

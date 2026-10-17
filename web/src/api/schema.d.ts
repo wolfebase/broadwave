@@ -551,9 +551,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * @description Listings that have not ended, on the channels the guide shows (one row per channel when
-         *     two tuners carry it): shows whose title has the words first, then the rest, each on now
-         *     first and then by start time; and matching recordings.
+         * @description Listings that have not ended, from every day the guide has, on the channels the guide shows
+         *     (one row per channel when two tuners carry it): shows whose title has the words first, then
+         *     the rest, each on now first and then by start time, with at most six airings of one show (a
+         *     game is its own show) and 60 in all; and matching recordings.
          */
         get: operations["search"];
         put?: never;

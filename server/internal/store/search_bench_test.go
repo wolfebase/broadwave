@@ -38,7 +38,7 @@ func BenchmarkSearch(b *testing.B) {
 	b.Run("Word", func(b *testing.B) {
 		for b.Loop() {
 			hits, _, err := st.Search(ctx, "bulletin", from, 20)
-			if err != nil || len(hits) != 20 {
+			if err != nil || len(hits) != perShow {
 				b.Fatal(err, len(hits))
 			}
 		}

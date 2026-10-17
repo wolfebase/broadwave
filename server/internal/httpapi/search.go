@@ -13,8 +13,9 @@ import (
 func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	// Listings that already ended are left out: what is on now comes first,
-	// then what starts next. Recordings cover what aired.
-	airings, recordings, err := s.Store.Search(r.Context(), query, s.now(), 40)
+	// then what starts next, across every listing the guide has. Recordings
+	// cover what aired.
+	airings, recordings, err := s.Store.Search(r.Context(), query, s.now(), 60)
 	if err != nil {
 		writeError(w, err)
 		return

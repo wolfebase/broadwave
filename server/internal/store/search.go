@@ -22,7 +22,7 @@ func (s *Store) Search(ctx context.Context, query string, from time.Time, limit 
 	if match == "" {
 		return []AiringHit{}, []Recording{}, nil
 	}
-	if limit <= 0 || limit > 50 {
+	if limit <= 0 || limit > 100 {
 		limit = 40
 	}
 	airings, err := s.searchAirings(ctx, match, titleMatch(query), from, limit)
@@ -76,19 +76,19 @@ func (s *Store) searchAirings(ctx context.Context, match, title string, from tim
 	// description is not sorted ahead of the shows it names.
 	slack := limit + len(standIn)*4
 	fromArg := from.UTC().Format(time.RFC3339)
-	var hits []AiringHit
-	if title != "" {
-		hits, err = s.querySearchHits(ctx, searchTitleSQL, title, fromArg, string(channels), slack)
+	if title == "" {
+		hits, err := s.pickPerShow(ctx, slack, searchTitleSQL, match, fromArg, string(channels))
 		if err != nil {
 			return nil, err
 		}
+		return withoutTwinRepeats(hits, standIn, limit), nil
+	}
+	hits, err := s.pickPerShow(ctx, slack, searchTitleSQL, title, fromArg, string(channels))
+	if err != nil {
+		return nil, err
 	}
 	if len(hits) < slack {
-		seen, err := json.Marshal(hitIDs(hits))
-		if err != nil {
-			return nil, err
-		}
-		rest, err := s.querySearchHits(ctx, searchRestSQL, match, fromArg, string(channels), string(seen), slack-len(hits))
+		rest, err := s.pickPerShow(ctx, slack-len(hits), searchRestSQL, match, fromArg, string(channels), title)
 		if err != nil {
 			return nil, err
 		}
@@ -101,22 +101,71 @@ const searchHitColumns = `a.id, a.channel_id, a.title, a.subtitle, a.description
 	a.program_id, a.is_new, a.image_url, a.image_width, a.image_height, a.season, a.episode, a.episode_label, a.original_air, a.series_id,
 	a.is_live, a.is_premiere, a.is_finale, a.rating, a.cast_list, a.game_id, c.guide_number, c.guide_name`
 
-const searchFrom = `
+// perShow is how many airings of one show a search returns. A two-week guide
+// lists a daily show fourteen times and a news word matches hundreds of
+// listings; without a cap the next few hours fill the results and a show on
+// next week never appears. A game is its own show.
+const perShow = 6
+
+const searchWhere = `
 FROM airing_search
 JOIN airings a ON a.id = airing_search.rowid
-JOIN channels c ON c.id = a.channel_id
 WHERE airing_search MATCH ?
   AND a.ends_at > ?
   AND a.channel_id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))`
 
-const searchTitleSQL = `SELECT ` + searchHitColumns + searchFrom + `
-ORDER BY a.starts_at, a.id
-LIMIT ?`
+// The pick reads only what it counts by, soonest first, and stops when it has
+// enough; the full rows are read for the ones kept.
+const searchTitleSQL = `SELECT a.id, a.title, a.game_id` + searchWhere + `
+ORDER BY a.starts_at, a.id`
 
-const searchRestSQL = `SELECT ` + searchHitColumns + searchFrom + `
-  AND a.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
-ORDER BY a.starts_at, a.id
-LIMIT ?`
+const searchRestSQL = `SELECT a.id, a.title, a.game_id` + searchWhere + `
+  AND a.id NOT IN (SELECT rowid FROM airing_search WHERE airing_search MATCH ?)
+ORDER BY a.starts_at, a.id`
+
+const searchRowsSQL = `SELECT ` + searchHitColumns + `
+FROM airings a
+JOIN channels c ON c.id = a.channel_id
+WHERE a.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+ORDER BY a.starts_at, a.id`
+
+// pickPerShow keeps the soonest perShow airings of each show, up to want in all.
+func (s *Store) pickPerShow(ctx context.Context, want int, sqlText string, args ...any) ([]AiringHit, error) {
+	rows, err := s.db.QueryContext(ctx, sqlText, args...)
+	if err != nil {
+		return nil, err
+	}
+	type show struct{ title, game string }
+	count := map[show]int{}
+	var ids []int64
+	for len(ids) < want && rows.Next() {
+		var id int64
+		var key show
+		if err := rows.Scan(&id, &key.title, &key.game); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		key.title = strings.ToLower(key.title)
+		if count[key] == perShow {
+			continue
+		}
+		count[key]++
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	list, err := json.Marshal(ids)
+	if err != nil {
+		return nil, err
+	}
+	return s.querySearchHits(ctx, searchRowsSQL, string(list))
+}
 
 func (s *Store) querySearchHits(ctx context.Context, sqlText string, args ...any) ([]AiringHit, error) {
 	rows, err := s.db.QueryContext(ctx, sqlText, args...)
@@ -143,14 +192,6 @@ func (s *Store) querySearchHits(ctx context.Context, sqlText string, args ...any
 		out = append(out, hit)
 	}
 	return out, rows.Err()
-}
-
-func hitIDs(hits []AiringHit) []int64 {
-	ids := make([]int64, len(hits))
-	for i, hit := range hits {
-		ids[i] = hit.ID
-	}
-	return ids
 }
 
 // withoutTwinRepeats drops an encrypted station's listing when its clear twin
