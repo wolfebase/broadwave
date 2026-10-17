@@ -290,11 +290,16 @@ test("a remote reaches home, the guide, the player, multiview, settings, and rec
     await until(page, "ArrowRight", async () => labelIs(page, "Settings"), 10);
     await press(page, "Enter");
     await expect(page).toHaveURL(/\/settings$/);
-    await expect(page.getByRole("button", { name: "Diagnostics" })).toBeVisible();
-    await until(page, "ArrowDown", async () => page.evaluate(() => Boolean(document.activeElement?.closest("[aria-label='Picture motion']"))), 60);
+    // Settings is a list of sections; Motion is under Playback. The page loads on first
+    // visit, then puts the remote on its first row.
+    await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest("main")))).toBe(true);
+    await until(page, "ArrowDown", async () => page.evaluate(() => (document.activeElement?.textContent || "").trim().startsWith("Playback")), 12);
+    await press(page, "Enter");
+    await expect(page).toHaveURL(/\/settings\/playback$/);
+    await until(page, "ArrowDown", async () => page.evaluate(() => Boolean(document.activeElement?.closest("[role='radiogroup'][aria-label='Motion']"))), 30);
     await until(page, "ArrowLeft", async () => labelIs(page, "Broadcast"), 4);
     await press(page, "Enter");
-    await expect(page.locator("[aria-label='Picture motion'] .seg.on")).toHaveText("Broadcast");
+    await expect(page.getByRole("radiogroup", { name: "Motion" }).getByRole("radio", { name: "Broadcast" })).toHaveAttribute("aria-checked", "true");
     await page.screenshot({ path: path.join(evidence, "settings.jpg"), type: "jpeg", quality: 60 });
 
     const stopped = await page.request.post(`/api/v1/recordings/${recordingId}/stop`);
