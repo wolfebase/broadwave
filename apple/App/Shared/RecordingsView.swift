@@ -342,7 +342,7 @@ struct RecordingsView: View {
     private func libraryLine(_ count: Int) -> String {
         switch count {
         case 0: String(localized: "No recordings on it yet. Uses no tuner.")
-        case 1: String(localized: "Plays 1 recording. Uses no tuner.")
+        // The catalog's plural says "Plays 1 recording." for one.
         default: String(localized: "Plays \(count) recordings in turn. Uses no tuner.")
         }
     }
