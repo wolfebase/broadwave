@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"mime"
 	"net/http"
 	"os"
@@ -603,6 +604,50 @@ func (s *Server) poster(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	http.ServeFile(w, r, dest)
+}
+
+// recordingStill is one picture of a recording at a time in it, for chapter
+// cards. It is made from the file as recorded and kept until the recording
+// is removed, so one address is one picture.
+func (s *Server) recordingStill(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpError(w, "invalid recording", http.StatusBadRequest)
+		return
+	}
+	at, err := strconv.ParseFloat(r.URL.Query().Get("at"), 64)
+	if err != nil || at < 0 || math.IsInf(at, 0) || math.IsNaN(at) {
+		httpError(w, "at is the seconds from the start of the recording", http.StatusBadRequest)
+		return
+	}
+	width, _ := strconv.Atoi(r.URL.Query().Get("w"))
+	if s.Hub == nil || s.Hub.FFmpeg == "" || s.Store == nil {
+		httpError(w, "recording not found", http.StatusNotFound)
+		return
+	}
+	rec, err := s.Store.Recording(r.Context(), id)
+	if err != nil || rec.Path == "" {
+		httpError(w, "recording not found", http.StatusNotFound)
+		return
+	}
+	path, ok := recordingInside(s.downloadRoots(r.Context()), rec.Path)
+	if !ok {
+		httpError(w, "recording not found", http.StatusNotFound)
+		return
+	}
+	still, err := s.Hub.RecordingStill(r.Context(), id, path, at, width)
+	switch {
+	case errors.Is(err, live.ErrStillBusy):
+		w.Header().Set("Retry-After", "2")
+		httpError(w, "stills are busy; try again", http.StatusServiceUnavailable)
+		return
+	case err != nil:
+		httpError(w, "no picture at that time", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	http.ServeFile(w, r, still)
 }
 
 func (s *Server) backup(w http.ResponseWriter, r *http.Request) {

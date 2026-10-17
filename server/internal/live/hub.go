@@ -134,6 +134,8 @@ type Hub struct {
 	// in the recordings folder up to need bytes before a recording is refused.
 	// It reports how many bytes of recording files were actually removed.
 	MakeRoom func(ctx context.Context, need uint64) uint64
+	// stills makes recording stills (still.go).
+	stills stillMaker
 	// NoLead starts an AC-4 channel's picture with its sound, without the
 	// silent lead (BROADWAVE_SOUND_LEAD=0).
 	NoLead bool

@@ -1412,6 +1412,36 @@ paths:
               schema: { type: string, format: binary }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /recordings/{id}/still:
+    get:
+      tags: [recordings]
+      operationId: recordingStill
+      summary: One picture of a recording at a time in it, for chapter cards.
+      description: |
+        Made from the file as recorded (a seek to the keyframe before `at`, then a decode to
+        the picture), deinterlaced, and kept until the recording is removed, so the same
+        address is the same picture. Two are made at once; a request that waits too long
+        for its turn gets 503 with Retry-After.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - in: query
+          name: at
+          required: true
+          schema: { type: number, minimum: 0 }
+          description: Seconds from the start of the recording's file. Tenths of a second are one picture.
+        - in: query
+          name: w
+          schema: { type: integer }
+          description: The width wanted. The picture is the smallest of 240, 480, 960, 1280, and 1920 that is at least this wide (1920 past it); 480 when left out.
+      responses:
+        "200":
+          description: JPEG still
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /recordings/{id}/again:
     get:
       tags: [recordings]

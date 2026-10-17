@@ -479,6 +479,7 @@ func TestARecordingOutsideItsFoldersIsNotOpened(t *testing.T) {
 		{http.MethodPost, "/api/recordings/" + ids + "/play"},
 		{http.MethodGet, "/media/poster/" + ids},
 		{http.MethodGet, "/api/recordings/" + ids + "/file"},
+		{http.MethodGet, "/api/recordings/" + ids + "/still?at=1"},
 	} {
 		req := httptest.NewRequest(c.method, c.path, bytes.NewBufferString(`{}`))
 		rec := httptest.NewRecorder()

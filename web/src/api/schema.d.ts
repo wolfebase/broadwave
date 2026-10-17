@@ -920,6 +920,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recordings/{id}/still": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One picture of a recording at a time in it, for chapter cards.
+         * @description Made from the file as recorded (a seek to the keyframe before `at`, then a decode to
+         *     the picture), deinterlaced, and kept until the recording is removed, so the same
+         *     address is the same picture. Two are made at once; a request that waits too long
+         *     for its turn gets 503 with Retry-After.
+         */
+        get: operations["recordingStill"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recordings/{id}/again": {
         parameters: {
             query?: never;
@@ -4780,6 +4803,36 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+        };
+    };
+    recordingStill: {
+        parameters: {
+            query: {
+                /** @description Seconds from the start of the recording's file. Tenths of a second are one picture. */
+                at: number;
+                /** @description The width wanted. The picture is the smallest of 240, 480, 960, 1280, and 1920 that is at least this wide (1920 past it); 480 when left out. */
+                w?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description JPEG still */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     recordAgain: {
