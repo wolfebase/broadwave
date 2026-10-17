@@ -243,7 +243,7 @@ final class PlayerPanelTests: XCTestCase {
         let url = try XCTUnwrap(URL(string: server + "/api/v1/channels"))
         let data = try Data(contentsOf: url)
         let page = try JSONDecoder().decode(ChannelPage.self, from: data)
-        return try String(XCTUnwrap(page.channels.first?.id, "no channels"))
+        return try String(XCTUnwrap(page.channels.first { $0.hidden != true }?.id, "no channels"))
     }
 
     private func waitChannel(_ app: XCUIApplication) throws -> String {
@@ -387,6 +387,7 @@ final class PlayerPanelTests: XCTestCase {
 private struct ChannelPage: Decodable {
     struct Item: Decodable {
         let id: Int64
+        let hidden: Bool?
     }
 
     let channels: [Item]

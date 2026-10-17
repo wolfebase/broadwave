@@ -162,14 +162,30 @@ final class RecordingPlaybackTests: WatchingCase {
     }
 
     private func open(_ title: String) throws {
-        let row = app.buttons.matching(NSPredicate(format: "identifier == 'recording-row' AND label CONTAINS %@", title)).firstMatch
+        // Recordings are poster shelves on Apple TV; a list row is the older layout.
+        let row = app.buttons.matching(NSPredicate(format: "identifier IN {'recording-row', 'recording-card'} AND label CONTAINS %@", title)).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 20), "no row \(title)")
-        for _ in 0 ..< 12 where !focusedLabel().contains(title) {
-            press(.down, wait: 0.4)
+        for _ in 0 ..< 6 where !focusedLabel().contains(title) {
+            for _ in 0 ..< 8 where !focusedLabel().contains(title) {
+                press(.right, wait: 0.3)
+            }
+            if !focusedLabel().contains(title) {
+                press(.down, wait: 0.5)
+                press(.left, 8, wait: 0.15)
+            }
         }
         XCTAssertTrue(focusedLabel().contains(title), "focus on \(focusedLabel())")
         shot("rec-row")
         press(.select, wait: 0.2)
+        // A Shows card opens the show's page first; its row plays.
+        let inShow = app.buttons.matching(NSPredicate(format: "identifier == 'recording-row' AND label CONTAINS %@", title)).firstMatch
+        if !playerUp(), inShow.waitForExistence(timeout: 2), focusedLabel().contains(title) {
+            press(.select, wait: 0.2)
+        }
+    }
+
+    private func playerUp() -> Bool {
+        element("recording-time").exists || element("AXElapsedTime").exists
     }
 
     /// The player's clock moves.
