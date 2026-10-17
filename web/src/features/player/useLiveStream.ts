@@ -1,6 +1,6 @@
 import Hls from "hls.js";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { getDeviceHealth, getReception, getSignals, getTuners, stopWatch, warmChannel, watchChannel, type ApiFailure } from "../../api";
+import { getDeviceHealth, getReception, getSignals, getTuners, stopWatch, stopWatchTicket, warmChannel, watchChannel, watchTicket, type ApiFailure } from "../../api";
 import { authHeaders } from "../../lib/deviceToken";
 import { events } from "../../lib/events";
 import { playbackURL, primedSounds, quietSubtitles, showCaptions } from "../../lib/playbackURL";
@@ -216,8 +216,22 @@ export function useLiveStream(
     const ctrl = new AbortController();
     let released = false;
     let leaving = false;
+    // The watch request names itself. A page that leaves while it is on its way
+    // cannot name the rendition, and the server may already count it: the
+    // answer can be written and not yet read. The stop names the ticket instead.
+    const ticket = watchTicket();
+    let inFlight = false;
+    const dropInFlight = () => {
+      if (!inFlight || released) return;
+      released = true;
+      stopWatchTicket(id, ticket);
+    };
     const release = () => {
-      if (released || !joined) return;
+      if (released) return;
+      if (!joined) {
+        dropInFlight();
+        return;
+      }
       released = true;
       void stopWatch(id, joined, boot);
     };
@@ -339,7 +353,10 @@ export function useLiveStream(
         const joining = Hls.isSupported() && syncing.current && !holdSync.current ? (roomRef.current ?? "") : "";
         const handed = joinFirst.current;
         joinFirst.current = "";
-        const next = await watchChannel(id, webCaps(askAlternates), { quality, audio, picture, track, even }, handed, allow, ctrl.signal, joining);
+        inFlight = true;
+        const next = await watchChannel(id, webCaps(askAlternates), { quality, audio, picture, track, even }, handed, allow, ctrl.signal, joining, ticket).finally(() => {
+          inFlight = false;
+        });
         if (!dead) order?.answered(id);
         joined = next.rendition;
         boot = next.boot ?? "";
@@ -505,6 +522,7 @@ export function useLiveStream(
         // whose request is cancelled.
         leaving = true;
         ctrl.abort();
+        dropInFlight();
         return;
       }
       const body = new Blob([JSON.stringify({ rendition: joined, boot })], { type: "application/json" });

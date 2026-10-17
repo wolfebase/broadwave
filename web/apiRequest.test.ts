@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { addPass, addPlaylistFile, apiFailure, getAirings, getHome, playVirtual, removeDevice, request, restoreBackup, search, startScan, unreadBody, watchChannel } from "./src/api.ts";
+import { addPass, addPlaylistFile, apiFailure, getAirings, getHome, playVirtual, removeDevice, request, restoreBackup, search, startScan, stopWatchTicket, unreadBody, watchChannel, watchTicket } from "./src/api.ts";
 import { onUnauthorized } from "./src/lib/deviceToken.ts";
 
 type Call = { url: string; init?: RequestInit };
@@ -113,6 +113,10 @@ test("watch, search, and guide reads build the path the server expects", async (
   assert.equal(again.confirmLive, true);
   assert.equal(again.room, "den");
   assert.equal(again.rendition, "720");
+  assert.equal("ticket" in again, false);
+
+  await watchChannel(4, { platform: "web", video: ["h264"], audio: ["aac"], network: "lan" }, { quality: "auto" } as never, "", false, undefined, "", "t1");
+  assert.equal(sentBody().ticket, "t1");
 
   await search("News & 4");
   assert.equal(calls.at(-1)?.url, "/api/v1/search?q=News%20%26%204");
@@ -189,4 +193,19 @@ test("a playlist file uploads as form data, and a 401 still opens pairing", asyn
   });
   assert.equal(denied, 1);
   stop();
+});
+
+test("a watch ticket is a fresh name, and its stop names it", async () => {
+  const a = watchTicket();
+  const b = watchTicket();
+  assert.match(a, /^[0-9a-f]{24}$/);
+  assert.notEqual(a, b);
+
+  // No beacon (as in Node): the stop goes as a kept-alive request.
+  stub(() => jsonResponse({ ok: true }));
+  stopWatchTicket(4, a);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls.at(-1)?.url, "/api/v1/watch/4/stop");
+  assert.equal(calls.at(-1)?.init?.keepalive, true);
+  assert.deepEqual(JSON.parse(String(calls.at(-1)?.init?.body)), { ticket: a });
 });
