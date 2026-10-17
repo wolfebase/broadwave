@@ -39,6 +39,49 @@ func watchInFlight(t *testing.T, api *Server) (hub *live.Hub, id int64, key stri
 // watchStarting is watchInFlight with the response the watch writes.
 func watchStarting(t *testing.T, api *Server) (hub *live.Hub, id int64, key string, cancel context.CancelFunc, done chan struct{}, rec *httptest.ResponseRecorder) {
 	t.Helper()
+	return watchStartingWith(t, api, "")
+}
+
+// watchStartingWith is watchStarting with a ticket on the watch request.
+func watchStartingWith(t *testing.T, api *Server, ticket string) (hub *live.Hub, id int64, key string, cancel context.CancelFunc, done chan struct{}, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	hub, id = watchHub(t, api)
+	reqCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/watch", strings.NewReader(fmt.Sprintf(`{"channelId":%d,"ticket":%q}`, id, ticket)))
+	req = req.WithContext(reqCtx)
+	rec = httptest.NewRecorder()
+	done = make(chan struct{})
+	go func() {
+		defer close(done)
+		api.watch(rec, req)
+	}()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		entries, _ := os.ReadDir(filepath.Join(hub.Dir, "live", strconv.FormatInt(id, 10)))
+		if len(entries) > 0 {
+			key = entries[0].Name()
+			if sess, ok := hub.Session(id, key); ok && sess.Viewers > 0 {
+				break
+			}
+		}
+		select {
+		case <-done:
+			t.Fatalf("watch ended before a viewer was counted: %d %s", rec.Code, rec.Body.String())
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	sess, ok := hub.Session(id, key)
+	if !ok || sess.Viewers == 0 {
+		t.Fatalf("watch did not take a viewer (key %q)", key)
+	}
+	return hub, id, key, cancel, done, rec
+}
+
+// watchHub is a hub with one channel whose picture never becomes servable.
+func watchHub(t *testing.T, api *Server) (hub *live.Hub, id int64) {
+	t.Helper()
 	dir := t.TempDir()
 	script := filepath.Join(dir, "ffmpeg")
 	// exec replaces the shell so Shutdown's kill reaches the sleeper, not a child
@@ -68,38 +111,7 @@ func watchStarting(t *testing.T, api *Server) (hub *live.Hub, id int64, key stri
 	}
 	t.Cleanup(hub.Shutdown)
 	api.Store, api.Hub = st, hub
-
-	reqCtx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/watch", strings.NewReader(fmt.Sprintf(`{"channelId":%d}`, id)))
-	req = req.WithContext(reqCtx)
-	rec = httptest.NewRecorder()
-	done = make(chan struct{})
-	go func() {
-		defer close(done)
-		api.watch(rec, req)
-	}()
-
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		entries, _ := os.ReadDir(filepath.Join(hub.Dir, "live", strconv.FormatInt(id, 10)))
-		if len(entries) > 0 {
-			key = entries[0].Name()
-			if sess, ok := hub.Session(id, key); ok && sess.Viewers > 0 {
-				break
-			}
-		}
-		select {
-		case <-done:
-			t.Fatalf("watch ended before a viewer was counted: %d %s", rec.Code, rec.Body.String())
-		case <-time.After(20 * time.Millisecond):
-		}
-	}
-	sess, ok := hub.Session(id, key)
-	if !ok || sess.Viewers == 0 {
-		t.Fatalf("watch did not take a viewer (key %q)", key)
-	}
-	return hub, id, key, cancel, done, rec
+	return hub, id
 }
 
 func TestWatchDropsTheViewerWhenTheClientLeaves(t *testing.T) {
@@ -172,5 +184,91 @@ func TestAWatchThatNeverStartsSaysSo(t *testing.T) {
 	}
 	if sess, ok := hub.Session(id, key); ok && sess.Viewers != 0 {
 		t.Fatalf("the failed watch kept its viewer: %d", sess.Viewers)
+	}
+}
+
+func stopByTicket(t *testing.T, api *Server, id int64, ticket string) {
+	t.Helper()
+	body := fmt.Sprintf(`{"ticket":%q}`, ticket)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/watch/"+strconv.FormatInt(id, 10)+"/stop", strings.NewReader(body))
+	req.SetPathValue("id", strconv.FormatInt(id, 10))
+	rec := httptest.NewRecorder()
+	api.release(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stop: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// A page that leaves before it reads the watch answer does not know the
+// rendition, and the server may already count it. Its stop names the request
+// instead, and that viewer goes at once, not after the abandoned-viewer sweep.
+func TestStopByTicketReleasesTheViewerTheWatchCounted(t *testing.T) {
+	api := &Server{}
+	hub, id, key, cancel, done, _ := watchStartingWith(t, api, "page-1")
+	stopByTicket(t, api, id, "page-1")
+	if sess, _ := hub.Session(id, key); sess.Viewers != 0 {
+		t.Fatalf("the stop by ticket kept the viewer: %d", sess.Viewers)
+	}
+	// The request then ends as cancelled. That must not take a second viewer.
+	spec, ok := live.ParseRenditionKey(key)
+	if !ok {
+		t.Fatalf("key %q", key)
+	}
+	other, err := hub.Watch(context.Background(), id, spec, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	<-done
+	if sess, _ := hub.Session(id, other.Rendition); sess.Viewers != 1 {
+		t.Fatalf("the cancelled watch released another viewer: %d left", sess.Viewers)
+	}
+	// A second stop by the same ticket takes nothing either.
+	stopByTicket(t, api, id, "page-1")
+	if sess, _ := hub.Session(id, other.Rendition); sess.Viewers != 1 {
+		t.Fatalf("a repeated stop took another viewer: %d left", sess.Viewers)
+	}
+}
+
+// The stop can arrive before the watch counts its viewer.
+func TestStopByTicketBeforeTheWatchCountsReleasesItThen(t *testing.T) {
+	api := &Server{}
+	hub, id := watchHub(t, api)
+	stopByTicket(t, api, id, "page-2")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/watch", strings.NewReader(fmt.Sprintf(`{"channelId":%d,"ticket":"page-2"}`, id)))
+	rec := httptest.NewRecorder()
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		api.watch(rec, req)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(3 * time.Second):
+		t.Fatal("a watch stopped before it counted kept waiting for its picture")
+	}
+	entries, _ := os.ReadDir(filepath.Join(hub.Dir, "live", strconv.FormatInt(id, 10)))
+	for _, e := range entries {
+		if sess, ok := hub.Session(id, e.Name()); ok && sess.Viewers != 0 {
+			t.Fatalf("%s kept %d viewer(s)", e.Name(), sess.Viewers)
+		}
+	}
+}
+
+// A stop by ticket on another channel takes nothing.
+func TestStopByTicketNamesItsChannel(t *testing.T) {
+	api := &Server{}
+	hub, id, key, cancel, done, _ := watchStartingWith(t, api, "page-3")
+	defer func() {
+		cancel()
+		<-done
+	}()
+	stopByTicket(t, api, id+1, "page-3")
+	if sess, _ := hub.Session(id, key); sess.Viewers != 1 {
+		t.Fatalf("a stop for another channel took the viewer: %d left", sess.Viewers)
+	}
+	stopByTicket(t, api, id, "page-3")
+	if sess, _ := hub.Session(id, key); sess.Viewers != 0 {
+		t.Fatalf("the stop kept the viewer: %d", sess.Viewers)
 	}
 }
