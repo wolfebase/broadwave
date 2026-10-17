@@ -287,7 +287,7 @@
                     LiveDelay.saved = choice
                 }),
                 choices: LiveDelay.allCases.map { ($0, $0.title) },
-                footer: "How far behind the broadcast a channel plays when this Apple TV starts it. Balanced is about 16 seconds and starts fastest. Stable is 20 and rides out a weak signal."
+                footer: "A channel starts as close to live as it plays smoothly, about 5 seconds, whichever you pick, and screens you line up meet it there. Picking a delay in the player moves every lined-up screen on that channel: Balanced to about 16 seconds, Stable to 20, which rides out a weak signal."
             )
         }
     }

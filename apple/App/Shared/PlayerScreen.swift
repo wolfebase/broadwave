@@ -907,6 +907,11 @@ final class LivePlayer {
         fflush(stdout)
     }
 
+    /// The program leads everywhere AVKit shows it. On Apple TV the Info tab's heading is the
+    /// subtitle when there is one and the title when not, and the bar puts the subtitle beside
+    /// LIVE, so a channel there headed the Info tab. With no subtitle the program heads both;
+    /// the channel and episode open the description, which the Info tab sets under the
+    /// heading, and the bar's program row names the channel.
     private func metadata(channel: Channel, airing: Airing?) -> [AVMetadataItem] {
         func item(_ id: AVMetadataIdentifier, _ value: String) -> AVMetadataItem {
             let m = AVMutableMetadataItem()
@@ -915,17 +920,42 @@ final class LivePlayer {
             m.extendedLanguageTag = "und"
             return m
         }
-        var out = [item(.commonIdentifierTitle, airing?.title ?? channel.displayName)]
-        out.append(item(.iTunesMetadataTrackSubTitle, "\(channel.displayNumber) \(channel.displayName)"))
-        // The system Info tab shows the description, so the episode line leads it.
-        let episode = airing.flatMap {
-            ProgramLine.episode(label: $0.episodeLabel, season: $0.season, episode: $0.episode, subtitle: $0.subtitle)
+        let name = "\(channel.displayNumber) \(channel.displayName)"
+        guard let airing else {
+            return [item(.commonIdentifierTitle, name)]
         }
-        let about = [episode, airing?.description].compactMap(\.self).joined(separator: "\n\n")
+        var out = [item(.commonIdentifierTitle, airing.title)]
+        #if os(iOS)
+            out.append(item(.iTunesMetadataTrackSubTitle, name))
+        #endif
+        let episode = ProgramLine.episode(label: airing.episodeLabel, season: airing.season, episode: airing.episode, subtitle: airing.subtitle)
+        #if os(tvOS)
+            let lead: String? = ([name] + [episode].compactMap(\.self)).joined(separator: " · ")
+        #else
+            let lead = episode
+        #endif
+        // One line break: a blank line costs the Info tab a line of the description, and a
+        // description it cannot fit shows as one faded fragment.
+        let about = [lead, airing.description].compactMap(\.self).filter { !$0.isEmpty }.joined(separator: "\n")
         if !about.isEmpty {
             out.append(item(.commonIdentifierDescription, about))
         }
+        if let genre = airing.category, !genre.isEmpty {
+            out.append(item(.quickTimeMetadataGenre, genre))
+        }
+        if let rating = airing.rating, !rating.isEmpty {
+            out.append(item(.iTunesMetadataContentRating, rating))
+        }
         return out
+    }
+
+    /// A new program on the channel being watched: the bar and the Info tab follow it.
+    func noteProgram(_ channel: Channel, _ airing: Airing?) {
+        guard channel.id == channelID, let item = player.currentItem else { return }
+        let next = metadata(channel: channel, airing: airing)
+        let title = { (items: [AVMetadataItem]) in items.first { $0.identifier == .commonIdentifierTitle }?.stringValue }
+        guard title(next) != title(item.externalMetadata) else { return }
+        item.externalMetadata = next
     }
 }
 
@@ -948,6 +978,8 @@ struct PlayerScreen: View {
     #endif
     /// True while the Apple TV transport bar is on screen. Swipes change channel only when it is not.
     @State private var transportShown = true
+    /// True while an Info, Channels, or Stream page covers the bar's title.
+    @State private var panelShown = false
     /// A recording that holds this showing's start, played from Start over.
     @State private var startOverRecording: Recording?
     @State private var lastChannelStep = Date.distantPast
@@ -1031,6 +1063,7 @@ struct PlayerScreen: View {
                 overlayOpen: stripOpen,
                 keysOn: startOverRecording == nil && !keysCovered,
                 onTransport: { transportShown = $0 },
+                onPanel: { panelShown = $0 },
                 onDisplay: { live.displayLine = $0 },
                 panelStore: store,
                 panelNow: nowPlaying,
@@ -1138,6 +1171,7 @@ struct PlayerScreen: View {
                     .accessibilityLabel("Recording")
                     .accessibilityIdentifier("rec-indicator")
                 }
+                programTimeline
                 if stripOpen {
                     ChannelStrip { stripOpen = false }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -1516,6 +1550,38 @@ struct PlayerScreen: View {
             .background(.black.opacity(0.62), in: .rect(cornerRadius: 24))
             .padding(56)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        }
+    #endif
+
+    #if os(tvOS)
+        /// The program's slot over the bar's title, shown and hidden with the bar.
+        /// It fades with AVKit's own bar, which takes about a third of a second.
+        private var programTimeline: some View {
+            let shown = transportShown && !panelShown && !stripOpen && live.error == nil
+            let onAir = nowPlaying.channel.flatMap { store.index.on($0.id, at: store.now) }
+            return ZStack {
+                if shown, let channel = nowPlaying.channel {
+                    let index = store.index
+                    let player = live.player
+                    ProgramTimeline(
+                        channel: "\(channel.displayNumber) \(channel.displayName)",
+                        program: { index.on(channel.id, at: $0) },
+                        playhead: { player.currentItem?.currentDate() }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.leading, ProgramTimeline.leading)
+                    .padding(.bottom, ProgramTimeline.bottom)
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: shown)
+            .allowsHitTesting(false)
+            .ignoresSafeArea()
+            .onChange(of: onAir?.id) {
+                if let channel = nowPlaying.channel {
+                    live.noteProgram(channel, onAir)
+                }
+            }
         }
     #endif
 
@@ -2016,6 +2082,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var overlayOpen = false
     var keysOn = false
     var onTransport: (Bool) -> Void = { _ in }
+    /// Apple TV: an Info, Channels, or Stream page opened or closed.
+    var onPanel: (Bool) -> Void = { _ in }
     var onDisplay: (String) -> Void = { _ in }
     var panelStore: AppStore?
     var panelNow: NowPlaying?
@@ -2050,6 +2118,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
             vc.onDown = onDown
             vc.overlayOpen = overlayOpen
             vc.onTransport = onTransport
+            vc.onPanel = onPanel
             vc.appliesPreferredDisplayCriteriaAutomatically = false
             context.coordinator.start(vc)
         #endif
@@ -2116,6 +2185,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
             vc.onDown = onDown
             vc.overlayOpen = overlayOpen
             vc.onTransport = onTransport
+            vc.onPanel = onPanel
             vc.onPictureInPicture = onPictureInPicture
             vc.onPictureRestore = onPictureRestore
             vc.onPictureClosed = onPictureClosed
@@ -2249,6 +2319,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
             }
 
             private func refresh(_ vc: AVPlayerViewController) async {
+                (vc as? LivePlayerController)?.notePanel()
                 guard let item = vc.player?.currentItem else {
                     match = DisplayMatch()
                     hint = DisplayMatch()

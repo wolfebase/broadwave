@@ -61,6 +61,24 @@ final class TVPagesTests: XCTestCase {
         XCTAssertTrue(until(6) { focusedLabel(app).hasPrefix("Whole-Home Sync") }, "Back did not return to the row: \(focused(app))")
     }
 
+    /// Live Delay says what it does: every channel starts about 5 s behind whichever is picked.
+    func testLiveDelaySaysWhatItDoes() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-BroadwaveFocus", "settings", "-lastChannel", "0", "-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["settings-playback"].waitForExistence(timeout: 20), app.debugDescription)
+        for _ in 0 ..< 8 where !focusedLabel(app).hasPrefix("Live Delay") {
+            XCUIRemote.shared.press(.down)
+            pause(0.5)
+        }
+        XCTAssertTrue(focusedLabel(app).hasPrefix("Live Delay"), "no Live Delay row: \(focused(app))")
+        XCUIRemote.shared.press(.select)
+        let note = app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'about 5 seconds'")).firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 6), "no explanation: \(focused(app))")
+        pause(1)
+        shot("settings-2-delay")
+    }
+
     /// An empty library still has something to press: Open the guide.
     func testEmptyRecordingsHasAFocusedWayForward() {
         let app = XCUIApplication()
@@ -105,20 +123,16 @@ final class TVPagesTests: XCTestCase {
     }
 
     /// Join a home server opens on the address field, on screen, not on a saved server.
+    /// Two saved servers (unreachable test addresses) push the buttons down the column,
+    /// the layout a fixed press count never reached.
     func testJoinFocusesTheAddressField() {
         let app = XCUIApplication()
-        app.launchArguments = ["-BroadwaveDiscover", "YES", "-ApplePersistenceIgnoreState", "YES"]
+        app.launchArguments = ["-BroadwaveDiscover", "YES", "-ApplePersistenceIgnoreState", "YES", "-servers", savedServers(2)]
         app.launch()
         let open = app.buttons["join-open"]
         XCTAssertTrue(open.waitForExistence(timeout: 30), app.debugDescription)
         shot("connect-0")
-        for direction in [XCUIRemote.Button.down, .right, .up] {
-            for _ in 0 ..< 12 where !open.hasFocus {
-                XCUIRemote.shared.press(direction)
-                pause(0.35)
-            }
-        }
-        XCTAssertTrue(open.hasFocus, "could not reach Join: \(focused(app))")
+        XCTAssertTrue(walkToJoin(app, open), "could not reach Join: \(focused(app))")
         shot("connect-1-on-join")
         XCUIRemote.shared.press(.select)
         let address = app.textFields["join-address"]
@@ -189,6 +203,40 @@ final class TVPagesTests: XCTestCase {
         }
         XCTAssertTrue(retry.hasFocus || app.buttons["offline-choose"].hasFocus, "Down did not reach the note's buttons: \(focused(app))")
         shot("offline-1-buttons")
+    }
+
+    /// The saved-servers list as the argument domain takes it: JSON data in plist form.
+    private func savedServers(_ count: Int) -> String {
+        let servers = (1 ... count).map { ["id": "test-\($0)", "name": "Test server \($0)", "url": "http://192.0.2.\($0):8477"] }
+        let data = (try? JSONSerialization.data(withJSONObject: servers)) ?? Data()
+        return "<" + data.map { String(format: "%02x", $0) }.joined() + ">"
+    }
+
+    /// Walks the remote to Join by where focus is, not by a fixed count: saved and found
+    /// servers come and go above the buttons while the page looks, so the column is never
+    /// the same height twice. Right leaves the brand column; Down goes past the server
+    /// cards to the row of buttons; Right along it reaches Join.
+    private func walkToJoin(_ app: XCUIApplication, _ open: XCUIElement) -> Bool {
+        var stuck = 0
+        var last = ""
+        for _ in 0 ..< 30 {
+            if open.hasFocus {
+                return true
+            }
+            let id = focusedID(app)
+            let direction: XCUIRemote.Button = switch id {
+            case "connect-server": .down
+            case "connect-address": .right
+            case "": .down
+            default: .right
+            }
+            stuck = id == last ? stuck + 1 : 0
+            last = id
+            // A press that moved nothing: try the way the walk has not tried yet.
+            XCUIRemote.shared.press(stuck > 1 ? (direction == .down ? .right : .down) : direction)
+            pause(0.45)
+        }
+        return open.hasFocus
     }
 
     private func focusedLabel(_ app: XCUIApplication) -> String {
