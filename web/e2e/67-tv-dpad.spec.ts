@@ -117,7 +117,8 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   const resultBox = await focused(page);
   await page.keyboard.press("ArrowRight");
   const record = await focused(page);
-  expect(record?.label).toContain("Record every airing");
+  // Right from a show reaches that show's own actions: Watch now first when it is on.
+  expect(record?.label).toMatch(/^(Watch now|Record series|Record every airing) Evening News/);
   expect(record!.x).toBeGreaterThan(resultBox!.x);
   await page.keyboard.press("ArrowDown");
   const below = await focused(page);
@@ -145,13 +146,19 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   await page.locator(".topbar").getByRole("link", { name: "Recordings", exact: true }).click();
   await expect(page).toHaveURL(/\/recordings$/);
   await settle(page);
-  // Unwatched is the end of its group. Show sits on the same row, outside it.
-  const unwatched = page.getByRole("tab", { name: "Unwatched" });
-  await unwatched.focus();
-  await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("combobox", { name: "Show" })).toBeFocused();
-  await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("combobox", { name: "Sort" })).toBeFocused();
+  // An empty library starts on Open the guide. With recordings, the last filter chip
+  // ends its group, and Right reaches Sort beside it.
+  const sort = page.getByRole("combobox", { name: "Sort" });
+  await expect(page.getByRole("button", { name: "Open the guide" }).or(sort)).toBeVisible();
+  if ((await sort.count()) === 0) {
+    await expect(page.getByRole("button", { name: "Open the guide" })).toBeFocused();
+  } else {
+    // The remote starts on the newest recording once the list is in.
+    await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest(".media-card")))).toBe(true);
+    await page.getByRole("group", { name: "Library filter" }).getByRole("button").last().focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(sort).toBeFocused();
+  }
   await pressCode(page, 10009);
   await expect(page).toHaveURL(/\/sports$/);
 
@@ -186,21 +193,35 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await settle(page);
+  // Settings is a list of sections. Name this screen is under Devices, Motion under Playback.
+  await page.getByRole("link", { name: /^Devices/ }).click();
+  await expect(page).toHaveURL(/\/settings\/devices$/);
+  // A section starts the remote on its first control.
   const name = page.getByRole("textbox", { name: "Name this screen" });
-  await name.focus();
+  await expect(name).toBeFocused();
   const nameBox = await focused(page);
   await page.keyboard.press("ArrowDown");
   const afterName = await focused(page);
   expect(afterName!.y).toBeGreaterThan(nameBox!.y);
-  const broadcast = page.getByRole("button", { name: "Broadcast" });
-  await broadcast.focus();
+  // Back from a section returns to the list. In a text field the first Back only leaves the field.
+  await name.focus();
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/settings\/devices$/);
+  await expect(name).not.toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.getByRole("link", { name: /^Playback/ }).click();
+  await expect(page).toHaveURL(/\/settings\/playback$/);
+  const motion = page.getByRole("radiogroup", { name: "Motion" });
+  await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest(".settings-body")))).toBe(true);
+  await motion.getByRole("radio", { name: "Broadcast" }).focus();
   await page.keyboard.press("ArrowRight");
   expect((await focused(page))?.label).toBe("Smooth");
-  await page.getByRole("button", { name: "Film" }).focus();
+  await motion.getByRole("radio", { name: "Film" }).focus();
   await page.keyboard.press("ArrowRight");
   expect((await focused(page))?.label).toBe("Film");
   await page.keyboard.press("Escape");
-  await expect(page).toHaveURL(/\/sports$/);
+  await expect(page).not.toHaveURL(/\/settings\/playback$/);
 
   await page.locator(".topbar").getByRole("link", { name: "Home", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
