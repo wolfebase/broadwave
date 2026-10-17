@@ -213,3 +213,60 @@ func TestAGrabStoppedAfterItsStillsLandedWorked(t *testing.T) {
 		t.Fatalf("a grab with no still names its channel: %v", err)
 	}
 }
+
+// A grab that misses a channel tries again for that one soon, so a guide
+// scan's 40 s on a frequency gets its stills even when the first grab ran
+// out of time before a slow program's keyframe.
+func TestAGrabTriesAgainForTheChannelsItMissed(t *testing.T) {
+	first, retry := frameFirst, frameRetry
+	frameFirst, frameRetry = 20*time.Millisecond, 50*time.Millisecond
+	t.Cleanup(func() { frameFirst, frameRetry = first, retry })
+	h, m := testHub(t)
+	addTestFeed(h, m, 4, "4.1")
+	addTestFeed(h, m, 5, "4.2")
+	dir := t.TempDir()
+	calls := filepath.Join(dir, "calls")
+	script := filepath.Join(dir, "ffmpeg")
+	// The first run writes only channel 4's stills; later runs write all
+	// they are asked for. Each run's arguments go to calls.
+	body := "#!/bin/sh\necho \"$@\" >> " + calls + "\n" +
+		"for a in \"$@\"; do case \"${a##*/}\" in 5*.part) [ -f " + calls + ".again ] && echo jpg > \"$a\";; *.part) echo jpg > \"$a\";; esac; done\n" +
+		"touch " + calls + ".again\nexit 0\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h.FFmpeg = script
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		h.watchFrames(ctx, m)
+		close(done)
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(FramePath(h.Dir, 5, 1920)); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			log, _ := os.ReadFile(calls)
+			entries, _ := os.ReadDir(filepath.Join(h.Dir, "frames"))
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			t.Fatalf("the missed channel was not grabbed again: %d runs, files %v", strings.Count(string(log), "\n"), names)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	log, err := os.ReadFile(calls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs := strings.Split(strings.TrimSpace(string(log)), "\n")
+	if len(runs) < 2 || strings.Contains(runs[1], "/4.jpg.part") || !strings.Contains(runs[1], "/5.jpg.part") {
+		t.Fatalf("runs %q", runs)
+	}
+}
