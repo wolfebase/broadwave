@@ -9,7 +9,7 @@ const selector = "button, a[href], input, select, textarea, [tabindex]";
 // Rows and lists the remote should walk in order. A tile on the multiview is
 // also role=group, and trapping arrows inside it would skip the next tile.
 // A game card wraps its buttons, so it is not a row: Down has to reach the next line.
-const groupSelector = ".shelf-row, .search-list > li, .source-list > li, .pass-list > li, .setup-list > li, .together-list > li, .guide-chips, .segmented, [role='listbox'], [role='menu'], [role='radiogroup']";
+const groupSelector = ".shelf-row, .library-chips, .search-list > li, .source-list > li, .pass-list > li, .setup-list > li, .together-list > li, .guide-chips, .segmented, [role='listbox'], [role='menu'], [role='radiogroup']";
 
 function arrow(key: string): Direction | null {
   if (key === "ArrowLeft") return "left";
@@ -77,6 +77,8 @@ function boxes(scope: ParentNode) {
     // An inert control sits behind the player. Focusing it would drop the keys.
     if (node.tabIndex < 0 || node.closest("[inert], [aria-hidden='true']")) continue;
     if ((node as HTMLButtonElement).disabled) continue;
+    // The skip link is for Tab. Once an arrow lands on it, nothing is above or beside it to leave by.
+    if (node.matches(".skip-link")) continue;
     if (pictureWithChrome(node)) continue;
     // The multiview page fills the screen. Its center sits on the tiles, so
     // Down would land on the page instead of the buttons under the grid.

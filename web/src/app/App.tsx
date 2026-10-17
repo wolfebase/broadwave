@@ -110,6 +110,8 @@ function Shell() {
       };
       const target =
         pick("[role='dialog'] .btn.primary") ||
+        // A channel already on screen is not the one to add.
+        pick(".mv-guide button:not([disabled]):not([aria-selected='true'])") ||
         pick(".mv-guide button:not([disabled])") ||
         pick(".mv") ||
         pick(".stage:not(.mini) [data-channels]") ||
