@@ -556,7 +556,7 @@ struct GameCard: View {
                 }
                 if let (a, b) = airing.matchup {
                     Text(a).font(.headline.weight(.heavy)).lineLimit(1)
-                    Text("AT").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
+                    Text("AT").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
                     Text(b).font(.headline.weight(.heavy)).lineLimit(1)
                 } else {
                     Text(airing.subtitle ?? airing.title).font(.headline.weight(.heavy)).lineLimit(3)

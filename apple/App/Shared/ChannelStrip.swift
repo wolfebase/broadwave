@@ -186,12 +186,13 @@
                     VStack(alignment: .leading, spacing: 2) {
                         LiveDot()
                         Text("\(channel.displayNumber)  \(store.index.on(channel.id, at: store.now)?.title ?? channel.displayName)")
-                            .font(.caption.weight(.semibold))
+                            .font(.footnote.weight(.semibold))
                             .lineLimit(1)
+                            .shadow(color: .black.opacity(0.6), radius: 4)
                     }
-                    .padding(10)
+                    .padding(12)
                 }
-                .frame(width: 256, height: 144)
+                .frame(width: 320, height: 180)
             }
             .buttonStyle(.card)
             .accessibilityLabel("Playing \(channel.displayNumber) \(channel.displayName)")
