@@ -24,6 +24,9 @@
             shot(app, "iphone-tabs")
 
             gear.tap()
+            let support = app.buttons["settings-support"]
+            XCTAssertTrue(support.waitForExistence(timeout: 10), app.debugDescription)
+            support.tap()
             let diagnostics = app.buttons["Diagnostics"]
             XCTAssertTrue(find(diagnostics, in: app), "no Diagnostics\n\(app.debugDescription)")
             diagnostics.tap()
@@ -96,7 +99,7 @@
             let server = try serverURL()
             try finishSetup(server)
             let app = launch(server, tab: "settings")
-            XCTAssertTrue(app.descendants(matching: .any)["home-scan"].waitForExistence(timeout: 25), app.debugDescription)
+            XCTAssertTrue(app.buttons["settings-playback"].waitForExistence(timeout: 25), app.debugDescription)
             XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10), app.debugDescription)
             assertOneBar(app, "settings-link")
             XCTAssertFalse(tabButton(app, "More").exists)

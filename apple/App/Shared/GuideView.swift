@@ -11,6 +11,10 @@ struct GuideView: View {
     @State private var favoritesOnly = false
     @State private var selected: Selection?
     @State private var jump: GuideJump?
+    /// The day chip last pressed: "now", "tonight", or a day's timestamp.
+    @State private var moment = "now"
+    /// The time the iPhone's list shows. Nil is now.
+    @State private var listAt: Date?
     @State private var scores: [String: String] = [:]
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
@@ -67,8 +71,7 @@ struct GuideView: View {
                     }
                 }
             #else
-                filters
-                dayJump
+                touchHeader
             #endif
             #if os(tvOS)
                 // Select plays what is on now, as on any TV guide; a later program opens its
@@ -85,14 +88,7 @@ struct GuideView: View {
                     }
                 )
             #else
-                if sizeClass == .compact, verticalSize != .compact {
-                    onNowList
-                } else {
-                    if sizeClass == .regular, verticalSize == .regular {
-                        GuidePreview(picked: selected?.channel)
-                    }
-                    GuideGrid(channels: rows, highlight: filter, jump: jump, scores: scores) { selected = Selection(channel: $0, airing: $1) }
-                }
+                touchGuide
             #endif
         }
         #if os(iOS)
@@ -148,6 +144,8 @@ struct GuideView: View {
         }
         #if os(iOS)
         .toolbarTitleDisplayMode(.inline)
+        // Landscape iPhone: the tab says Guide, and the bar's height is two channel rows.
+        .toolbarVisibility(verticalSize == .compact ? .hidden : .automatic, for: .navigationBar)
         .modifier(GuideDetail(selected: $selected, wide: sizeClass == .regular))
         #else
         .sheet(item: $selected) { sel in
@@ -173,6 +171,45 @@ struct GuideView: View {
         }
         #endif
     }
+
+    #if !os(tvOS)
+        /// The list in portrait on iPhone; the grid elsewhere, with the preview on iPad.
+        @ViewBuilder
+        private var touchGuide: some View {
+            if sizeClass == .compact, verticalSize != .compact {
+                onNowList
+            } else {
+                if sizeClass == .regular, verticalSize == .regular {
+                    GuidePreview(picked: selected?.channel)
+                }
+                GuideGrid(
+                    channels: rows, highlight: filter, jump: jump, scores: scores, compactHeight: verticalSize == .compact,
+                    onDetails: { selected = Selection(channel: $0, airing: $1) },
+                    onSelect: { channel, airing in pick(channel, airing) }
+                )
+            }
+        }
+
+        /// Landscape iPhone: one row of chips, so more than two channels fit.
+        @ViewBuilder
+        private var touchHeader: some View {
+            if verticalSize == .compact {
+                // Landscape iPhone: one row of chips, so more than two channels fit.
+                guideRow {
+                    HStack(spacing: 8) {
+                        filterChips
+                        Divider().frame(height: 22)
+                        dayChips
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
+                }
+            } else {
+                filters
+                dayJump
+            }
+        }
+    #endif
 
     #if os(tvOS)
         /// The sidebar stays open over the grid until something in the page has focus, and it covers the
@@ -230,38 +267,88 @@ struct GuideView: View {
 
     private var dayJump: some View {
         guideRow {
-            HStack(spacing: 8) {
-                Button { go(store.now.addingTimeInterval(-15 * 60)) } label: { chipLabel("Now") }
-                    .buttonStyle(.glass)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Now")
-                    .accessibilityIdentifier("guide-now")
-                #if os(tvOS)
-                    .focused($headerFocus, equals: .now)
-                    .onMoveCommand { moveHeader($0, from: .now) }
-                #endif
-                Button { go(primeTime(on: store.now, after: store.now)) } label: { chipLabel("Tonight") }
-                    .buttonStyle(.glass)
-                    .foregroundStyle(.secondary)
+            dayChips
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+        }
+    }
+
+    private var dayChips: some View {
+        HStack(spacing: 8) {
+            Button { goNow() } label: { chipLabel("Now") }
+                .modifier(GuideChipLook(on: dayOn("now")))
+                .accessibilityLabel("Now")
+                .accessibilityAddTraits(dayOn("now") ? .isSelected : [])
+                .accessibilityIdentifier("guide-now")
+            #if os(tvOS)
+                .focused($headerFocus, equals: .now)
+                .onMoveCommand { moveHeader($0, from: .now) }
+            #endif
+            if tonightListed {
+                Button { go(primeTime(on: store.now, after: store.now), spot: "tonight") } label: { chipLabel("Tonight") }
+                    .modifier(GuideChipLook(on: dayOn("tonight")))
                     .accessibilityLabel("Tonight")
+                    .accessibilityAddTraits(dayOn("tonight") ? .isSelected : [])
+                    .accessibilityIdentifier("guide-tonight")
                 #if os(tvOS)
                     .focused($headerFocus, equals: .tonight)
                     .onMoveCommand { moveHeader($0, from: .tonight) }
                 #endif
-                ForEach(comingDays, id: \.timeIntervalSince1970) { day in
-                    Button { go(primeTime(on: day, after: day)) } label: { chipLabel(dayLabel(day)) }
-                        .buttonStyle(.glass)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel(dayLabel(day))
-                    #if os(tvOS)
-                        .focused($headerFocus, equals: .later(day.timeIntervalSince1970))
-                        .onMoveCommand { moveHeader($0, from: .later(day.timeIntervalSince1970)) }
-                    #endif
-                }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+            ForEach(comingDays, id: \.timeIntervalSince1970) { day in
+                let spot = "day-\(Int(day.timeIntervalSince1970))"
+                Button { go(primeTime(on: day, after: day), spot: spot) } label: { chipLabel(dayLabel(day)) }
+                    .modifier(GuideChipLook(on: dayOn(spot)))
+                    .accessibilityLabel(dayLabel(day))
+                    .accessibilityAddTraits(dayOn(spot) ? .isSelected : [])
+                #if os(tvOS)
+                    .focused($headerFocus, equals: .later(day.timeIntervalSince1970))
+                    .onMoveCommand { moveHeader($0, from: .later(day.timeIntervalSince1970)) }
+                #endif
+            }
         }
+    }
+
+    /// Apple TV keeps Tonight: its header focus order counts on it.
+    private var tonightListed: Bool {
+        #if os(tvOS)
+            true
+        #else
+            listed(at: primeTime(on: store.now, after: store.now).addingTimeInterval(15 * 60))
+        #endif
+    }
+
+    /// iPhone and iPad mark the day chip in use. Apple TV's chips show focus instead.
+    private func dayOn(_ spot: String) -> Bool {
+        #if os(tvOS)
+            false
+        #else
+            moment == spot
+        #endif
+    }
+
+    private func goNow() {
+        moment = "now"
+        listAt = nil
+        go(store.now.addingTimeInterval(-15 * 60))
+    }
+
+    /// The grid scrolls to a quarter hour before; the list shows the programs on at the hour.
+    private func go(_ date: Date, spot: String) {
+        moment = spot
+        listAt = date.addingTimeInterval(15 * 60)
+        go(date)
+    }
+
+    /// A tap plays what is on now. A later program, and a long press, open its details.
+    private func pick(_ channel: Channel, _ airing: Airing?) {
+        #if os(iOS)
+            if UIDevice.current.userInterfaceIdiom == .phone, airing.map({ $0.start <= store.now }) ?? true {
+                nowPlaying.play(channel)
+                return
+            }
+        #endif
+        selected = Selection(channel: channel, airing: airing)
     }
 
     /// Every press scrolls, the same day twice included.
@@ -274,9 +361,22 @@ struct GuideView: View {
     private var comingDays: [Date] {
         let cal = Calendar.current
         let start = cal.startOfDay(for: store.now)
-        let listed = store.channels.compactMap { store.index.airings($0.id).last?.end }.max() ?? store.now
-        return (1 ... 2).compactMap { cal.date(byAdding: .day, value: $0, to: start) }
-            .filter { primeTime(on: $0, after: $0) < listed }
+        let days = (1 ... 2).compactMap { cal.date(byAdding: .day, value: $0, to: start) }
+        #if os(tvOS)
+            let listed = store.channels.compactMap { store.index.airings($0.id).last?.end }.max() ?? store.now
+            return days.filter { primeTime(on: $0, after: $0) < listed }
+        #else
+            return days.filter { listed(at: primeTime(on: $0, after: $0).addingTimeInterval(15 * 60)) }
+        #endif
+    }
+
+    /// Something is listed then on at least a fifth of the channels that have listings.
+    /// One channel with a long playlist guide no longer makes a whole day look listed.
+    private func listed(at time: Date) -> Bool {
+        let withListings = store.channels.filter { !store.index.airings($0.id).isEmpty }
+        guard !withListings.isEmpty else { return false }
+        let on = withListings.count { store.index.on($0.id, at: time) != nil }
+        return on > 0 && on * 5 >= withListings.count
     }
 
     private func dayLabel(_ day: Date) -> String {
@@ -298,14 +398,20 @@ struct GuideView: View {
         return primeTime(on: cal.date(byAdding: .day, value: 1, to: day) ?? day, after: now)
     }
 
+    private var filterChips: some View {
+        HStack(spacing: 8) {
+            chip("All", spot: "all", on: filter == nil && !favoritesOnly) { filter = nil; favoritesOnly = false }
+            chip("Favorites", spot: "favorites", on: favoritesOnly) { favoritesOnly.toggle() }
+            ForEach([BroadwaveKit.Category.sports, .news, .movies, .kids], id: \.self) { c in
+                chip(c.label, spot: c.rawValue, color: c.color, on: filter == c) { filter = filter == c ? nil : c }
+            }
+        }
+    }
+
     private var filters: some View {
         guideRow {
             HStack(spacing: 8) {
-                chip("All", spot: "all", on: filter == nil && !favoritesOnly) { filter = nil; favoritesOnly = false }
-                chip("Favorites", spot: "favorites", on: favoritesOnly) { favoritesOnly.toggle() }
-                ForEach([BroadwaveKit.Category.sports, .news, .movies, .kids], id: \.self) { c in
-                    chip(c.label, spot: c.rawValue, color: c.color, on: filter == c) { filter = filter == c ? nil : c }
-                }
+                filterChips
                 #if os(tvOS)
                     Spacer(minLength: 24)
                     pageIcons
@@ -384,9 +490,7 @@ struct GuideView: View {
             }
             .padding(.horizontal, 6)
         }
-        .buttonStyle(.glass)
-        .tint(on ? .white : nil)
-        .foregroundStyle(on ? .primary : .secondary)
+        .modifier(GuideChipLook(on: on))
         .accessibilityAddTraits(on ? .isSelected : [])
         .accessibilityIdentifier("guide-filter-\(spot)")
         #if os(tvOS)
@@ -447,30 +551,118 @@ struct GuideView: View {
     #endif
 
     #if os(iOS)
+        /// Now and next on each channel, or what is on at the time a day chip picked.
+        /// A tap plays what's on now; the info button and a long press open the details.
         private var onNowList: some View {
-            List(rows) { channel in
-                let airing = store.index.on(channel.id, at: store.now)
+            let at = listAt.map { max($0, store.now) } ?? store.now
+            let later = listAt != nil && at > store.now.addingTimeInterval(60)
+            let shown = later ? rows.filter { store.index.on($0.id, at: at) != nil } : rows
+            return List {
+                Section {
+                    ForEach(shown) { channel in
+                        listRow(channel, at: at, later: later)
+                    }
+                } header: {
+                    if later {
+                        laterHeader(at)
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .overlay {
+                if later, shown.isEmpty {
+                    ContentUnavailableView("Nothing listed then", systemImage: "calendar", description: Text("The guide doesn't reach that far on these channels."))
+                }
+            }
+        }
+
+        private func laterHeader(_ at: Date) -> some View {
+            HStack {
+                Text(Calendar.current.isDateInToday(at)
+                    ? "Tonight at \(at.formatted(date: .omitted, time: .shortened))"
+                    : "\(at.formatted(.dateTime.weekday(.wide))) at \(at.formatted(date: .omitted, time: .shortened))")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .accessibilityIdentifier("guide-list-time")
+                Spacer()
+                Button("Back to now") { goNow() }
+                    .font(.subheadline.weight(.semibold))
+                    .accessibilityIdentifier("guide-back-to-now")
+            }
+            .textCase(nil)
+        }
+
+        private func listRow(_ channel: Channel, at: Date, later: Bool) -> some View {
+            let airing = store.index.on(channel.id, at: at)
+            return HStack(spacing: 4) {
                 Button {
-                    selected = Selection(channel: channel, airing: airing)
+                    if later {
+                        selected = Selection(channel: channel, airing: airing)
+                    } else {
+                        nowPlaying.play(channel)
+                    }
                 } label: {
                     OnNowRow(
                         channel: channel,
                         airing: airing,
-                        next: store.index.next(channel.id, after: airing?.end ?? store.now),
-                        now: store.now,
-                        recording: store.activeRecording(on: channel) != nil
+                        next: store.index.next(channel.id, after: airing?.end ?? at),
+                        now: at,
+                        recording: !later && store.activeRecording(on: channel) != nil,
+                        later: later
                     )
+                    .contentShape(.rect)
                     .playerZoomSource(channel.id)
                 }
                 .buttonStyle(.plain)
-                .listRowBackground(Tokens.ColorToken.surface1)
-                .contextMenu { ChannelActions(channel: channel, airing: airing) }
-                .modifier(ChannelSwipeActions(channel: channel))
+                .accessibilityHint(later ? "Shows the details" : "Plays the channel")
+                Button {
+                    selected = Selection(channel: channel, airing: airing)
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Details")
+                .accessibilityIdentifier("guide-row-info")
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
+            .listRowBackground(Tokens.ColorToken.surface1)
+            .contextMenu {
+                Button("Details", systemImage: "info.circle") { selected = Selection(channel: channel, airing: airing) }
+                ChannelActions(channel: channel, airing: airing)
+            }
+            .modifier(ChannelSwipeActions(channel: channel))
         }
     #endif
+}
+
+/// A chip in the guide's header. The one in use is solid white on iPhone and iPad,
+/// so it reads apart from the glass ones around it.
+private struct GuideChipLook: ViewModifier {
+    var on: Bool
+
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+            content
+                .buttonStyle(.glass)
+                .tint(on ? .white : nil)
+                .foregroundStyle(on ? .primary : .secondary)
+        #else
+            if on {
+                content
+                    .buttonStyle(.glassProminent)
+                    .tint(.white)
+                    .foregroundStyle(.black)
+            } else {
+                content
+                    .buttonStyle(.glass)
+                    .foregroundStyle(.secondary)
+            }
+        #endif
+    }
 }
 
 /// The time grid. The channel column and time header stay pinned while the grid
@@ -493,10 +685,12 @@ struct GuideGrid: View {
     let highlight: BroadwaveKit.Category?
     let jump: GuideJump?
     var scores: [String: String] = [:]
+    /// Landscape iPhone: shorter rows and header, so more channels fit.
+    var compactHeight = false
     #if os(tvOS)
         var channelFocus: FocusState<Int64?>.Binding
-        var onDetails: (Channel, Airing?) -> Void = { _, _ in }
     #endif
+    var onDetails: (Channel, Airing?) -> Void = { _, _ in }
     let onSelect: (Channel, Airing?) -> Void
     @State private var offset: CGPoint = .zero
     @State private var scroll = ScrollPosition()
@@ -520,11 +714,19 @@ struct GuideGrid: View {
         private let perMinute: CGFloat = 10
         private let channelW: CGFloat = 300
     #else
-        private let rowH: CGFloat = 72
+        private var rowH: CGFloat {
+            compactHeight ? 58 : 72
+        }
+
         private let perMinute: CGFloat = 6.4
-        private let channelW: CGFloat = 170
+        private var channelW: CGFloat {
+            compactHeight ? 150 : 170
+        }
     #endif
-    private let headH: CGFloat = 44
+    private var headH: CGFloat {
+        compactHeight ? 36 : 44
+    }
+
     #if os(tvOS)
         private let nowPillW: CGFloat = 130
     #else
@@ -586,15 +788,40 @@ struct GuideGrid: View {
         }
     #endif
 
+    /// How far a long program runs past the right edge of the screen, so its picture
+    /// stays in view instead of sitting off screen at the program's far end. iPhone and iPad.
+    private func trailingInset(start: CGFloat, width: CGFloat, visible: CGFloat) -> CGFloat {
+        #if os(tvOS)
+            0
+        #else
+            let past = start + width - (offset.x + visible)
+            let lead = max(0, offset.x - start)
+            return max(0, min(past, width - lead - 180))
+        #endif
+    }
+
     private func x(_ date: Date) -> CGFloat {
         CGFloat(date.timeIntervalSince(origin) / 60) * perMinute
     }
 
     var body: some View {
         GeometryReader { geo in
-            let row = fittedRowHeight(geo.size.height)
-            scrollGrid(rowHeight: row, viewport: geo.size)
+            let row = fittedRowHeight(geo.size.height - underBar(geo))
+            scrollGrid(rowHeight: row, viewport: geo.size, bottom: underBar(geo))
         }
+        #if os(iOS)
+        // The rows run on under the floating tab bar and mini player, as any scroll view's do.
+        .ignoresSafeArea(.container, edges: .bottom)
+        #endif
+    }
+
+    /// How much of the grid sits under the tab bar: the last row scrolls up past it.
+    private func underBar(_ geo: GeometryProxy) -> CGFloat {
+        #if os(iOS)
+            geo.safeAreaInsets.bottom
+        #else
+            0
+        #endif
     }
 
     /// A short lineup grows its rows so the guide fills the screen. A long one keeps the base height and scrolls.
@@ -605,7 +832,7 @@ struct GuideGrid: View {
         return min(room / count, 280)
     }
 
-    private func scrollGrid(rowHeight: CGFloat, viewport: CGSize) -> some View {
+    private func scrollGrid(rowHeight: CGFloat, viewport: CGSize, bottom: CGFloat) -> some View {
         let width = CGFloat(hours * 60) * perMinute
         let end = origin.addingTimeInterval(hours * 3600)
         let gridW = max(0, viewport.width - channelW)
@@ -635,11 +862,11 @@ struct GuideGrid: View {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             Color.clear.frame(height: headH)
                             ForEach(channels) { channel in
-                                row(channel, end: end, rowHeight: rowHeight)
+                                row(channel, end: end, rowHeight: rowHeight, visible: gridW)
                                     .frame(width: width, height: rowHeight, alignment: .leading)
                             }
                         }
-                        .frame(height: headH + CGFloat(channels.count) * rowHeight, alignment: .top)
+                        .frame(height: headH + CGFloat(channels.count) * rowHeight + bottom, alignment: .top)
                         // Now line
                         Rectangle()
                             .fill(Tokens.ColorToken.tally)
@@ -772,6 +999,11 @@ struct GuideGrid: View {
                         .contextMenu {
                             Button("Details", systemImage: "info.circle") { onDetails(channel, store.index.on(channel.id, at: store.now)) }
                         }
+                    #else
+                        .contextMenu {
+                            Button("Watch", systemImage: "play.fill") { nowPlaying.play(channel) }
+                            Button("Details", systemImage: "info.circle") { onDetails(channel, store.index.on(channel.id, at: store.now)) }
+                        }
                     #endif
                         .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)\(channel.isATSC3 ? ", ATSC 3.0" : "")")
                 }
@@ -814,7 +1046,7 @@ struct GuideGrid: View {
         }
     #endif
 
-    private func row(_ channel: Channel, end: Date, rowHeight: CGFloat) -> some View {
+    private func row(_ channel: Channel, end: Date, rowHeight: CGFloat, visible: CGFloat) -> some View {
         let list = store.index.airings(channel.id).filter { $0.end > origin && $0.start < end }
         return ZStack(alignment: .leading) {
             ForEach(list) { airing in
@@ -831,7 +1063,8 @@ struct GuideGrid: View {
                         art: ArtLayout.showsCellArt(slot: Int(w.rounded())) ? store.artURL(airing, width: 160) : nil,
                         showsText: w >= 44,
                         // A program that started off screen keeps its title at the visible edge.
-                        inset: max(0, min(offset.x - x(s), w - 120))
+                        inset: max(0, min(offset.x - x(s), w - 120)),
+                        trailing: trailingInset(start: x(s), width: w, visible: visible)
                     )
                     .frame(width: w, height: rowHeight - 10)
                 }
@@ -848,15 +1081,22 @@ struct GuideGrid: View {
                     .focused($cellFocus, equals: GuideCellKey(channel: channel.id, airing: airing.id))
                     // Back from later in the day comes back to now, on this channel.
                     .onExitCommand(perform: awayFromNow ? { backToNow(channel) } : nil)
+                #else
+                    .contextMenu {
+                        if airing.isOn(at: store.now) {
+                            Button("Watch", systemImage: "play.fill") { nowPlaying.play(channel) }
+                        }
+                        Button("Details", systemImage: "info.circle") { onDetails(channel, airing) }
+                    }
                 #endif
                     .offset(x: x(s))
             }
             if list.isEmpty {
-                Text(listingsNote(store.index.airings(channel.id), windowStart: origin)).font(.footnote).foregroundStyle(.tertiary).offset(x: offset.x + 12)
+                Text(listingsNote(store.index.airings(channel.id), windowStart: origin)).font(.footnote).foregroundStyle(.secondary).offset(x: offset.x + 12)
             } else if let last = store.index.airings(channel.id).last, last.end < end.addingTimeInterval(-60) {
                 Text(listingsNote(store.index.airings(channel.id), windowStart: end))
                     .font(.footnote)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .offset(x: x(last.end) + 12)
             }
         }
@@ -875,6 +1115,8 @@ struct GuideCell: View {
     /// A sliver of a program (its last few minutes) keeps its color bar but not a lone ellipsis.
     var showsText = true
     var inset: CGFloat = 0
+    /// The part of the cell past the screen's right edge.
+    var trailing: CGFloat = 0
 
     var body: some View {
         let kind = airing.kind
@@ -920,7 +1162,7 @@ struct GuideCell: View {
                     }
                 }
                 .padding(.leading, 12 + inset)
-                .padding(.trailing, 8)
+                .padding(.trailing, 8 + trailing)
             }
         }
         .opacity(airing.end <= now ? 0.45 : dim ? 0.3 : 1)
@@ -1003,12 +1245,25 @@ struct ProgramSheet: View {
     let channel: Channel
     let airing: Airing?
 
+    /// The kind and time line. Apple TV sets it at body size (29 pt); caption is 25.
+    private static var metaFont: Font {
+        #if os(tvOS)
+            .footnote.weight(.semibold)
+        #else
+            .caption.weight(.bold)
+        #endif
+    }
+
+    private func episodeLine(_ airing: Airing?) -> String? {
+        let label = airing?.episodeLabel.flatMap { $0.isEmpty ? nil : $0 }
+        let aired = airing?.originalAir.flatMap { $0.isEmpty ? nil : String(localized: "First aired \($0)") }
+        let parts = [label, aired].compactMap(\.self)
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     var body: some View {
         let kind = airing?.kind ?? .other
         let on = airing?.isOn(at: store.now) ?? true
-        let upcoming = airing.map { $0.start > store.now } ?? false
-        let once = airing.flatMap { Pass.once(in: store.passes, for: $0) }
-        let series = airing.flatMap { Pass.series(in: store.passes, for: $0) }
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let airing, let art = store.artURL(airing, width: 960) {
@@ -1038,119 +1293,54 @@ struct ProgramSheet: View {
                 }
                 if let airing {
                     Text("\(kind.label) · \(airing.start.formatted(.dateTime.weekday().hour().minute())) – \(airing.end.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption.weight(.bold))
+                        .font(Self.metaFont)
                         .foregroundStyle(.secondary)
                 }
-                if let line = guideSourceLine(airing?.guideSource) {
-                    Text(line).font(.caption).foregroundStyle(.secondary)
-                }
-                Text(airing?.title ?? channel.displayName).font(.largeTitle.weight(.heavy))
-                if let sub = airing?.subtitle {
-                    Text(sub).font(.title3).foregroundStyle(.secondary)
-                }
-                if let label = airing?.episodeLabel, !label.isEmpty {
-                    Text(label).font(.caption.weight(.bold)).foregroundStyle(.secondary)
-                }
-                if let aired = airing?.originalAir, !aired.isEmpty {
-                    Text("First aired \(aired)").font(.caption).foregroundStyle(.secondary)
-                }
-                if let airing, on {
-                    HStack {
-                        AiringProgress(airing.progress(at: store.now), color: kind.color)
-                        Text(airing.minutesLeft(at: store.now)).font(.footnote).foregroundStyle(.secondary)
-                    }
-                }
-                if let desc = airing?.description {
-                    Text(desc).foregroundStyle(.secondary)
-                }
-                VStack(spacing: 10) {
-                    if on {
-                        Button {
-                            dismiss()
-                            nowPlaying.play(channel)
-                        } label: {
-                            Label("Watch", systemImage: "play.fill").frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.large)
-                        Button {
-                            dismiss()
-                            if let current = nowPlaying.channel, current.id != channel.id {
-                                nowPlaying.watchTogether([current, channel])
-                            } else {
-                                nowPlaying.watchTogether([channel])
-                            }
-                        } label: {
-                            Label("Watch together", systemImage: "rectangle.split.2x1").frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glass)
-                        .controlSize(.large)
-                        Button {
-                            Task { await store.toggleRecord(channel) }
-                        } label: {
-                            Label(store.activeRecording(on: channel) == nil ? "Record" : "Stop recording", systemImage: "record.circle")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glass)
-                        .controlSize(.large)
-                    }
-                    if let airing, upcoming, series == nil {
-                        if let once {
-                            Button {
-                                act { try await store.removePass(once.id) }
-                            } label: {
-                                Label("Don't record", systemImage: "xmark.circle").frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.glass)
-                            .controlSize(.large)
-                        } else {
-                            Button {
-                                act { try await store.recordOnce(airing) }
-                            } label: {
-                                Label("Record", systemImage: "record.circle").frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.glass)
-                            .controlSize(.large)
-                        }
-                    }
-                    if let airing {
-                        Button {
-                            if series == nil {
-                                confirmSeries = true
-                            }
-                        } label: {
-                            Label(series != nil ? "Series is recording" : kind == .sports ? "Record every airing" : "Record series", systemImage: "repeat")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glass)
-                        .controlSize(.large)
-                        #if os(iOS)
-                            .disabled(series != nil)
-                        #endif
-                            .accessibilityIdentifier("program-record-series")
-                            .confirmationDialog(
-                                kind == .sports ? "Record every airing of \(airing.title)?" : "Record every episode of \(airing.title)?",
-                                isPresented: $confirmSeries,
-                                titleVisibility: .visible
-                            ) {
-                                Button(kind == .sports ? "Record every airing" : "Record series") {
-                                    act { try await store.recordSeries(airing) }
-                                }
-                                .accessibilityIdentifier("program-record-series-confirm")
-                                Button("Cancel", role: .cancel) {}
-                            } message: {
-                                Text("New airings record as they come up. You can stop it in Recordings › Upcoming.")
-                            }
-                    }
-                    if !problem.isEmpty {
-                        Text(problem).font(.footnote).foregroundStyle(.red)
-                    }
-                }
-                .padding(.top, 8)
                 #if os(tvOS)
-                    // Room for the focused button to grow without touching the sheet's edge.
-                    .padding(.bottom, 36)
-                    .padding(.horizontal, 12)
+                    if let line = guideSourceLine(airing?.guideSource) {
+                        Text(line).font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Text(airing?.title ?? channel.displayName).font(.largeTitle.weight(.heavy))
+                    if let sub = airing?.subtitle {
+                        Text(sub).font(.title3).foregroundStyle(.secondary)
+                    }
+                    // From ten feet the episode and first-aired lines read as one, at body size.
+                    if let line = episodeLine(airing) {
+                        Text(line).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                    if let airing, on {
+                        HStack {
+                            AiringProgress(airing.progress(at: store.now), color: kind.color)
+                            Text(airing.minutesLeft(at: store.now)).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                    if let desc = airing?.description {
+                        Text(desc).foregroundStyle(.secondary)
+                    }
+                    actions
+                #else
+                    // Watch comes first, under the title. Where the listing came from is
+                    // not a choice a viewer makes, so the sheet leaves it out.
+                    Text(airing?.title ?? channel.displayName).font(.largeTitle.weight(.heavy))
+                    if let sub = airing?.subtitle {
+                        Text(sub).font(.title3).foregroundStyle(.secondary)
+                    }
+                    actions
+                    if let label = airing?.episodeLabel, !label.isEmpty {
+                        Text(label).font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                    }
+                    if let aired = airing?.originalAir, !aired.isEmpty {
+                        Text("First aired \(aired)").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let airing, on {
+                        HStack {
+                            AiringProgress(airing.progress(at: store.now), color: kind.color)
+                            Text(airing.minutesLeft(at: store.now)).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                    if let desc = airing?.description {
+                        Text(desc).foregroundStyle(.secondary)
+                    }
                 #endif
             }
             .padding(24)
@@ -1160,6 +1350,103 @@ struct ProgramSheet: View {
             RadialGradient(colors: [kind.color.opacity(0.35), .clear], center: .topLeading, startRadius: 0, endRadius: 400)
                 .ignoresSafeArea()
         }
+    }
+
+    private var actions: some View {
+        let kind = airing?.kind ?? .other
+        let on = airing?.isOn(at: store.now) ?? true
+        let upcoming = airing.map { $0.start > store.now } ?? false
+        let once = airing.flatMap { Pass.once(in: store.passes, for: $0) }
+        let series = airing.flatMap { Pass.series(in: store.passes, for: $0) }
+        return VStack(spacing: 10) {
+            if on {
+                Button {
+                    dismiss()
+                    nowPlaying.play(channel)
+                } label: {
+                    Label("Watch", systemImage: "play.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
+                .controlSize(.large)
+                Button {
+                    dismiss()
+                    if let current = nowPlaying.channel, current.id != channel.id {
+                        nowPlaying.watchTogether([current, channel])
+                    } else {
+                        nowPlaying.watchTogether([channel])
+                    }
+                } label: {
+                    Label("Watch together", systemImage: "rectangle.split.2x1").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .controlSize(.large)
+                Button {
+                    Task { await store.toggleRecord(channel) }
+                } label: {
+                    Label(store.activeRecording(on: channel) == nil ? "Record" : "Stop recording", systemImage: "record.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .controlSize(.large)
+            }
+            if let airing, upcoming, series == nil {
+                if let once {
+                    Button {
+                        act { try await store.removePass(once.id) }
+                    } label: {
+                        Label("Don't record", systemImage: "xmark.circle").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
+                } else {
+                    Button {
+                        act { try await store.recordOnce(airing) }
+                    } label: {
+                        Label("Record", systemImage: "record.circle").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
+                }
+            }
+            if let airing {
+                Button {
+                    if series == nil {
+                        confirmSeries = true
+                    }
+                } label: {
+                    Label(series != nil ? "Series is recording" : kind == .sports ? "Record every airing" : "Record series", systemImage: "repeat")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .controlSize(.large)
+                #if os(iOS)
+                    .disabled(series != nil)
+                #endif
+                    .accessibilityIdentifier("program-record-series")
+                    .confirmationDialog(
+                        kind == .sports ? "Record every airing of \(airing.title)?" : "Record every episode of \(airing.title)?",
+                        isPresented: $confirmSeries,
+                        titleVisibility: .visible
+                    ) {
+                        Button(kind == .sports ? "Record every airing" : "Record series") {
+                            act { try await store.recordSeries(airing) }
+                        }
+                        .accessibilityIdentifier("program-record-series-confirm")
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("New airings record as they come up. You can stop it in Recordings › Upcoming.")
+                    }
+            }
+            if !problem.isEmpty {
+                Text(problem).font(.footnote).foregroundStyle(.red)
+            }
+        }
+        .padding(.top, 8)
+        #if os(tvOS)
+            // Room for the focused button to grow without touching the sheet's edge.
+            .padding(.bottom, 36)
+            .padding(.horizontal, 12)
+        #endif
     }
 
     private func act(_ work: @escaping () async throws -> Void) {

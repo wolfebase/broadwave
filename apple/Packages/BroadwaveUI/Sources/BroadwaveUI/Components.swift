@@ -61,8 +61,8 @@ public struct ATSC3Tag: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(.white.opacity(0.12), in: .rect(cornerRadius: Tokens.Radius.xs))
+            // No identifier: a card that combines its children took this one as its own.
             .accessibilityLabel("ATSC 3.0")
-            .accessibilityIdentifier("atsc3-tag")
     }
 }
 
@@ -214,13 +214,16 @@ public struct OnNowRow: View {
     let next: Airing?
     let now: Date
     let recording: Bool
+    /// The row shows a later time: the program's hours instead of how far along it is.
+    let later: Bool
 
-    public init(channel: Channel, airing: Airing?, next: Airing?, now: Date, recording: Bool) {
+    public init(channel: Channel, airing: Airing?, next: Airing?, now: Date, recording: Bool, later: Bool = false) {
         self.channel = channel
         self.airing = airing
         self.next = next
         self.now = now
         self.recording = recording
+        self.later = later
     }
 
     public var body: some View {
@@ -248,11 +251,19 @@ public struct OnNowRow: View {
                     }
                     Text(airing?.title ?? String(localized: "No listing")).font(.body.weight(.semibold)).lineLimit(1)
                 }
-                AiringProgress(airing?.progress(at: now) ?? 0, color: kind.color)
+                if later, let airing {
+                    Text("\(airing.start.formatted(date: .omitted, time: .shortened)) – \(airing.end.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(kind.color)
+                } else {
+                    AiringProgress(airing?.progress(at: now) ?? 0, color: kind.color)
+                }
                 if let next {
+                    // Secondary, not tertiary: the lighter gray failed contrast on the dark rows.
                     Text("Next \(next.start.formatted(date: .omitted, time: .shortened)) · \(next.title)")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }

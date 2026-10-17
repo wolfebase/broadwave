@@ -121,3 +121,40 @@ private func channel(_ id: Int64, _ number: String, favorite: Bool = false, twin
     recent.clear()
     #expect(recent.items.isEmpty)
 }
+
+@Test func searchListsEachShowOnceWithItsAiringsAndEachGameApart() {
+    let now = t0.addingTimeInterval(30 * 60)
+    let found = [
+        airing(1, channel: 3, title: "The Commish", start: 0, minutes: 60),
+        airing(2, channel: 3, title: "The Commish", start: 120, minutes: 60),
+        airing(3, channel: 4, title: "the commish ", start: 300, minutes: 60),
+        airing(4, channel: 5, title: "KC End Zone", start: 200, minutes: 30),
+        airing(5, channel: 6, title: "College Football", subtitle: "Washington at Purdue", category: "Sport, Football", gameId: "401", start: 400),
+        airing(6, channel: 6, title: "College Football", subtitle: "Iowa at Ohio State", category: "Sport, Football", gameId: "402", start: 500),
+        airing(7, channel: 3, title: "The Commish", start: -120, minutes: 60),
+    ]
+    let shows = SearchBoard.shows(found, visible: [3, 4, 5, 6], now: now)
+    #expect(shows.map(\.airings.count) == [3, 1, 1, 1])
+    #expect(shows[0].live?.id == 1)
+    #expect(shows[0].next(after: now)?.id == 2)
+    #expect(shows[1].lead.id == 4)
+    #expect(shows[2].lead.id == 5 && shows[3].lead.id == 6)
+}
+
+@Test func homeLeadsWithSomethingWorthWatchingNotAShowEndingNow() {
+    let now = t0.addingTimeInterval(58 * 60)
+    let a = channel(1, "4.1")
+    let b = channel(2, "5.1")
+    let c = channel(3, "62.3")
+    let d = channel(4, "9.1")
+    var ending = airing(1, channel: 1, title: "Judge Judy", start: 0, minutes: 60)
+    ending.imageUrl = "x"
+    var fresh = airing(2, channel: 2, title: "Let's Make a Deal", start: 50, minutes: 60)
+    fresh.imageUrl = "y"
+    let sitcom = airing(3, channel: 3, title: "The Game", category: "Series, Comedy drama, Football", start: 30, minutes: 60)
+    let paid = airing(4, channel: 4, title: "Paid Programming", start: 30, minutes: 60)
+    let pick = HomeBoard.hero([(a, ending), (b, fresh), (c, sitcom), (d, paid)], now: now)
+    #expect(pick?.0.id == 2)
+    let game = airing(5, channel: 3, title: "College Football", subtitle: "A at B", category: "Sport, Football", gameId: "9", start: 30, minutes: 180)
+    #expect(HomeBoard.hero([(b, fresh), (c, game)], now: now)?.0.id == 3)
+}

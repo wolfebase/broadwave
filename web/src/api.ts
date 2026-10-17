@@ -205,10 +205,10 @@ export function putSettings(values: Partial<Settings>) {
 }
 
 // room is the sync room a player that starts on the room's frame joins.
-export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendition = "", confirmLive = false, signal?: AbortSignal, room = "") {
+export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendition = "", confirmLive = false, signal?: AbortSignal, room = "", ticket = "") {
   return request<WatchSession>("/api/v1/watch", {
     method: "POST",
-    body: JSON.stringify({ channelId, caps, prefs, rendition, ...(confirmLive ? { confirmLive: true } : {}), ...(room ? { room } : {}) }),
+    body: JSON.stringify({ channelId, caps, prefs, rendition, ...(confirmLive ? { confirmLive: true } : {}), ...(room ? { room } : {}), ...(ticket ? { ticket } : {}) }),
     signal,
   });
 }
@@ -220,6 +220,24 @@ export function warmChannel(channelId: number, caps: Caps, prefs: Prefs) {
 
 export function stopWatch(channelId: number, rendition = "", boot = "") {
   return request<{ ok: boolean }>(`/api/v1/watch/${channelId}/stop`, { method: "POST", body: JSON.stringify({ rendition, boot }) });
+}
+
+/** A name for one watch request, so a page that leaves before reading the answer can stop it. */
+export function watchTicket(): string {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Stops the viewer a watch request may have been counted as, by its ticket. A
+ * beacon, so it still goes out while the page is being hidden or closed.
+ */
+export function stopWatchTicket(channelId: number, ticket: string) {
+  const url = `/api/v1/watch/${channelId}/stop`;
+  const body = JSON.stringify({ ticket });
+  if (navigator.sendBeacon?.(url, new Blob([body], { type: "application/json" }))) return;
+  void request<{ ok: boolean }>(url, { method: "POST", body, keepalive: true }).catch(() => undefined);
 }
 
 export function planMultiview(channelIds: number[]) {

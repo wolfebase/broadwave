@@ -14,6 +14,8 @@ struct HomeView: View {
     @State private var teams: [TeamFollow] = []
     /// iPad and Apple TV cover the picture. A push would keep the sidebar on it.
     @State private var playingRecording: Recording?
+    /// A later program's details, from the Tonight shelf.
+    @State private var details: GuideView.Selection?
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
         @FocusState private var watch: Bool
@@ -35,13 +37,15 @@ struct HomeView: View {
                     TVPageTitle(String(localized: "Home"))
                         .padding(.horizontal)
                 #endif
-                if let (channel, airing) = store.featured() {
-                    #if os(tvOS)
+                #if os(tvOS)
+                    if let (channel, airing) = store.featured() {
                         Hero(channel: channel, airing: airing, watchFocused: $watch)
-                    #else
-                        Hero(channel: channel, airing: airing)
-                    #endif
-                }
+                    }
+                #else
+                    if let (channel, airing) = touchHero {
+                        TouchHero(channel: channel, airing: airing)
+                    }
+                #endif
                 let live = store.channels.compactMap { c -> (Channel, Airing)? in
                     guard let a = store.index.on(c.id, at: store.now) else { return nil }
                     return (c, a)
@@ -66,6 +70,9 @@ struct HomeView: View {
                         }
                     }
                 }
+                #if os(iOS)
+                    tonightShelf
+                #endif
                 let games = homeGames
                 let yours = games.filter { WidgetFeed.followed($0.1, teams) }
                 if !yours.isEmpty {
@@ -184,6 +191,12 @@ struct HomeView: View {
             }
         }
         .onChange(of: playingRecording != nil) { _, up in library.playing = up }
+        .sheet(item: $details) { sel in
+            ProgramSheet(channel: sel.channel, airing: sel.airing)
+            #if os(iOS)
+                .presentationDetents([.medium, .large])
+            #endif
+        }
         .onChange(of: library.closeToken) { _, _ in playingRecording = nil }
         .navigationTitle("Home")
         #if os(tvOS)
@@ -227,14 +240,52 @@ struct HomeView: View {
         .onAppear { saved = SavedMultiview.load() }
     }
 
-    /// Apple TV lists games only, each once, as its Sports page does.
+    /// Games only, each once, as the Sports pages list them. A sitcom called The Game is not one.
     private var homeGames: [(Channel, Airing)] {
-        #if os(tvOS)
-            SportsBoard.games(store.sports()).map { ($0.channel, $0.airing) }
-        #else
-            store.sports()
-        #endif
+        SportsBoard.games(store.sports()).map { ($0.channel, $0.airing) }
     }
+
+    #if os(iOS)
+        /// Something worth watching now: not a show in its last minutes, not paid programming.
+        private var touchHero: (Channel, Airing?)? {
+            HomeBoard.hero(store.channels.map { ($0, store.index.on($0.id, at: store.now)) }, now: store.now)
+        }
+
+        /// Prime time tonight on the channels with art, favorites first.
+        @ViewBuilder
+        private var tonightShelf: some View {
+            let picks = tonight
+            if picks.count >= 3 {
+                Shelf("Tonight") {
+                    ForEach(picks, id: \.1.id) { channel, airing in
+                        Button { details = GuideView.Selection(channel: channel, airing: airing) } label: {
+                            LaterCard(channel: channel, airing: airing)
+                        }
+                        .cardButton()
+                        .accessibilityIdentifier("home-tonight")
+                    }
+                }
+            }
+        }
+
+        private var tonight: [(Channel, Airing)] {
+            let cal = Calendar.current
+            var parts = cal.dateComponents([.year, .month, .day], from: store.now)
+            parts.hour = 20
+            parts.minute = 5
+            guard let prime = cal.date(from: parts), prime > store.now else { return [] }
+            let list = store.channels.compactMap { c -> (Channel, Airing)? in
+                guard let a = store.index.on(c.id, at: prime), a.imageUrl?.isEmpty == false else { return nil }
+                return (c, a)
+            }
+            var seen = Set<String>()
+            return list
+                .sorted { ($0.0.favorite ? 0 : 1, $0.1.start) < ($1.0.favorite ? 0 : 1, $1.1.start) }
+                .filter { seen.insert($0.1.title.lowercased()).inserted }
+                .prefix(12)
+                .map(\.self)
+        }
+    #endif
 
     #if os(tvOS)
         /// Guide and Settings put focus in the page, which collapses the sidebar. Home does not, unless asked.
@@ -505,7 +556,7 @@ struct GameCard: View {
                 }
                 if let (a, b) = airing.matchup {
                     Text(a).font(.headline.weight(.heavy)).lineLimit(1)
-                    Text("AT").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
+                    Text("AT").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
                     Text(b).font(.headline.weight(.heavy)).lineLimit(1)
                 } else {
                     Text(airing.subtitle ?? airing.title).font(.headline.weight(.heavy)).lineLimit(3)
@@ -659,3 +710,169 @@ struct PressCardStyle: ButtonStyle {
             .animation(Tokens.Motion.spring, value: configuration.isPressed)
     }
 }
+
+#if os(iOS)
+    /// Home's lead on iPhone and iPad: the program's art fills the card edge to edge, the
+    /// words sit on a dark fade at its foot. A small or tall picture is shown whole over a
+    /// blurred copy of itself, never stretched or left with a band of tint above it.
+    struct TouchHero: View {
+        @Environment(AppStore.self) private var store
+        @Environment(NowPlaying.self) private var nowPlaying
+        @Environment(\.horizontalSizeClass) private var width
+        let channel: Channel
+        let airing: Airing?
+
+        var body: some View {
+            let kind = airing?.kind ?? .other
+            ZStack(alignment: .bottomLeading) {
+                Color.clear
+                    .overlay { backdrop }
+                    .overlay {
+                        LinearGradient(
+                            stops: [.init(color: .clear, location: 0.3), .init(color: .black.opacity(0.92), location: 0.95)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        // On a dark chip: red on bright art did not read.
+                        LiveDot("Live now")
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.7), in: .capsule)
+                        if let label = kindLabel(kind) {
+                            Text(label).font(.caption.weight(.bold)).tracking(1).foregroundStyle(.white.opacity(0.8))
+                        }
+                    }
+                    Text(airing.map(GameWords.title) ?? channel.displayName)
+                        .font(.system(.largeTitle, weight: .heavy))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
+                    if let sub = airing?.subtitle, airing?.matchup == nil {
+                        Text(sub).font(.title3).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
+                    }
+                    HStack(spacing: 12) {
+                        ChannelBadge(channel)
+                            .fixedSize()
+                        if let airing {
+                            AiringProgress(airing.progress(at: store.now), color: kind.color).frame(minWidth: 40, maxWidth: 160)
+                            Text(airing.minutesLeft(at: store.now)).font(.footnote).foregroundStyle(.white.opacity(0.8)).fixedSize()
+                        }
+                    }
+                    HStack(spacing: 12) {
+                        Button("Watch", systemImage: "play.fill") { nowPlaying.play(channel) }
+                            .buttonStyle(.glassProminent)
+                            .controlSize(.large)
+                            .accessibilityIdentifier("home-watch")
+                        Button(store.activeRecording(on: channel) == nil ? "Record" : "Recording", systemImage: "record.circle") {
+                            Task { await store.toggleRecord(channel) }
+                        }
+                        .buttonStyle(.glass)
+                        .controlSize(.large)
+                    }
+                    .padding(.top, 4)
+                }
+                .foregroundStyle(.white)
+                .padding(20)
+            }
+            .aspectRatio(width == .regular ? 16 / 7 : 4 / 5, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .background(Tokens.ColorToken.surface1)
+            .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
+            .playerZoomSource(channel.id)
+            .padding(.horizontal)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("home-hero")
+        }
+
+        /// The category, except Sports on a show that only talks about it.
+        private func kindLabel(_ kind: BroadwaveKit.Category) -> String? {
+            guard kind != .other else { return nil }
+            if kind == .sports, let airing, !SportsBoard.isGame(airing) {
+                return nil
+            }
+            return kind.label.uppercased()
+        }
+
+        @ViewBuilder
+        private var backdrop: some View {
+            if let airing, let art = store.artURL(airing, width: 1200) {
+                let layout = ArtLayout.choose(width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0, slot: 1200)
+                AsyncImage(url: art) { phase in
+                    if let image = phase.image {
+                        if layout == "bleed" {
+                            image.resizable().scaledToFill()
+                        } else {
+                            ZStack(alignment: .top) {
+                                image.resizable().scaledToFill().blur(radius: 36).opacity(0.7)
+                                image.resizable().scaledToFit()
+                                    .clipShape(.rect(cornerRadius: Tokens.Radius.lg))
+                                    .padding(.horizontal, 28)
+                                    .padding(.top, 28)
+                                    .frame(maxHeight: 260, alignment: .top)
+                            }
+                        }
+                    } else {
+                        tint
+                    }
+                }
+            } else if let frame = store.api?.frameURL(channelID: channel.id, width: 960, listed: store.frameIDs) {
+                AsyncImage(url: frame) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        tint
+                    }
+                }
+            } else {
+                tint
+            }
+        }
+
+        private var tint: some View {
+            ZStack(alignment: .topTrailing) {
+                RadialGradient(colors: [(airing?.kind ?? .other).color.opacity(0.5), .clear], center: .topTrailing, startRadius: 0, endRadius: 420)
+                Text(channel.displayNumber)
+                    .font(.system(size: 160, weight: .black))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.06))
+                    .padding(20)
+            }
+        }
+    }
+
+    /// A program later today: its art, the time, the title, and the channel.
+    struct LaterCard: View {
+        @Environment(AppStore.self) private var store
+        let channel: Channel
+        let airing: Airing
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                Group {
+                    if let art = store.artURL(airing, width: 640) {
+                        ProgramPicture(url: art, width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0, hero: false)
+                    } else {
+                        Tokens.ColorToken.surface2
+                    }
+                }
+                .frame(width: cardWidth, height: cardWidth * 9 / 16)
+                .clipShape(.rect(cornerRadius: Tokens.Radius.md))
+                Text(airing.start.formatted(date: .omitted, time: .shortened))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                Text(airing.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text("\(channel.displayNumber) \(channel.displayName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(width: cardWidth, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(airing.title), \(airing.start.formatted(date: .omitted, time: .shortened)), \(channel.displayNumber) \(channel.displayName)")
+            .accessibilityHint("Shows the details")
+        }
+    }
+#endif

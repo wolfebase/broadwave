@@ -5,77 +5,90 @@ import SwiftUI
     import UniformTypeIdentifiers
 #endif
 
+/// What Settings loaded from the server and what the viewer has typed. A class, so a page
+/// pushed on iPhone sees a load that finishes after it opened.
+@MainActor
+@Observable
+final class SettingsModel {
+    var seat: ClientSeat?
+    var storage: APIClient.StorageInfo?
+    var showRows: [StorageShow]?
+    var backupRows: [CatalogBackup]?
+    var restoreName: String?
+    var showAbout = false
+    var showDiagnostics = false
+    var showChannels = false
+    var showSources = false
+    var showPasses = false
+    var checkUpdates = true
+    var updatesKnown = false
+    var liveScores = true
+    var scoresKnown = false
+    var sportsDB = false
+    var sportsKey = ""
+    var supportBusy = false
+    var hideScores = false
+    var hideScoresKnown = false
+    var gameAlerts = "all"
+    var alertsKnown = false
+    var autoplay = true
+    var autoplayKnown = false
+    var shareTuner = false
+    var shareKnown = false
+    var pictureMode = "broadcast"
+    var liveDelay = LiveDelay.saved
+    var pictureKnown = false
+    var sdUser = ""
+    var sdLineup = ""
+    var guideURL = ""
+    var reserve = "10"
+    var bufferMinutes = "60"
+    var loadedBuffer = "60"
+    var bufferKnown = false
+    var makeRoom = "0"
+    var loadedMakeRoom = "0"
+    var roomKnown = false
+    var deleteWatchedDays = "0"
+    var loadedDays = "0"
+    var daysKnown = false
+    var folderLayout = "shows"
+    var loadedFolder = "shows"
+    var folderKnown = false
+    var sdPassword = ""
+    var tmdbKey = ""
+    var passwordSaved = false
+    var artSaved = false
+    var guideKnown = false
+    var loadedUser = ""
+    var loadedLineup = ""
+    var loadedGuide = ""
+    var loadedReserve = "10"
+    var showError = ""
+    var backupError = ""
+    var backupBusy = ""
+    var importBackup = false
+    var saveError = ""
+    var savedNote = ""
+    var screenLabel = ""
+    var screenLabelSaved = ""
+    var screenNameReady = false
+    var confirmImport = false
+}
+
 struct SettingsView: View {
+    @State private var m = SettingsModel()
     @Environment(AppStore.self) private var store
     @Environment(LibraryFilter.self) private var library
-    @State private var showAbout = false
     /// How the server knows this device: open at home, or a paired device.
-    @State private var seat: ClientSeat?
-    @State private var showDiagnostics = false
-    @State private var showChannels = false
-    @State private var showSources = false
-    @State private var showPasses = false
-    @State private var checkUpdates = true
-    @State private var updatesKnown = false
-    @State private var liveScores = true
-    @State private var scoresKnown = false
-    @State private var sportsDB = false
-    @State private var sportsKey = ""
-    @State private var supportBusy = false
-    @State private var hideScores = false
-    @State private var hideScoresKnown = false
-    @State private var gameAlerts = "all"
-    @State private var alertsKnown = false
-    @State private var autoplay = true
-    @State private var autoplayKnown = false
-    @State private var shareTuner = false
-    @State private var shareKnown = false
-    @State private var pictureMode = "broadcast"
-    @State private var liveDelay = LiveDelay.saved
-    @State private var pictureKnown = false
-    @State private var sdUser = ""
-    @State private var sdLineup = ""
-    @State private var guideURL = ""
     @AppStorage(BreakSkip.key) private var breakSkip = BreakSkip.auto
     #if os(iOS)
         @AppStorage(LiveActivities.recordingsKey) private var activityRecordings = true
         @AppStorage(LiveActivities.gamesKey) private var activityGames = true
     #endif
-    @State private var reserve = "10"
-    @State private var bufferMinutes = "60"
-    @State private var loadedBuffer = "60"
-    @State private var bufferKnown = false
-    @State private var makeRoom = "0"
-    @State private var loadedMakeRoom = "0"
-    @State private var roomKnown = false
-    @State private var deleteWatchedDays = "0"
-    @State private var loadedDays = "0"
-    @State private var daysKnown = false
-    @State private var folderLayout = "shows"
-    @State private var loadedFolder = "shows"
-    @State private var folderKnown = false
-    @State private var sdPassword = ""
-    @State private var tmdbKey = ""
-    @State private var passwordSaved = false
-    @State private var artSaved = false
-    @State private var guideKnown = false
-    @State private var loadedUser = ""
-    @State private var loadedLineup = ""
-    @State private var loadedGuide = ""
-    @State private var loadedReserve = "10"
-    @State private var storage: APIClient.StorageInfo?
-    @State private var showRows: [StorageShow]?
-    @State private var showError = ""
-    @State private var backupRows: [CatalogBackup]?
-    @State private var backupError = ""
-    @State private var backupBusy = ""
-    @State private var restoreName: String?
-    @State private var importBackup = false
-    @State private var saveError = ""
-    @State private var savedNote = ""
-    @State private var screenLabel = ""
-    @State private var screenLabelSaved = ""
-    @State private var screenNameReady = false
+    /// The page on the right on iPad.
+    @State private var padPage: SettingsPage? = .playback
+    /// A page a debug launch opens on iPhone.
+    @State private var phonePage: SettingsPage?
 
     private var demo: Bool {
         store.server?.id == "demo"
@@ -89,25 +102,232 @@ struct SettingsView: View {
         }
     }
 
+    /// iPhone pushes a page from the list; iPad keeps the list on the left and the page on the right.
     @ViewBuilder
-    private func settingsForm(_ store: AppStore) -> some View {
-        @Bindable var store = store
-        Form {
-            screenNameSection
-            if !saveError.isEmpty {
-                Section {
-                    Text(saveError)
-                        .foregroundStyle(.red)
+    private func settingsForm(_: AppStore) -> some View {
+        #if os(iOS)
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                NavigationSplitView {
+                    List(selection: $padPage) { rootSections }
+                        .navigationTitle("Settings")
+                } detail: {
+                    NavigationStack {
+                        page(padPage ?? .playback)
+                    }
+                }
+                .modifier(settingsWork)
+            } else {
+                List { rootSections }
+                    .navigationTitle("Settings")
+                    .navigationDestination(item: $phonePage) { page($0) }
+                    .modifier(settingsWork)
+            }
+        #else
+            Form {
+                ForEach(SettingsPage.allCases) { item in
+                    pageSections(item)
                 }
             }
-            Section {
-                HomeListView(grabsFocus: true)
+            .navigationTitle("Settings")
+            .modifier(settingsWork)
+        #endif
+    }
+
+    /// Loading, saving on the way out, and the restore question, for every layout.
+    private var settingsWork: SettingsWork {
+        SettingsWork(load: load, leave: {
+            flushServerText()
+            commitScreenName()
+        }, restoreName: $m.restoreName, restore: { name in Task { await restore(name) } })
+    }
+
+    // MARK: The list
+
+    /// This device first, then the server every screen shares, so a change says where it lands.
+    @ViewBuilder
+    private var rootSections: some View {
+        Section {
+            row(.screen, "Name", symbol: "character.cursor.ibeam", value: m.screenLabel.isEmpty ? ScreenIdentity.name : m.screenLabel)
+            row(.playback, "Playback", symbol: "play.rectangle", value: qualityName)
+            row(.sync, "Whole-Home Sync", symbol: "dot.radiowaves.left.and.right", value: store.syncEnabled ? String(localized: "On") : String(localized: "Off"))
+            #if os(iOS)
+                row(.activities, "Live Activities", symbol: "platter.filled.bottom.iphone", value: "")
+            #endif
+        } header: {
+            Text(deviceName)
+        } footer: {
+            Text(deviceFooter)
+        }
+        Section {
+            row(.home, "Your home", symbol: "house", value: "")
+        } footer: {
+            Text("Tuners, screens, and servers on this network.")
+        }
+        Section {
+            row(.server, demo ? "Demo" : "Server", symbol: "server.rack", value: store.info?.name ?? store.server?.name ?? "")
+            row(.recording, "Recording and storage", symbol: "record.circle", value: "")
+            row(.picture, "Picture", symbol: "sparkles.tv", value: m.pictureMode.capitalized)
+            row(.sports, "Sports and scores", symbol: "sportscourt", value: "")
+            if !demo {
+                row(.guide, "Guide data", symbol: "list.bullet.rectangle", value: "")
             }
-            serverSection
+            row(.sources, "Tuners and channels", symbol: "antenna.radiowaves.left.and.right", value: "")
+            if !demo {
+                row(.backups, "Backups", symbol: "externaldrive", value: "")
+            }
+            row(.support, "Updates and support", symbol: "lifepreserver", value: "")
+        } header: {
+            Text("Server")
+        } footer: {
+            Text(demo ? "The demo changes nothing on your server." : "These apply to every screen in the house.")
+        }
+        Section {
+            row(.about, "About", symbol: "info.circle", value: "")
+        } footer: {
+            if !demo {
+                Text(accessLine)
+                    .accessibilityIdentifier("settings-access")
+            }
+        }
+        if !m.saveError.isEmpty {
+            Section {
+                Text(m.saveError).foregroundStyle(.red)
+            }
+        }
+    }
+
+    /// iPad selects the row for the page beside the list. iPhone pushes it: Settings is itself
+    /// pushed on the tab's stack, and a value link there did not reach a destination.
+    @ViewBuilder
+    private func row(_ item: SettingsPage, _ title: LocalizedStringKey, symbol: String, value: String) -> some View {
+        let label = LabeledContent {
+            Text(value).lineLimit(1)
+        } label: {
+            Label {
+                Text(title).foregroundStyle(.primary)
+            } icon: {
+                Image(systemName: symbol).foregroundStyle(.tint)
+            }
+        }
+        #if os(iOS)
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                Button { phonePage = item } label: {
+                    HStack {
+                        label
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings-\(item.rawValue)")
+            } else {
+                NavigationLink(value: item) { label }
+                    .accessibilityIdentifier("settings-\(item.rawValue)")
+            }
+        #else
+            NavigationLink(value: item) { label }
+                .accessibilityIdentifier("settings-\(item.rawValue)")
+        #endif
+    }
+
+    private var deviceName: String {
+        #if os(iOS)
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                return String(localized: "This iPad")
+            }
+            return String(localized: "This iPhone")
+        #else
+            return String(localized: "This Apple TV")
+        #endif
+    }
+
+    private var deviceFooter: String {
+        #if os(iOS)
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                return String(localized: "Kept on this iPad.")
+            }
+            return String(localized: "Kept on this iPhone.")
+        #else
+            return String(localized: "Kept on this Apple TV.")
+        #endif
+    }
+
+    private var qualityName: String {
+        switch store.prefs.quality {
+        case .auto: String(localized: "Auto")
+        case .original: String(localized: "Original")
+        case .high: String(localized: "High")
+        case .medium: String(localized: "Medium")
+        case .saver: String(localized: "Data saver")
+        case .tile, .focus, .tile360: String(localized: "Auto")
+        }
+    }
+
+    // MARK: Pages
+
+    private func page(_ item: SettingsPage) -> some View {
+        Form {
+            if item == .about {
+                AboutView.credit
+            } else {
+                pageSections(item)
+            }
+        }
+        .navigationTitle(item.title)
+        #if os(iOS)
+            .toolbarTitleDisplayMode(.inline)
+        #endif
+            .navigationDestination(isPresented: $m.showAbout) { AboutView() }
+            .navigationDestination(isPresented: $m.showDiagnostics) { DiagnosticsView() }
+            .navigationDestination(isPresented: $m.showChannels) { ChannelsView() }
+            .navigationDestination(isPresented: $m.showSources) { SourcesView() }
+            .navigationDestination(isPresented: $m.showPasses) { PassesView() }
+        #if os(iOS)
+            .fileImporter(isPresented: $m.importBackup, allowedContentTypes: [.data]) { result in
+                Task { await importCatalog(result) }
+            }
+        #endif
+    }
+
+    @ViewBuilder
+    private func pageSections(_ item: SettingsPage) -> some View {
+        switch item {
+        case .screen:
+            screenNameSection
+        case .playback:
             playbackSection(store)
             CaptionStyleSection()
             delaySection
+            breaksSection
+        case .sync:
+            syncSection(store)
+        case .activities:
+            #if os(iOS)
+                activitiesSection.id("activities")
+            #else
+                EmptyView()
+            #endif
+        case .home:
+            Section {
+                HomeListView(grabsFocus: true)
+            }
+        case .server:
+            serverSection
+        case .recording:
+            dvrSection
+            if !demo {
+                storageFolderSection.id("storage")
+                storageOptionsSection
+                showSpaceSection
+            }
+        case .picture:
             pictureSection
+        case .sports:
+            sportsSection
+        case .guide:
             if demo {
                 Section {
                     Text("The demo does not change a guide account, a folder, or a backup.")
@@ -116,97 +336,71 @@ struct SettingsView: View {
             } else {
                 guideSection.id("guide")
             }
-            sportsSection
-            dvrSection
-            #if os(iOS)
-                activitiesSection.id("activities")
-            #endif
+        case .sources:
             sourcesSection
-            syncSection(store)
+        case .backups:
             if !demo {
-                storageFolderSection.id("storage")
-                showSpaceSection
-                storageOptionsSection
                 backupSection.id("backups")
             }
+        case .support:
             updatesSection
             supportSection
             if !demo {
                 Section {
-                    Button("Diagnostics") { showDiagnostics = true }
+                    Button("Diagnostics") { m.showDiagnostics = true }
                 } footer: {
                     Text("Tuner health, the guide, and the last antenna reading.")
                 }
             }
+        case .about:
             Section {
-                Button("About") { showAbout = true }
+                Button("About") { m.showAbout = true }
                     .accessibilityLabel("About Broadwave")
             }
-            if !demo {
-                Section {
-                    Text(accessLine)
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("settings-access")
-                }
+        }
+        if !m.saveError.isEmpty {
+            Section {
+                Text(m.saveError).foregroundStyle(.red)
             }
         }
-        .navigationTitle("Settings")
-        .task { await load() }
-        .onDisappear {
-            flushServerText()
-            commitScreenName()
-        }
-        .navigationDestination(isPresented: $showAbout) { AboutView() }
-        .navigationDestination(isPresented: $showDiagnostics) { DiagnosticsView() }
-        .navigationDestination(isPresented: $showChannels) { ChannelsView() }
-        .navigationDestination(isPresented: $showSources) { SourcesView() }
-        .navigationDestination(isPresented: $showPasses) { PassesView() }
-        .confirmationDialog(
-            "Restore this backup? The catalog goes back to that copy. Recordings stay.",
-            isPresented: Binding(
-                get: { restoreName != nil },
-                set: {
-                    if !$0 {
-                        restoreName = nil
-                    }
-                }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Restore", role: .destructive) {
-                if let name = restoreName {
-                    Task { await restore(name) }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-        #if os(iOS)
-        .fileImporter(isPresented: $importBackup, allowedContentTypes: [.data]) { result in
-            Task { await importCatalog(result) }
-        }
-        #endif
     }
 
     private func openDebug(_ proxy: ScrollViewProxy) {
         #if DEBUG
-            if UserDefaults.standard.bool(forKey: "BroadwaveAbout") {
-                showAbout = true
+            // A flag opens the page that holds what it names, then the screen or row on it.
+            let defaults = UserDefaults.standard
+            var opened: SettingsPage?
+            if defaults.bool(forKey: "BroadwaveAbout") {
+                opened = .about
+                m.showAbout = true
             }
-            if UserDefaults.standard.bool(forKey: "BroadwaveDiagnostics") {
-                showDiagnostics = true
+            if defaults.bool(forKey: "BroadwaveDiagnostics") {
+                opened = .support
+                m.showDiagnostics = true
             }
-            if UserDefaults.standard.bool(forKey: "BroadwaveSources") {
-                showSources = true
+            if defaults.bool(forKey: "BroadwaveSources") {
+                opened = .sources
+                m.showSources = true
             }
-            if UserDefaults.standard.bool(forKey: "BroadwaveChannels") {
-                showChannels = true
+            if defaults.bool(forKey: "BroadwaveChannels") {
+                opened = .sources
+                m.showChannels = true
             }
-            if UserDefaults.standard.bool(forKey: "BroadwavePasses") {
-                showPasses = true
+            if defaults.bool(forKey: "BroadwavePasses") {
+                opened = .recording
+                m.showPasses = true
             }
-            if let anchor = UserDefaults.standard.string(forKey: "BroadwaveSettingsAnchor") {
+            let anchor = defaults.string(forKey: "BroadwaveSettingsAnchor")
+            if let anchor {
+                opened = SettingsPage.holding(anchor) ?? opened
+            }
+            if let opened {
+                padPage = opened
+                phonePage = opened
+            }
+            if let anchor {
                 Task {
-                    try? await Task.sleep(for: .milliseconds(700))
+                    try? await Task.sleep(for: .milliseconds(900))
                     proxy.scrollTo(anchor, anchor: .top)
                 }
             }
@@ -217,7 +411,7 @@ struct SettingsView: View {
 
     private var screenNameSection: some View {
         Section {
-            TextField("Name this screen", text: $screenLabel)
+            TextField("Name this screen", text: $m.screenLabel)
                 .accessibilityIdentifier("screen-name")
                 .onSubmit { commitScreenName() }
         } header: {
@@ -226,20 +420,20 @@ struct SettingsView: View {
             Text("Other screens see this name.")
         }
         .onAppear {
-            guard !screenNameReady else { return }
-            screenNameReady = true
+            guard !m.screenNameReady else { return }
+            m.screenNameReady = true
             let name = ScreenIdentity.name
-            screenLabel = name
-            screenLabelSaved = name
+            m.screenLabel = name
+            m.screenLabelSaved = name
         }
     }
 
     /// Sends the new name on the open socket. Blank goes back to the device name.
     private func commitScreenName() {
-        guard screenNameReady, screenLabel != screenLabelSaved else { return }
-        let sent = ScreenName.save(screenLabel, device: ScreenIdentity.deviceName)
-        screenLabel = sent
-        screenLabelSaved = sent
+        guard m.screenNameReady, m.screenLabel != m.screenLabelSaved else { return }
+        let sent = ScreenName.save(m.screenLabel, device: ScreenIdentity.deviceName)
+        m.screenLabel = sent
+        m.screenLabelSaved = sent
         store.screenName = sent
         store.socket?.announce(id: ScreenIdentity.id, name: sent, kind: ScreenIdentity.kind)
     }
@@ -291,9 +485,9 @@ struct SettingsView: View {
     private var delaySection: some View {
         Section {
             Picker("Live delay", selection: Binding(
-                get: { liveDelay },
+                get: { m.liveDelay },
                 set: { delay in
-                    liveDelay = delay
+                    m.liveDelay = delay
                     LiveDelay.saved = delay
                 }
             )) {
@@ -309,10 +503,10 @@ struct SettingsView: View {
     private var pictureSection: some View {
         Section {
             Picker("Picture", selection: Binding(
-                get: { pictureMode },
+                get: { m.pictureMode },
                 set: { mode in
-                    guard pictureKnown else { return }
-                    pictureMode = mode
+                    guard m.pictureKnown else { return }
+                    m.pictureMode = mode
                     save(["pictureMode": mode])
                 }
             )) {
@@ -320,7 +514,7 @@ struct SettingsView: View {
                 Text("Smooth").tag("smooth")
                 Text("Film").tag("film")
             }
-            .disabled(!pictureKnown)
+            .disabled(!m.pictureKnown)
         } footer: {
             Text("Broadcast rebuilds interlaced channels at 60 frames a second. Smooth adds motion compensation when this server can hold it. Film is for movies.")
         }
@@ -328,19 +522,19 @@ struct SettingsView: View {
 
     private var guideSection: some View {
         Section {
-            TextField("Schedules Direct", text: $sdUser)
+            TextField("Schedules Direct", text: $m.sdUser)
                 .fieldTyping()
                 .onSubmit { flushServerText() }
-            SecureField("Password", text: $sdPassword, prompt: passwordSaved ? Text("Saved") : nil)
-                .onSubmit { saveSecret("sdPassword", sdPassword) { passwordSaved = $0 } }
-            TextField("Lineup", text: $sdLineup)
+            SecureField("Password", text: $m.sdPassword, prompt: m.passwordSaved ? Text("Saved") : nil)
+                .onSubmit { saveSecret("sdPassword", m.sdPassword) { m.passwordSaved = $0 } }
+            TextField("Lineup", text: $m.sdLineup)
                 .fieldTyping()
                 .onSubmit { flushServerText() }
-            TextField("Guide address", text: $guideURL)
+            TextField("Guide address", text: $m.guideURL)
                 .fieldTyping()
                 .onSubmit { flushServerText() }
-            SecureField("Movie artwork", text: $tmdbKey, prompt: artSaved ? Text("Saved") : nil)
-                .onSubmit { saveSecret("tmdbKey", tmdbKey) { artSaved = $0 } }
+            SecureField("Movie artwork", text: $m.tmdbKey, prompt: m.artSaved ? Text("Saved") : nil)
+                .onSubmit { saveSecret("tmdbKey", m.tmdbKey) { m.artSaved = $0 } }
         } header: {
             Text("Guide")
         } footer: {
@@ -351,34 +545,34 @@ struct SettingsView: View {
     private var sportsSection: some View {
         Section {
             Toggle("Live scores", isOn: Binding(
-                get: { liveScores },
+                get: { m.liveScores },
                 set: { on in
-                    guard scoresKnown else { return }
-                    liveScores = on
+                    guard m.scoresKnown else { return }
+                    m.liveScores = on
                     Task {
                         try? await store.api?.saveSettings(["liveScores": on ? "1" : "0"])
                         await store.refresh(lineup: false)
                     }
                 }
             ))
-            .disabled(!scoresKnown)
+            .disabled(!m.scoresKnown)
             Toggle("Hide scores", isOn: Binding(
-                get: { hideScores },
+                get: { m.hideScores },
                 set: { on in
-                    guard hideScoresKnown else { return }
-                    hideScores = on
+                    guard m.hideScoresKnown else { return }
+                    m.hideScores = on
                     save(["hideScores": on ? "1" : "0"])
                 }
             ))
-            .disabled(!hideScoresKnown)
+            .disabled(!m.hideScoresKnown)
             Text("A recorded game stays hidden until you watch it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Picker("Game alerts", selection: Binding(
-                get: { gameAlerts },
+                get: { m.gameAlerts },
                 set: { next in
-                    guard alertsKnown, next != gameAlerts, next == "all" || next == "teams" || next == "off" else { return }
-                    gameAlerts = next
+                    guard m.alertsKnown, next != m.gameAlerts, next == "all" || next == "teams" || next == "off" else { return }
+                    m.gameAlerts = next
                     save(["gameAlerts": next])
                 }
             )) {
@@ -386,23 +580,23 @@ struct SettingsView: View {
                 Text("Your teams only").tag("teams")
                 Text("Off").tag("off")
             }
-            .disabled(!alertsKnown)
+            .disabled(!m.alertsKnown)
             .accessibilityIdentifier("game-alerts")
             Text("A note when a team you follow starts playing, or a game on your channels comes down to the last minutes. A game you're recording and haven't watched gets no score and no close-game note.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            SecureField("TheSportsDB key", text: $sportsKey)
+            SecureField("TheSportsDB key", text: $m.sportsKey)
                 .onSubmit {
-                    let key = sportsKey.trimmingCharacters(in: .whitespacesAndNewlines)
-                    sportsKey = ""
+                    let key = m.sportsKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                    m.sportsKey = ""
                     guard !key.isEmpty else { return }
                     Task {
                         try? await store.api?.saveSettings(["sportsdbKey": key])
-                        sportsDB = true
+                        m.sportsDB = true
                     }
                 }
         } header: {
-            Text(sportsDB ? "Scores from TheSportsDB" : "Scores from ESPN's public scoreboard")
+            Text(m.sportsDB ? "Scores from TheSportsDB" : "Scores from ESPN's public scoreboard")
         } footer: {
             Text("On asks your server for the scoreboard. Off sends nothing. A key is optional and never included.")
         }
@@ -426,31 +620,38 @@ struct SettingsView: View {
     private var dvrSection: some View {
         Section {
             Toggle("Play the next episode", isOn: Binding(
-                get: { autoplay },
+                get: { m.autoplay },
                 set: { on in
-                    guard autoplayKnown else { return }
-                    autoplay = on
+                    guard m.autoplayKnown else { return }
+                    m.autoplay = on
                     save(["autoplay": on ? "1" : "0"])
                 }
             ))
-            .disabled(!autoplayKnown)
-            Picker("Commercial breaks", selection: $breakSkip) {
-                ForEach(BreakSkip.allCases, id: \.self) { Text($0.label).tag($0) }
-            }
-            Button("Passes") { showPasses = true }
+            .disabled(!m.autoplayKnown)
+            Button("Passes") { m.showPasses = true }
         } header: {
             Text("DVR")
         } footer: {
-            Text("For recordings with marked breaks. Kept on this device.")
+            Text("Passes record a show or a team every time it airs.")
+        }
+    }
+
+    private var breaksSection: some View {
+        Section {
+            Picker("Commercial breaks", selection: $breakSkip) {
+                ForEach(BreakSkip.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+        } footer: {
+            Text("For recordings with marked breaks.")
         }
     }
 
     private var sourcesSection: some View {
         Section {
             if !demo {
-                Button("Tuners and playlists") { showSources = true }
+                Button("Tuners and playlists") { m.showSources = true }
             }
-            Button("Channels") { showChannels = true }
+            Button("Channels") { m.showChannels = true }
             if demo {
                 Text("The demo does not share a tuner.")
                     .foregroundStyle(.secondary)
@@ -459,14 +660,14 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             } else {
                 Toggle("Offer this server as an HDHomeRun on port 8478", isOn: Binding(
-                    get: { shareTuner },
+                    get: { m.shareTuner },
                     set: { on in
-                        guard shareKnown else { return }
-                        shareTuner = on
+                        guard m.shareKnown else { return }
+                        m.shareTuner = on
                         save(["hdhrEmulate": on ? "1" : "0"])
                     }
                 ))
-                .disabled(!shareKnown)
+                .disabled(!m.shareKnown)
             }
         } header: {
             Text("Sources")
@@ -500,11 +701,11 @@ struct SettingsView: View {
 
     private var storageFolderSection: some View {
         Section {
-            if let storage {
+            if let storage = m.storage {
                 Text(storageSummary(storage))
                     .foregroundStyle(.secondary)
             }
-            if let path = storage?.path, !path.isEmpty {
+            if let path = m.storage?.path, !path.isEmpty {
                 LabeledContent("Recordings folder", value: path)
             }
         } header: {
@@ -515,69 +716,75 @@ struct SettingsView: View {
     private var storageOptionsSection: some View {
         Section {
             Picker("Recording folders", selection: Binding(
-                get: { folderLayout },
+                get: { m.folderLayout },
                 set: { next in
-                    guard folderKnown, next != folderLayout else { return }
-                    folderLayout = next
+                    guard m.folderKnown, next != m.folderLayout else { return }
+                    m.folderLayout = next
                     flushServerText()
                 }
             )) {
                 Text("By show, for Plex and Jellyfin").tag("shows")
                 Text("All in one folder").tag("flat")
             }
-            .disabled(!folderKnown)
+            .disabled(!m.folderKnown)
             .accessibilityIdentifier("recording-folders")
             Text("By show puts new recordings in TV/Show/Season 01 and Movies/Title (Year). Point a TV library at TV and a movie library at Movies.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             LabeledContent("Keep this much free") {
-                TextField("GB", text: $reserve)
-                    .multilineTextAlignment(.trailing)
-                    .fieldTyping()
-                    .accessibilityLabel("Gigabytes to keep free")
-                #if os(iOS)
-                    .keyboardType(.numberPad)
-                #endif
-                    .onSubmit { flushServerText() }
+                HStack(spacing: 4) {
+                    TextField("10", text: $m.reserve)
+                        .multilineTextAlignment(.trailing)
+                        .fieldTyping()
+                        .accessibilityLabel("Gigabytes to keep free")
+                        .accessibilityIdentifier("keep-free")
+                    #if os(iOS)
+                        .keyboardType(.numberPad)
+                    #endif
+                        .onSubmit { flushServerText() }
+                    Text("GB")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
             }
             Picker("When space runs low", selection: Binding(
-                get: { makeRoom },
+                get: { m.makeRoom },
                 set: { next in
-                    guard roomKnown, next != makeRoom else { return }
-                    makeRoom = next
+                    guard m.roomKnown, next != m.makeRoom else { return }
+                    m.makeRoom = next
                     flushServerText()
                 }
             )) {
                 Text("Skip new recordings").tag("0")
                 Text("Delete the oldest watched").tag("1")
             }
-            .disabled(!roomKnown)
+            .disabled(!m.roomKnown)
             .accessibilityIdentifier("make-room")
             Text("Delete makes room before a new recording is skipped, oldest watched first. Unwatched and kept recordings stay.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Picker("Delete watched recordings", selection: Binding(
-                get: { deleteWatchedDays },
+                get: { m.deleteWatchedDays },
                 set: { days in
-                    guard daysKnown, days != deleteWatchedDays else { return }
-                    deleteWatchedDays = days
+                    guard m.daysKnown, days != m.deleteWatchedDays else { return }
+                    m.deleteWatchedDays = days
                     flushServerText()
                 }
             )) {
-                ForEach(Self.dayChoices(deleteWatchedDays), id: \.self) { days in
+                ForEach(Self.dayChoices(m.deleteWatchedDays), id: \.self) { days in
                     Text(Self.dayLabel(days)).tag(days)
                 }
             }
-            .disabled(!daysKnown)
+            .disabled(!m.daysKnown)
             .accessibilityIdentifier("delete-watched")
             Text("Counts from when a recording was played to its end or marked watched. Recordings you keep forever stay.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Picker("Keep for recording from the start", selection: Binding(
-                get: { bufferMinutes },
+                get: { m.bufferMinutes },
                 set: { minutes in
-                    guard bufferKnown, minutes != bufferMinutes else { return }
-                    bufferMinutes = minutes
+                    guard m.bufferKnown, minutes != m.bufferMinutes else { return }
+                    m.bufferMinutes = minutes
                     flushServerText()
                 }
             )) {
@@ -587,7 +794,7 @@ struct SettingsView: View {
                 Text("2 hours").tag("120")
                 Text("4 hours").tag("240")
             }
-            .disabled(!bufferKnown)
+            .disabled(!m.bufferKnown)
             .accessibilityIdentifier("recording-buffer")
             Text("While a channel is on, the server keeps up to this much of it, so recording a show already on starts from its beginning. It uses at most half the free space.")
                 .font(.caption)
@@ -599,10 +806,10 @@ struct SettingsView: View {
 
     private var showSpaceSection: some View {
         Section {
-            if let message = showError.nilIfEmpty {
+            if let message = m.showError.nilIfEmpty {
                 Text(message)
                     .foregroundStyle(.red)
-            } else if let rows = showRows {
+            } else if let rows = m.showRows {
                 if rows.isEmpty {
                     Text("No finished recordings yet.")
                         .foregroundStyle(.secondary)
@@ -639,38 +846,49 @@ struct SettingsView: View {
 
     private var backupSection: some View {
         Section {
-            if let backupError = backupError.nilIfEmpty {
+            if let backupError = m.backupError.nilIfEmpty {
                 Text(backupError)
                     .foregroundStyle(.red)
             }
-            if let rows = backupRows, rows.isEmpty {
+            if let rows = m.backupRows, rows.isEmpty {
                 Text("No backups yet.")
                     .foregroundStyle(.secondary)
             }
-            ForEach(backupRows ?? [], id: \.name) { row in
+            ForEach(m.backupRows ?? [], id: \.name) { row in
                 VStack(alignment: .leading, spacing: 6) {
                     Text("\(backupKindLabel(row.kind)) · \(row.takenAt.formatted(date: .abbreviated, time: .shortened))")
                     Text(ByteCountFormatter.string(fromByteCount: row.bytes, countStyle: .file))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    HStack {
+                    // Borderless: two buttons in one form row otherwise both fire on a tap.
+                    HStack(spacing: 20) {
                         Button("Download") { Task { await downloadBackup(row) } }
-                            .disabled(backupBusy != "")
+                            .buttonStyle(.borderless)
+                            .disabled(m.backupBusy != "")
                             .accessibilityLabel("Download \(backupKindLabel(row.kind)) \(row.takenAt.formatted(date: .abbreviated, time: .shortened))")
-                        Button("Restore") { restoreName = row.name }
-                            .disabled(backupBusy != "")
+                        Button("Restore", role: .destructive) { m.restoreName = row.name }
+                            .buttonStyle(.borderless)
+                            .disabled(m.backupBusy != "")
                             .accessibilityLabel("Restore \(backupKindLabel(row.kind)) \(row.takenAt.formatted(date: .abbreviated, time: .shortened))")
                     }
                 }
             }
             Button("Download backup") { Task { await downloadCatalog() } }
-                .disabled(backupBusy != "" || store.api == nil)
+                .disabled(m.backupBusy != "" || store.api == nil)
             #if os(iOS)
-                Button("Restore a catalog backup") { importBackup = true }
-                    .disabled(backupBusy != "" || store.api == nil)
+                Button("Restore a catalog backup", role: .destructive) { m.confirmImport = true }
+                    .disabled(m.backupBusy != "" || store.api == nil)
+                    .confirmationDialog(
+                        "Restore a backup from a file? The catalog goes back to that copy. Recordings stay.",
+                        isPresented: $m.confirmImport,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Choose a file", role: .destructive) { m.importBackup = true }
+                        Button("Cancel", role: .cancel) {}
+                    }
             #endif
             #if os(tvOS)
-                if savedNote == "backup" {
+                if m.savedNote == "backup" {
                     Text("Saved on this Apple TV.")
                 }
             #endif
@@ -688,17 +906,17 @@ struct SettingsView: View {
     private var updatesSection: some View {
         Section {
             Toggle("Check for updates", isOn: Binding(
-                get: { checkUpdates },
+                get: { m.checkUpdates },
                 set: { on in
-                    guard updatesKnown else { return }
-                    checkUpdates = on
+                    guard m.updatesKnown else { return }
+                    m.checkUpdates = on
                     Task {
                         try? await store.api?.saveSettings(["checkUpdates": on ? "1" : "0"])
                         await store.refresh(lineup: false)
                     }
                 }
             ))
-            .disabled(!updatesKnown)
+            .disabled(!m.updatesKnown)
         } footer: {
             Text("Once a day. Nothing else is sent.")
         }
@@ -709,9 +927,9 @@ struct SettingsView: View {
             Button("Download a support bundle") {
                 Task { await downloadSupport() }
             }
-            .disabled(supportBusy || store.api == nil)
+            .disabled(m.supportBusy || store.api == nil)
             #if os(tvOS)
-                if savedNote == "support" {
+                if m.savedNote == "support" {
                     Text("Saved on this Apple TV.")
                 }
             #endif
@@ -723,7 +941,7 @@ struct SettingsView: View {
     /// What the server said about this device, in one plain sentence.
     @MainActor
     private var accessLine: String {
-        if seat?.auth == "device", let name = seat?.device?.name, !name.isEmpty {
+        if m.seat?.auth == "device", let name = m.seat?.device?.name, !name.isEmpty {
             return String(localized: "Signed in as \(name).")
         }
         return String(localized: "Open on your home network. Away from home, this device needs an invite from the owner.")
@@ -731,118 +949,118 @@ struct SettingsView: View {
 
     private func load() async {
         if let me = try? await store.api?.clientMe() {
-            seat = me
+            m.seat = me
         }
         if let values = try? await store.api?.settings() {
-            checkUpdates = values["checkUpdates"] != "0"
-            updatesKnown = true
-            liveScores = values["liveScores"] != "0"
-            scoresKnown = true
-            sportsDB = values["sportsdbKeySet"] == "1"
-            hideScores = values["hideScores"] == "1"
-            hideScoresKnown = true
-            gameAlerts = Self.alertChoice(values["gameAlerts"])
-            alertsKnown = true
-            autoplay = values["autoplay"] != "0"
-            autoplayKnown = true
-            shareTuner = values["hdhrEmulate"] == "1"
-            shareKnown = true
+            m.checkUpdates = values["checkUpdates"] != "0"
+            m.updatesKnown = true
+            m.liveScores = values["liveScores"] != "0"
+            m.scoresKnown = true
+            m.sportsDB = values["sportsdbKeySet"] == "1"
+            m.hideScores = values["hideScores"] == "1"
+            m.hideScoresKnown = true
+            m.gameAlerts = Self.alertChoice(values["gameAlerts"])
+            m.alertsKnown = true
+            m.autoplay = values["autoplay"] != "0"
+            m.autoplayKnown = true
+            m.shareTuner = values["hdhrEmulate"] == "1"
+            m.shareKnown = true
             if let mode = values["pictureMode"], mode == "broadcast" || mode == "smooth" || mode == "film" {
-                pictureMode = mode
+                m.pictureMode = mode
             }
-            pictureKnown = true
-            sdUser = values["sdUser"] ?? ""
-            sdLineup = values["sdLineup"] ?? ""
-            guideURL = values["guideUrl"] ?? ""
-            reserve = values["watermarkGB"] ?? "10"
+            m.pictureKnown = true
+            m.sdUser = values["sdUser"] ?? ""
+            m.sdLineup = values["sdLineup"] ?? ""
+            m.guideURL = values["guideUrl"] ?? ""
+            m.reserve = values["watermarkGB"] ?? "10"
             let minutes = values["bufferMinutes"] ?? "60"
-            bufferMinutes = Self.bufferChoices.contains(minutes) ? minutes : "60"
-            loadedBuffer = bufferMinutes
-            makeRoom = values["makeRoom"] == "1" ? "1" : "0"
-            loadedMakeRoom = makeRoom
-            deleteWatchedDays = Self.watchedDays(values["deleteWatchedDays"])
-            loadedDays = deleteWatchedDays
-            folderLayout = values["folderLayout"] == "flat" ? "flat" : "shows"
-            loadedFolder = folderLayout
-            loadedUser = sdUser
-            loadedLineup = sdLineup
-            loadedGuide = guideURL
-            loadedReserve = reserve
-            passwordSaved = values["sdPasswordSet"] == "1"
-            artSaved = values["tmdbKeySet"] == "1"
-            guideKnown = true
-            bufferKnown = true
-            roomKnown = true
-            daysKnown = true
-            folderKnown = true
+            m.bufferMinutes = Self.bufferChoices.contains(minutes) ? minutes : "60"
+            m.loadedBuffer = m.bufferMinutes
+            m.makeRoom = values["makeRoom"] == "1" ? "1" : "0"
+            m.loadedMakeRoom = m.makeRoom
+            m.deleteWatchedDays = Self.watchedDays(values["deleteWatchedDays"])
+            m.loadedDays = m.deleteWatchedDays
+            m.folderLayout = values["folderLayout"] == "flat" ? "flat" : "shows"
+            m.loadedFolder = m.folderLayout
+            m.loadedUser = m.sdUser
+            m.loadedLineup = m.sdLineup
+            m.loadedGuide = m.guideURL
+            m.loadedReserve = m.reserve
+            m.passwordSaved = values["sdPasswordSet"] == "1"
+            m.artSaved = values["tmdbKeySet"] == "1"
+            m.guideKnown = true
+            m.bufferKnown = true
+            m.roomKnown = true
+            m.daysKnown = true
+            m.folderKnown = true
         }
         guard !demo else { return }
-        storage = try? await store.api?.storage()
+        m.storage = try? await store.api?.storage()
         if let api = store.api {
             do {
-                showRows = try await api.storageShows().shows
-                showError = ""
+                m.showRows = try await api.storageShows().shows
+                m.showError = ""
             } catch {
-                showRows = nil
-                showError = "Could not load space by show."
+                m.showRows = nil
+                m.showError = "Could not load space by show."
             }
         }
         do {
-            backupRows = try await store.api?.backups() ?? []
-            backupError = ""
+            m.backupRows = try await store.api?.backups() ?? []
+            m.backupError = ""
         } catch {
-            backupRows = []
-            backupError = "Could not load backups."
+            m.backupRows = []
+            m.backupError = "Could not load backups."
         }
     }
 
     private func flushServerText() {
-        guard !demo, guideKnown else { return }
+        guard !demo, m.guideKnown else { return }
         var values: [String: String] = [:]
-        if sdUser != loadedUser {
-            values["sdUser"] = sdUser
-            loadedUser = sdUser
+        if m.sdUser != m.loadedUser {
+            values["sdUser"] = m.sdUser
+            m.loadedUser = m.sdUser
         }
-        if sdLineup != loadedLineup {
-            values["sdLineup"] = sdLineup
-            loadedLineup = sdLineup
+        if m.sdLineup != m.loadedLineup {
+            values["sdLineup"] = m.sdLineup
+            m.loadedLineup = m.sdLineup
         }
-        if reserve != loadedReserve {
-            if let n = Int(reserve), (0 ... 1_000_000).contains(n), String(n) == reserve {
-                values["watermarkGB"] = reserve
-                loadedReserve = reserve
-                saveError = ""
+        if m.reserve != m.loadedReserve {
+            if let n = Int(m.reserve), (0 ... 1_000_000).contains(n), String(n) == m.reserve {
+                values["watermarkGB"] = m.reserve
+                m.loadedReserve = m.reserve
+                m.saveError = ""
             } else {
-                saveError = "Keep this much free needs a whole number of gigabytes from 0 to 1000000."
+                m.saveError = "Keep this much free needs a whole number of gigabytes from 0 to 1000000."
             }
         }
-        if bufferMinutes != loadedBuffer, Self.bufferChoices.contains(bufferMinutes) {
-            values["bufferMinutes"] = bufferMinutes
-            loadedBuffer = bufferMinutes
+        if m.bufferMinutes != m.loadedBuffer, Self.bufferChoices.contains(m.bufferMinutes) {
+            values["bufferMinutes"] = m.bufferMinutes
+            m.loadedBuffer = m.bufferMinutes
         }
-        if roomKnown, makeRoom != loadedMakeRoom, makeRoom == "0" || makeRoom == "1" {
-            values["makeRoom"] = makeRoom
-            loadedMakeRoom = makeRoom
+        if m.roomKnown, m.makeRoom != m.loadedMakeRoom, m.makeRoom == "0" || m.makeRoom == "1" {
+            values["makeRoom"] = m.makeRoom
+            m.loadedMakeRoom = m.makeRoom
         }
-        if daysKnown, deleteWatchedDays != loadedDays, Self.watchedDays(deleteWatchedDays) == deleteWatchedDays {
-            values["deleteWatchedDays"] = deleteWatchedDays
-            loadedDays = deleteWatchedDays
+        if m.daysKnown, m.deleteWatchedDays != m.loadedDays, Self.watchedDays(m.deleteWatchedDays) == m.deleteWatchedDays {
+            values["deleteWatchedDays"] = m.deleteWatchedDays
+            m.loadedDays = m.deleteWatchedDays
         }
-        if folderKnown, folderLayout != loadedFolder, folderLayout == "shows" || folderLayout == "flat" {
-            values["folderLayout"] = folderLayout
-            loadedFolder = folderLayout
+        if m.folderKnown, m.folderLayout != m.loadedFolder, m.folderLayout == "shows" || m.folderLayout == "flat" {
+            values["folderLayout"] = m.folderLayout
+            m.loadedFolder = m.folderLayout
         }
-        let guide = guideURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if guide != loadedGuide {
+        let guide = m.guideURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if guide != m.loadedGuide {
             if guide.isEmpty || guide.hasPrefix("http://") || guide.hasPrefix("https://") {
                 values["guideUrl"] = guide
-                guideURL = guide
-                loadedGuide = guide
-                if saveError.hasPrefix("The guide address") {
-                    saveError = ""
+                m.guideURL = guide
+                m.loadedGuide = guide
+                if m.saveError.hasPrefix("The guide address") {
+                    m.saveError = ""
                 }
             } else {
-                saveError = "The guide address needs to start with http."
+                m.saveError = "The guide address needs to start with http."
             }
         }
         guard !values.isEmpty else { return }
@@ -853,9 +1071,9 @@ struct SettingsView: View {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
         if key == "sdPassword" {
-            sdPassword = ""
+            m.sdPassword = ""
         } else {
-            tmdbKey = ""
+            m.tmdbKey = ""
         }
         mark(true)
         save([key: value])
@@ -866,33 +1084,33 @@ struct SettingsView: View {
             do {
                 try await store.api?.saveSettings(values)
             } catch {
-                saveError = error.localizedDescription
+                m.saveError = error.localizedDescription
             }
         }
     }
 
     @MainActor
     private func restore(_ name: String) async {
-        restoreName = nil
-        backupBusy = name
-        defer { backupBusy = "" }
+        m.restoreName = nil
+        m.backupBusy = name
+        defer { m.backupBusy = "" }
         do {
             try await store.api?.restoreBackup(name: name)
             await store.refresh()
-            backupRows = try await store.api?.backups() ?? backupRows
-            backupError = ""
+            m.backupRows = try await store.api?.backups() ?? m.backupRows
+            m.backupError = ""
         } catch {
-            backupError = "Could not restore that backup."
+            m.backupError = "Could not restore that backup."
         }
     }
 
     @MainActor
     private func downloadBackup(_ row: CatalogBackup) async {
         guard let api = store.api else { return }
-        backupBusy = row.name
-        defer { backupBusy = "" }
+        m.backupBusy = row.name
+        defer { m.backupBusy = "" }
         guard let file = await downloadFile(from: api.backupURL(name: row.name), name: row.name) else {
-            backupError = "Could not download that backup."
+            m.backupError = "Could not download that backup."
             return
         }
         present(file, kind: "backup")
@@ -901,10 +1119,10 @@ struct SettingsView: View {
     @MainActor
     private func downloadCatalog() async {
         guard let api = store.api else { return }
-        backupBusy = "catalog"
-        defer { backupBusy = "" }
+        m.backupBusy = "catalog"
+        defer { m.backupBusy = "" }
         guard let file = await downloadFile(from: api.catalogBackupURL(), name: "broadwave-backup.db") else {
-            backupError = "Could not download that backup."
+            m.backupError = "Could not download that backup."
             return
         }
         present(file, kind: "backup")
@@ -923,24 +1141,24 @@ struct SettingsView: View {
                 }
                 let data = try Data(contentsOf: url)
                 guard !data.isEmpty else {
-                    backupError = "Could not restore that backup."
+                    m.backupError = "Could not restore that backup."
                     return
                 }
                 try await store.api?.restoreCatalog(data)
                 await store.refresh()
-                backupError = ""
+                m.backupError = ""
             } catch {
-                backupError = "Could not restore that backup."
+                m.backupError = "Could not restore that backup."
             }
         }
     #endif
 
     @MainActor
     private func downloadSupport() async {
-        guard !supportBusy, let api = store.api else { return }
-        supportBusy = true
-        defer { supportBusy = false }
-        savedNote = ""
+        guard !m.supportBusy, let api = store.api else { return }
+        m.supportBusy = true
+        defer { m.supportBusy = false }
+        m.savedNote = ""
         guard let file = await downloadFile(from: api.supportURL(), name: "broadwave-support.zip") else { return }
         present(file, kind: "support")
     }
@@ -950,7 +1168,7 @@ struct SettingsView: View {
             _ = kind
             FileShare.present(file)
         #elseif os(tvOS)
-            savedNote = kind
+            m.savedNote = kind
         #endif
     }
 
@@ -1052,6 +1270,13 @@ private extension View {
 struct AboutView: View {
     @FocusState private var creditFocused: Bool
 
+    /// The credit on its own, for the About page in the iPhone and iPad list.
+    static var credit: some View {
+        Section {
+            Text("Store art and the demo use Big Buck Bunny, Sintel, Tears of Steel, and Elephants Dream. They are Blender Foundation films under CC BY.")
+        }
+    }
+
     var body: some View {
         Form {
             Section {
@@ -1093,3 +1318,80 @@ struct AboutView: View {
         }
     }
 #endif
+
+/// The pages of Settings: what this device keeps, then what the server keeps for every screen.
+enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
+    case screen, playback, sync, activities, home
+    case server, recording, picture, sports, guide, sources, backups, support, about
+
+    var id: String {
+        rawValue
+    }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .screen: "Name"
+        case .playback: "Playback"
+        case .sync: "Whole-Home Sync"
+        case .activities: "Live Activities"
+        case .home: "Your Home"
+        case .server: "Server"
+        case .recording: "Recording and Storage"
+        case .picture: "Picture"
+        case .sports: "Sports and Scores"
+        case .guide: "Guide Data"
+        case .sources: "Tuners and Channels"
+        case .backups: "Backups"
+        case .support: "Updates and Support"
+        case .about: "About"
+        }
+    }
+
+    /// The page with a debug anchor's section on it.
+    static func holding(_ anchor: String) -> SettingsPage? {
+        switch anchor {
+        case "storage": .recording
+        case "guide": .guide
+        case "backups": .backups
+        case "activities": .activities
+        default: nil
+        }
+    }
+}
+
+/// Loads the settings once, saves typed text on the way out, and asks before a restore.
+private struct SettingsWork: ViewModifier {
+    var load: () async -> Void
+    var leave: () -> Void
+    @Binding var restoreName: String?
+    var restore: (String) -> Void
+    @State private var loaded = false
+
+    func body(content: Content) -> some View {
+        content
+            // Not .task: pushing a page hides the list, and that cancelled the load
+            // mid-request, which left the server's settings greyed out.
+            .onAppear {
+                guard !loaded else { return }
+                loaded = true
+                Task { await load() }
+            }
+            .onDisappear(perform: leave)
+            .confirmationDialog(
+                "Restore this backup? The catalog goes back to that copy. Recordings stay.",
+                isPresented: Binding(get: { restoreName != nil }, set: {
+                    if !$0 {
+                        restoreName = nil
+                    }
+                }),
+                titleVisibility: .visible
+            ) {
+                Button("Restore", role: .destructive) {
+                    if let name = restoreName {
+                        restore(name)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+    }
+}

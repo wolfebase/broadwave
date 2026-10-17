@@ -366,7 +366,11 @@ public final class DemoServer: @unchecked Sendable {
         case ("POST", "/api/v1/recordings"), ("POST", "/api/v1/passes"):
             return Self.fail(409, "demo", String(localized: "The demo plays samples. It does not record.", bundle: .module))
         default:
-            return Self.fail(404, "missing", String(localized: "demo.missing", defaultValue: "The demo has no \(path).", bundle: .module))
+            // Plain words: a viewer saw "The demo has no /api/v1/recordings/1/play."
+            if method == "GET", path.hasPrefix("/api/v1/recordings/") {
+                return Self.fail(404, "missing", String(localized: "This recording can't play in the demo.", bundle: .module))
+            }
+            return Self.fail(404, "missing", String(localized: "The demo can't do that.", bundle: .module))
         }
     }
 

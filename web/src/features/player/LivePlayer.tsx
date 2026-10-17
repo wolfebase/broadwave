@@ -221,20 +221,26 @@ export function LivePlayer({
   const tuning = useFirstFrame(videoRef, `${channel.id}:${opts.quality}:${opts.audio}:${stream.sounds ? "" : opts.track}:${opts.even}:${picture}`);
   // Once the picture moves, start the likely next change (channel up, then the
   // last channel) and fetch their art, so the change that follows is instant.
+  // Once per picture: a sound switched in place on a master, or a guide
+  // refresh, is not a new picture and asks the server for nothing.
   const warmNext = stream.warm;
+  const warmRef = useRef(warmNext);
+  warmRef.current = warmNext;
+  const guideNow = useRef(index);
+  guideNow.current = index;
   useEffect(() => {
     if (tuning || mode !== "full") return;
     const neighbours = neighbourIds(channels.map((c) => c.id), channel.id, previous.current?.id);
     if (neighbours.length === 0) return;
     const timer = window.setTimeout(() => {
-      warmNext(neighbours[0]);
+      warmRef.current(neighbours[0]);
       for (const id of neighbours) {
-        const a = airingAt(index, id, Date.now());
+        const a = airingAt(guideNow.current, id, Date.now());
         if (a?.imageUrl) new Image().src = `/media/art/airing/${a.id}?w=960`;
       }
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [tuning, mode, channels, channel.id, warmNext, index]);
+  }, [tuning, mode, channels, channel.id]);
 
   // Who sent this channel here. Its 6 s start once the picture moves; a cold tune would use them up.
   const [sent, setSent] = useState<SentNote | null>(null);

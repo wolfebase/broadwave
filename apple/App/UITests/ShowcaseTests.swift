@@ -9,6 +9,11 @@
     final class ShowcaseTests: XCTestCase {
         func testCaptionStylePreview() throws {
             let app = try launch(["-BroadwaveTab", "settings"])
+            let playback = app.buttons["settings-playback"]
+            XCTAssertTrue(playback.waitForExistence(timeout: 30), app.debugDescription)
+            if !app.staticTexts["Quality"].exists {
+                playback.tap()
+            }
             let preview = app.descendants(matching: .any)["caption-preview"]
             XCTAssertTrue(scrollTo(preview, in: app), app.debugDescription)
             // Center it, then let the still load.
