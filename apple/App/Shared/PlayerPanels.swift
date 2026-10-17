@@ -173,6 +173,9 @@ final class LivePlayerController: AVPlayerViewController {
         var onPictureRestore: (() -> Void)?
         var onPictureClosed: (() -> Void)?
         private var pipRestoring = false
+        /// An Info, Channels, or Stream page opened or closed over the picture.
+        var onPanel: ((Bool) -> Void)?
+        private var panelShown = false
     #endif
     private(set) var transportShown = true
     private var installedGestures = false
@@ -318,6 +321,20 @@ final class LivePlayerController: AVPlayerViewController {
     }
 
     #if os(tvOS)
+        /// Focus moving into the tab row is the first sign of a page; the coordinator's
+        /// sampling catches one that closes without a focus change.
+        override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+            super.didUpdateFocus(in: context, with: coordinator)
+            notePanel()
+        }
+
+        func notePanel() {
+            let shown = infoPanelVisible
+            guard shown != panelShown else { return }
+            panelShown = shown
+            onPanel?(shown)
+        }
+
         private var focusInTabs: Bool {
             guard let tabs = infoTabs, let focused = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView else { return false }
             return focused.isDescendant(of: tabs)

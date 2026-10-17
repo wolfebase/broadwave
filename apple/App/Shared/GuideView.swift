@@ -1092,11 +1092,11 @@ struct GuideGrid: View {
                     .offset(x: x(s))
             }
             if list.isEmpty {
-                Text(listingsNote(store.index.airings(channel.id), windowStart: origin)).font(.footnote).foregroundStyle(.tertiary).offset(x: offset.x + 12)
+                Text(listingsNote(store.index.airings(channel.id), windowStart: origin)).font(.footnote).foregroundStyle(.secondary).offset(x: offset.x + 12)
             } else if let last = store.index.airings(channel.id).last, last.end < end.addingTimeInterval(-60) {
                 Text(listingsNote(store.index.airings(channel.id), windowStart: end))
                     .font(.footnote)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .offset(x: x(last.end) + 12)
             }
         }
@@ -1245,6 +1245,22 @@ struct ProgramSheet: View {
     let channel: Channel
     let airing: Airing?
 
+    /// The kind and time line. Apple TV sets it at body size (29 pt); caption is 25.
+    private static var metaFont: Font {
+        #if os(tvOS)
+            .footnote.weight(.semibold)
+        #else
+            .caption.weight(.bold)
+        #endif
+    }
+
+    private func episodeLine(_ airing: Airing?) -> String? {
+        let label = airing?.episodeLabel.flatMap { $0.isEmpty ? nil : $0 }
+        let aired = airing?.originalAir.flatMap { $0.isEmpty ? nil : String(localized: "First aired \($0)") }
+        let parts = [label, aired].compactMap(\.self)
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     var body: some View {
         let kind = airing?.kind ?? .other
         let on = airing?.isOn(at: store.now) ?? true
@@ -1277,22 +1293,20 @@ struct ProgramSheet: View {
                 }
                 if let airing {
                     Text("\(kind.label) · \(airing.start.formatted(.dateTime.weekday().hour().minute())) – \(airing.end.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption.weight(.bold))
+                        .font(Self.metaFont)
                         .foregroundStyle(.secondary)
                 }
                 #if os(tvOS)
                     if let line = guideSourceLine(airing?.guideSource) {
-                        Text(line).font(.caption).foregroundStyle(.secondary)
+                        Text(line).font(.footnote).foregroundStyle(.secondary)
                     }
                     Text(airing?.title ?? channel.displayName).font(.largeTitle.weight(.heavy))
                     if let sub = airing?.subtitle {
                         Text(sub).font(.title3).foregroundStyle(.secondary)
                     }
-                    if let label = airing?.episodeLabel, !label.isEmpty {
-                        Text(label).font(.caption.weight(.bold)).foregroundStyle(.secondary)
-                    }
-                    if let aired = airing?.originalAir, !aired.isEmpty {
-                        Text("First aired \(aired)").font(.caption).foregroundStyle(.secondary)
+                    // From ten feet the episode and first-aired lines read as one, at body size.
+                    if let line = episodeLine(airing) {
+                        Text(line).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
                     }
                     if let airing, on {
                         HStack {
