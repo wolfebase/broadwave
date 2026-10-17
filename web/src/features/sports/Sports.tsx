@@ -151,7 +151,7 @@ export function Sports() {
     const passed = passes.some((p) => p.kind !== "once" && p.title.toLowerCase() === airing.title.toLowerCase());
     if (passed) return null;
     return (
-      <button type="button" className="btn small ghost" aria-label={actionName(t("sports.recordAll"), cardLabel(airing))} onClick={() => void recordSeries(airing.title, channel)}>
+      <button type="button" className="btn small ghost" aria-label={actionName(t("sports.recordAll"), cardLabel(airing))} onClick={() => void recordSeries(airing.title, channel.id)}>
         {t("sports.recordAll")}
       </button>
     );
