@@ -61,6 +61,24 @@ final class TVPagesTests: XCTestCase {
         XCTAssertTrue(until(6) { focusedLabel(app).hasPrefix("Whole-Home Sync") }, "Back did not return to the row: \(focused(app))")
     }
 
+    /// Live Delay says what it does: every channel starts about 5 s behind whichever is picked.
+    func testLiveDelaySaysWhatItDoes() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-BroadwaveFocus", "settings", "-lastChannel", "0", "-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["settings-playback"].waitForExistence(timeout: 20), app.debugDescription)
+        for _ in 0 ..< 8 where !focusedLabel(app).hasPrefix("Live Delay") {
+            XCUIRemote.shared.press(.down)
+            pause(0.5)
+        }
+        XCTAssertTrue(focusedLabel(app).hasPrefix("Live Delay"), "no Live Delay row: \(focused(app))")
+        XCUIRemote.shared.press(.select)
+        let note = app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'about 5 seconds'")).firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 6), "no explanation: \(focused(app))")
+        pause(1)
+        shot("settings-2-delay")
+    }
+
     /// An empty library still has something to press: Open the guide.
     func testEmptyRecordingsHasAFocusedWayForward() {
         let app = XCUIApplication()
