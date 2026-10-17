@@ -270,6 +270,7 @@ public final class AppStore {
     /// Points the API client and the event socket at `base`. The server, its
     /// catalog, and the home address stay as they are.
     private func attach(base: URL, token: String?, started: Int) {
+        let previous = socket
         socket?.disconnect()
         // Down until the first message, so a server that is off at launch gets the banner.
         noteConnection(false)
@@ -280,6 +281,9 @@ public final class AppStore {
         }
         self.api = api
         let socket = EventSocket(base: base, token: token)
+        if let previous {
+            socket.carryIdentity(from: previous)
+        }
         socket.onFailure = { [weak self] in
             Task {
                 await self?.recheckSecure()

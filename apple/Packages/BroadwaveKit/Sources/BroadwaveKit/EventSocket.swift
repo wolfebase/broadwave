@@ -140,12 +140,29 @@ public final class EventSocket {
         sayHere()
     }
 
-    private func sayHere() {
-        guard !screenName.isEmpty, !screenKind.isEmpty else { return }
+    /// A new socket for the same screen (moving to the secure address, or back
+    /// home) says the same `here` on connect. Without it the server saw a screen
+    /// with no name or kind: missing from Move to another screen, and an Apple
+    /// screen's room started like a browser's.
+    public func carryIdentity(from other: EventSocket) {
+        screenID = other.screenID
+        screenName = other.screenName
+        screenKind = other.screenKind
+        watchingID = other.watchingID
+    }
+
+    /// What `here` says, or nil before the screen has announced itself.
+    var hereBody: [String: Any]? {
+        guard !screenName.isEmpty, !screenKind.isEmpty else { return nil }
         var body: [String: Any] = Self.here(id: screenID, name: screenName, kind: screenKind)
         if watchingID > 0 {
             body["channelId"] = watchingID
         }
+        return body
+    }
+
+    private func sayHere() {
+        guard let body = hereBody else { return }
         send("here", body)
     }
 

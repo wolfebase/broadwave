@@ -137,3 +137,19 @@ import Testing
     #expect(EventSocket.freshCommands([(text: "{\"type\":\"sync.command\"}", at: now - 3000)], at: now).isEmpty)
     #expect(EventSocket.freshCommands([(text: "keep", at: now - 2999)], at: now) == ["keep"])
 }
+
+@Test @MainActor func aNewSocketForTheSecureAddressKeepsThisScreensName() throws {
+    let home = try #require(URL(string: "http://10.1.2.3:18940"))
+    let secure = try #require(URL(string: "https://lan.example.direct.wolfeup.com:18941"))
+    let first = EventSocket(base: home)
+    #expect(first.hereBody == nil)
+    first.announce(name: "Den", kind: "appletv")
+    first.watching(29)
+    let second = EventSocket(base: secure)
+    #expect(second.hereBody == nil)
+    second.carryIdentity(from: first)
+    let body = try #require(second.hereBody)
+    #expect(body["name"] as? String == "Den")
+    #expect(body["kind"] as? String == "appletv")
+    #expect(body["channelId"] as? Int64 == 29)
+}
