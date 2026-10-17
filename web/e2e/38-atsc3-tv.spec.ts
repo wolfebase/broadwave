@@ -200,40 +200,53 @@ test("a remote sees the 3.0 tag, the 3.0/1.0 choice, and the encrypted line", as
   await until(page, "ArrowRight", async () => page.evaluate(() => document.activeElement?.getAttribute("aria-label") === "Settings"), 8);
   await press(page, "Enter");
   await expect(page).toHaveURL(/\/settings/);
-  await expect(page.getByRole("heading", { name: "Tuners and channels" })).toBeVisible();
+  // Settings opens on its list of sections, focused on the first one; the
+  // lineup is under Tuners.
+  await expect(page.locator('[data-section="tuners"]')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.hasAttribute("data-section") ?? false)).toBe(true);
+  await until(page, "ArrowDown", async () => page.evaluate(() => document.activeElement?.getAttribute("data-section") === "tuners"), 8);
+  await press(page, "Enter");
+  await expect(page).toHaveURL(/\/settings\/tuners/);
+  await expect(page.getByRole("heading", { name: "Tuners and lineup" })).toBeVisible();
 
-  const choice = (number: string) => page.getByLabel(`Show ${number}`, { exact: true });
-  await expect(choice("104.1")).toBeAttached();
-  await until(page, "ArrowDown", async () => page.evaluate(() => document.activeElement?.getAttribute("aria-label") === "Show 104.1"), 120);
-  const before = await choice("104.1").inputValue();
-  await inView(page, choice("104.1"));
-  await page.keyboard.press("ArrowRight");
-  await expect(choice("104.1")).not.toHaveValue(before);
-  await expect(choice("104.1")).toBeFocused();
-  await inView(page, choice("104.1"));
-  await page.keyboard.press("ArrowLeft");
-  await expect(choice("104.1")).toHaveValue(before);
-  await shot(page.locator(".source-row").filter({ has: choice("104.1") }), "choice.jpg");
+  // The 3.0 row and its 1.0 twin share one choice: what the guide shows.
+  const group = page.getByRole("radiogroup", { name: /^Guide shows, 104\.1 / });
+  await expect(group).toBeAttached();
+  const checked = () => group.locator("[role='radio'][aria-checked='true']").innerText();
+  const before = await checked();
+  await until(page, "ArrowDown", async () => group.evaluate((el) => el.contains(document.activeElement)), 120);
+  await inView(page, group);
+  // Another option of the same choice, by the remote, then back.
+  await until(page, "ArrowRight", async () => group.evaluate((el) => document.activeElement?.getAttribute("aria-checked") === "false" && el.contains(document.activeElement)), 3);
+  await press(page, "Enter");
+  await expect.poll(checked).not.toBe(before);
+  await expect.poll(() => group.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+  await until(page, "ArrowLeft", async () => group.evaluate((el, text) => (document.activeElement as HTMLElement | null)?.innerText === text && el.contains(document.activeElement), before), 3);
+  await press(page, "Enter");
+  await expect.poll(checked).toBe(before);
+  await shot(group, "choice.jpg");
 
+  // The encrypted 3.0 twin says what plays instead, and the other encrypted
+  // row says it cannot play. The table and the list name them the same way.
+  const notes = page.locator(".lineup-note, .lineup-detail");
   const playsAs = copy.sources.playsAs("5.1");
-  await until(
-    page,
-    "ArrowDown",
-    async () => page.evaluate((sentence) => Boolean(document.activeElement?.closest(".source-row")?.textContent?.includes(sentence)), playsAs),
-    12,
-  );
-  const sealedRow = page.locator(".source-row").filter({ hasText: playsAs });
-  const sealedLine = sealedRow.locator(".protected-note");
-  await expect(sealedLine).toHaveText(playsAs);
+  const sealedLine = notes.filter({ hasText: playsAs });
+  await expect(sealedLine).toHaveCount(1);
+  // The remote brings each row into view by moving onto it.
+  const onRow = (text: string) =>
+    page.evaluate((sentence) => Boolean(document.activeElement?.closest(".lineup-tr, .lineup-item")?.textContent?.includes(sentence)), text);
+  await until(page, "ArrowDown", () => onRow(playsAs), 40);
   await inView(page, sealedLine);
-  const numberClipped = await sealedRow.locator(".num-input").evaluate((node) => (node as HTMLInputElement).scrollWidth > node.clientWidth + 2);
-  expect(numberClipped).toBe(false);
   const clipped = await sealedLine.evaluate((node) => node.scrollHeight > node.clientHeight + 4 || node.scrollWidth > node.clientWidth + 4);
   expect(clipped).toBe(false);
-  await shot(sealedRow, "settings.jpg");
+  await shot(sealedLine, "settings.jpg");
 
-  const locked = page.locator(".protected-note").filter({ hasText: copy.sources.encrypted(true) });
+  const locked = notes.filter({ hasText: copy.sources.encrypted(true) });
   await expect(locked).toHaveCount(1);
+  if (!(await onRow(copy.sources.encrypted(true)))) {
+    const up = await locked.evaluate((node) => node.getBoundingClientRect().top < (document.activeElement?.getBoundingClientRect().top ?? 0));
+    await until(page, up ? "ArrowUp" : "ArrowDown", () => onRow(copy.sources.encrypted(true)), 40);
+  }
   await inView(page, locked);
   await shot(locked, "encrypted.jpg");
 });
