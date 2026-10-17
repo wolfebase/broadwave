@@ -129,6 +129,17 @@ test("multiview adds a channel and swaps the one with sound", async ({ page }, i
   }
 });
 
+test("an empty multiview is one Add a channel tile that says to pick two", async ({ page }) => {
+  await page.goto("/multiview");
+  await settle(page);
+  const add = page.getByRole("button", { name: /Add a channel/ });
+  await expect(add).toHaveCount(1);
+  await expect(add).toContainText("Pick two channels.");
+  // The note used to float over the grid beside the tile, and the tile hint showed with no tiles.
+  await expect(page.locator(".mv-empty")).toHaveCount(0);
+  await expect(page.getByText("Select a tile to hear it.")).toHaveCount(0);
+});
+
 test("moving the sound between equal tiles restarts neither", async ({ page }) => {
   await page.goto("/watch?channel=1");
   await settle(page);
