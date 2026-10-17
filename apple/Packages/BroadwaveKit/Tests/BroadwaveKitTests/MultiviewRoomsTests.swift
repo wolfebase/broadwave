@@ -130,3 +130,12 @@ private func deadSnap(_ edit: (inout TilePlaybackSnap) -> Void = { _ in }) -> Ti
     commands.bind(9, { heard.append("other:" + $0) }, whenPaused: false)
     #expect(heard == ["pause"])
 }
+
+@Test func aTileRoomComesToAScreenThatStartedAheadOfIt() {
+    let tile = MultiviewRooms.tile("multiview:ab12cd34", channelID: 37)
+    #expect(SyncEngine.measuresAhead(room: tile))
+    #expect(SyncEngine.measuresAhead(room: "channel:37"))
+    // The grid's shared room and a watch party keep their place.
+    #expect(!SyncEngine.measuresAhead(room: "multiview:ab12cd34"))
+    #expect(!SyncEngine.measuresAhead(room: "group:den"))
+}

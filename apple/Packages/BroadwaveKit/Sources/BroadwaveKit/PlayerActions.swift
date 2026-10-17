@@ -138,3 +138,73 @@ public struct StreamFacts: Equatable, Sendable {
         return String(localized: "\(word) · \(String(rounded)) ms", bundle: .module)
     }
 }
+
+/// Where a live picture sits in what the server still holds: its oldest frame,
+/// the frame on screen, and the live edge, as station clock times. The player's
+/// timeline draws from this; LIVE is the right end.
+public struct LiveWindow: Equatable, Sendable {
+    public var start: Date
+    public var position: Date
+    public var edge: Date
+
+    /// A player in a room sits about 13-18 s behind the edge (balanced or stable).
+    /// Within this it reads as live.
+    public static let liveSlack: TimeInterval = 25
+
+    public init(start: Date, position: Date, edge: Date) {
+        self.start = min(start, position)
+        self.position = position
+        self.edge = max(edge, position)
+    }
+
+    /// From the item's clock: its date now, its time in seconds, and its seekable ranges in seconds.
+    public static func make(currentDate: Date?, currentSeconds: Double, seekable: [ClosedRange<Double>]) -> LiveWindow? {
+        guard let currentDate, currentSeconds.isFinite, let first = seekable.map(\.lowerBound).min(),
+              let last = seekable.map(\.upperBound).max(), first.isFinite, last.isFinite
+        else { return nil }
+        return LiveWindow(
+            start: currentDate.addingTimeInterval(first - currentSeconds),
+            position: currentDate,
+            edge: currentDate.addingTimeInterval(last - currentSeconds)
+        )
+    }
+
+    public var span: TimeInterval {
+        edge.timeIntervalSince(start)
+    }
+
+    /// 0 at the oldest frame, 1 at the live edge.
+    public var fraction: Double {
+        span > 0 ? min(1, max(0, position.timeIntervalSince(start) / span)) : 1
+    }
+
+    public var behind: TimeInterval {
+        edge.timeIntervalSince(position)
+    }
+
+    public var isLive: Bool {
+        behind <= Self.liveSlack
+    }
+
+    /// The time a point on the bar stands for.
+    public func date(at fraction: Double) -> Date {
+        start.addingTimeInterval(span * min(1, max(0, fraction)))
+    }
+
+    /// Back or forward by `seconds`, never past either end.
+    public func moved(by seconds: TimeInterval) -> Date {
+        min(edge, max(start, position.addingTimeInterval(seconds)))
+    }
+
+    /// Whether the window holds a moment, such as a show's start.
+    public func holds(_ date: Date) -> Bool {
+        date >= start && date <= edge
+    }
+
+    /// "−4:05" or "−1:02:09": how far behind live, as the TV app writes it.
+    public static func behindText(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded()))
+        let h = total / 3600, m = (total % 3600) / 60, s = total % 60
+        return h > 0 ? String(format: "\u{2212}%d:%02d:%02d", h, m, s) : String(format: "\u{2212}%d:%02d", m, s)
+    }
+}

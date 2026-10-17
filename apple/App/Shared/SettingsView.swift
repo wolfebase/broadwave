@@ -496,7 +496,7 @@ struct SettingsView: View {
                 }
             }
         } footer: {
-            Text("How far behind live a channel plays when this device starts it: Balanced about 16 seconds, Stable 20.")
+            Text("A channel starts as close to live as it plays smoothly, about 5 seconds, whichever you pick, and screens you line up meet it there. Picking a delay in the player moves every lined-up screen on that channel: Balanced to about 16 seconds, Stable to 20, which rides out a weak signal.")
         }
     }
 

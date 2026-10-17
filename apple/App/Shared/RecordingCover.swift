@@ -1,15 +1,9 @@
 import SwiftUI
-#if os(iOS)
-    import UIKit
-#endif
 
-/// iPhone pushes a recording into the tab. iPad and Apple TV play it over the picture, so the sidebar stays off it.
+/// A recording plays over the whole screen, as the TV app plays a show. Pushed into a
+/// tab, an iPhone on its side stacked the More tab's back button over the Recordings one.
 @MainActor var recordingCovers: Bool {
-    #if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .pad
-    #else
-        true
-    #endif
+    true
 }
 
 /// A recording played over the picture. On iPad the stack gives Start over, Next, Breaks, and Close a bar.

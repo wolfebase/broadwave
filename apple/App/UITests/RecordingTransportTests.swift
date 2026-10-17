@@ -23,8 +23,11 @@
             XCTAssertTrue(app.buttons["recording-start-over"].waitForExistence(timeout: 15), app.debugDescription)
             sleep(3)
 
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            // A cover may open with the transport up; a tap in the middle would land on Play/Pause.
             let play = app.buttons["Play/Pause"]
+            if !play.waitForExistence(timeout: 1) {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+            }
             XCTAssertTrue(play.waitForExistence(timeout: 5), "no transport after a tap: \(app.debugDescription)")
             XCTAssertEqual(play.label, "Pause")
             play.tap()

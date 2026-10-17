@@ -44,6 +44,9 @@ import SwiftUI
         func makeUIView(context: Context) -> AirPlayPickerView {
             let picker = AirPlayPickerView(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
             picker.prioritizesVideoDevices = true
+            // White on glass over a picture, as the system player draws it; blue while a route is on.
+            picker.tintColor = .white
+            picker.activeTintColor = .tintColor
             picker.delegate = context.coordinator
             return picker
         }

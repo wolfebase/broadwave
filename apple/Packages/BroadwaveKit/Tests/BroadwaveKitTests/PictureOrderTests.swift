@@ -45,3 +45,18 @@ import Testing
     #expect(PictureOrder.askDelay(hadWatch: false, serverCameBack: true) == PictureOrder.lateAsk)
     #expect(PictureOrder.lateAsk == 3)
 }
+
+@Test func everyTileStartsAtOnceWhenTheTunersCoverThem() {
+    let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+    // The plan gave every tile a tuner: nothing is taken from anyone by asking together.
+    var round = PictureOrder.begin(4, now: t0, everyTileFits: true)
+    #expect(!PictureOrder.holdQuiet(round, channelID: 5, now: t0))
+    // A new sound tile, a drop, or a restart keeps that, until a plan says otherwise.
+    round = PictureOrder.soundChanged(round, soundID: 5, now: t0)
+    #expect(!PictureOrder.holdQuiet(round, channelID: 4, now: t0))
+    round = PictureOrder.beginAgain(round, now: t0)
+    #expect(!PictureOrder.holdQuiet(round, channelID: 4, now: t0))
+    round = PictureOrder.planned(round, everyTileFits: false)
+    #expect(PictureOrder.holdQuiet(round, channelID: 4, now: t0))
+    #expect(!PictureOrder.holdQuiet(PictureOrder.planned(round, everyTileFits: true), channelID: 4, now: t0))
+}

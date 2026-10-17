@@ -16,22 +16,32 @@ public enum PictureOrder {
         public var answered: Bool
         /// When this round began. The wait is measured from here.
         public var since: Date
+        /// The server's plan has a tuner for every tile, so no tile waits for another.
+        public var everyTileFits: Bool
 
-        public init(soundID: Int64, answered: Bool = false, since: Date) {
+        public init(soundID: Int64, answered: Bool = false, since: Date, everyTileFits: Bool = false) {
             self.soundID = soundID
             self.answered = answered
             self.since = since
+            self.everyTileFits = everyTileFits
         }
     }
 
-    public static func begin(_ soundID: Int64, now: Date) -> Round {
-        Round(soundID: soundID, since: now)
+    public static func begin(_ soundID: Int64, now: Date, everyTileFits: Bool = false) -> Round {
+        Round(soundID: soundID, since: now, everyTileFits: everyTileFits)
+    }
+
+    /// A newer plan said whether every tile has a tuner.
+    public static func planned(_ round: Round, everyTileFits: Bool) -> Round {
+        var next = round
+        next.everyTileFits = everyTileFits
+        return next
     }
 
     /// A quiet tile holds its start. The sound tile never does. No sound tile
     /// yet means nothing is held, so a grid does not wait forever.
     public static func holdQuiet(_ round: Round, channelID: Int64, now: Date) -> Bool {
-        if round.soundID == 0 || channelID == round.soundID || round.answered {
+        if round.everyTileFits || round.soundID == 0 || channelID == round.soundID || round.answered {
             return false
         }
         return now.timeIntervalSince(round.since) < soundWait
@@ -39,7 +49,7 @@ public enum PictureOrder {
 
     /// The socket dropped or the server restarted. Nobody has answered in this round.
     public static func beginAgain(_ round: Round, now: Date) -> Round {
-        Round(soundID: round.soundID, answered: false, since: now)
+        Round(soundID: round.soundID, answered: false, since: now, everyTileFits: round.everyTileFits)
     }
 
     /// The sound moved to another tile. That tile asks first, and the wait starts over.
@@ -47,7 +57,7 @@ public enum PictureOrder {
         if round.soundID == soundID {
             return round
         }
-        return Round(soundID: soundID, answered: false, since: now)
+        return Round(soundID: soundID, answered: false, since: now, everyTileFits: round.everyTileFits)
     }
 
     /// The sound tile's watch answered: a picture, or a reason it cannot start.

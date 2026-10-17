@@ -227,7 +227,7 @@ func (r *Rooms) stepBackLocked(room string, st *RoomState, now time.Time) RoomSt
 // marked measured: Settle and the Apple floor no longer pull it back to the
 // latency target, and a viewer's Live delay choice clears the mark.
 func (r *Rooms) measureLocked(room string, st *RoomState, action string, media float64, now time.Time) RoomState {
-	if st.Mode != "follow" || st.Rate != 1 || media <= 0 {
+	if st.Mode != "follow" && !soloTile(room, st) || st.Rate != 1 || media <= 0 {
 		return *st
 	}
 	nowMS := unixMS(now)
@@ -248,6 +248,14 @@ func (r *Rooms) measureLocked(room string, st *RoomState, action string, media f
 	st.Version++
 	r.measured[room] = true
 	return *st
+}
+
+// soloTile is a multiview tile's own room ("multiview:ID:CHANNEL") with one
+// screen in it. A tile pauses 10 s or more on a warm channel to fall back to a
+// 16 s room; nobody else plays that room, so it may come to the tile instead.
+// The grid's shared room and group rooms keep their place.
+func soloTile(room string, st *RoomState) bool {
+	return st.Members == 1 && strings.HasPrefix(room, "multiview:") && strings.Count(room, ":") == 2
 }
 
 // youngRoom is how long after it is made a room still takes "ahead": long

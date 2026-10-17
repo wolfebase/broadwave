@@ -42,6 +42,8 @@ import XCTest
                 "-BroadwaveWatch", channel,
                 "-BroadwaveSyncLog", "1",
                 "-BroadwaveExercise", "YES",
+                // Lining up is opt-in; this test reads the engine's state to know the picture started.
+                "-lineUp", "YES",
             ]
             app.launch()
 
@@ -57,7 +59,16 @@ import XCTest
             let airplay = app.buttons["airplay"]
             XCTAssertTrue(airplay.waitForExistence(timeout: 5), "AirPlay button missing\n\(app.debugDescription)")
             XCTAssertEqual(airplay.label, "AirPlay")
-            airplay.tap()
+            /// The zoom leaves a zero-size copy behind; tap the one drawn on screen. Over the
+            /// picture (iPad) the controls hide after 3 s, and a tap brings them back.
+            func drawn() -> XCUIElement? {
+                app.buttons.matching(identifier: "airplay").allElementsBoundByIndex.first { $0.frame.width > 0 && $0.isHittable }
+            }
+            if drawn() == nil {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                RunLoop.current.run(until: Date().addingTimeInterval(1))
+            }
+            (drawn() ?? airplay).tap()
             XCTAssertTrue(waitForLog(timeout: 8) { $0.contains("airplay open") }, "the route picker did not open")
             let picker = routePicker(app)
             let showedRoutes = picker.waitForExistence(timeout: 6)
@@ -105,8 +116,18 @@ import XCTest
                 }
 
                 openPictureAgain(app)
-                XCTAssertTrue(program.waitForExistence(timeout: 15), app.debugDescription)
-                XCTAssertEqual(program.label, title, "came back on \(program.label), left on \(title)")
+                // Over the picture (iPad) the title hides with the controls; a tap shows it.
+                // They hide again after 3 s, so the title is read as soon as it shows.
+                var cameBack: String?
+                for _ in 0 ..< 3 where cameBack == nil {
+                    if program.waitForExistence(timeout: 4) {
+                        cameBack = program.label
+                    } else {
+                        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                    }
+                }
+                XCTAssertNotNil(cameBack, app.debugDescription)
+                XCTAssertEqual(cameBack, title, "came back on \(cameBack ?? "-"), left on \(title)")
                 XCTAssertTrue(waitForLog(timeout: 15) { $0.contains("pip restore") }, "a tap did not restore the player\n\(logTail())")
             } else {
                 XCTAssertTrue(logText().contains("pip supported no"), "Picture in Picture did not start\n\(logTail())")

@@ -14,12 +14,17 @@ final class NowPlaying {
         didSet {
             if let oldValue, oldValue.id != channel?.id {
                 previousChannel = oldValue
+                // A pick from a list is not surfing; step() sets the way again after this.
+                surfing = nil
             }
         }
     }
 
     /// The channel before this one, which a viewer often goes back to. Its picture is kept warm.
     private(set) var previousChannel: Channel?
+    /// The way the viewer last stepped through the lineup. Surfing keeps going that way,
+    /// so the next channel that way is the one kept warm. Nil after a pick from a list.
+    private(set) var surfing: Int?
     var expanded = false
     /// The channel that played last, kept after the player closes: Back from the
     /// Apple TV guide goes back to it, and the guide opens on its row.
@@ -118,6 +123,7 @@ final class NowPlaying {
         guard let current = channel, let i = channels.firstIndex(of: current) else { return }
         let next = channels[(i + dir + channels.count) % channels.count]
         channel = next
+        surfing = dir
         lastChannel = next
         Self.lastChannelID = next.id
         SharedRecents.note(next.id)
@@ -1228,63 +1234,3 @@ struct GameAlertBanner: View {
         #endif
     }
 }
-
-#if os(iOS)
-    /// Live TV keeps a place at the bottom while you browse.
-    struct MiniPlayerBar: View {
-        @Environment(AppStore.self) private var store
-        @Environment(NowPlaying.self) private var nowPlaying
-
-        var body: some View {
-            if let channel = nowPlaying.channel {
-                let live = nowPlaying.live
-                HStack(spacing: 12) {
-                    // The dot means sound is playing. The player keeps going while minimized.
-                    if live.moving {
-                        LiveDot("")
-                    } else if live.error == nil {
-                        ProgressView()
-                            .accessibilityLabel("Tuning")
-                    }
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(store.index.on(channel.id, at: store.now)?.title ?? channel.displayName)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                        Text(live.error ?? "\(channel.displayNumber) \(channel.displayName)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityValue(live.moving ? "Playing" : live.error == nil ? "Tuning" : "Stopped")
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityHint("Opens the player")
-                    .accessibilityIdentifier("miniPlayer")
-                    .accessibilityAction { nowPlaying.expanded = true }
-                    Spacer()
-                    if nowPlaying.externalDisplay {
-                        // The picture is on the display; this bar is its remote.
-                        Button("Previous channel", systemImage: "chevron.up") {
-                            nowPlaying.step(ChannelStep.offset(up: true), in: store.channels)
-                        }
-                        .labelStyle(.iconOnly)
-                        Button("Next channel", systemImage: "chevron.down") {
-                            nowPlaying.step(ChannelStep.offset(up: false), in: store.channels)
-                        }
-                        .labelStyle(.iconOnly)
-                    }
-                    Button("Close", systemImage: "xmark") { nowPlaying.stop() }
-                        .labelStyle(.iconOnly)
-                        .accessibilityLabel("Close")
-                }
-                .padding(.horizontal, 16)
-                .contentShape(.rect)
-                .playerZoomSource(id: PlayerZoom.mini)
-                .onTapGesture {
-                    nowPlaying.zoomFrom = PlayerZoom.mini
-                    nowPlaying.expanded = true
-                }
-            }
-        }
-    }
-#endif
