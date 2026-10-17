@@ -455,9 +455,12 @@ struct ConnectView: View {
         @ViewBuilder var content: Content
 
         var body: some View {
+            // Each column is a focus section: Try the demo sits lower than anything on the
+            // right, and Right from it found nothing in line, so focus could not leave it.
             HStack(alignment: .center, spacing: 120) {
                 VStack(alignment: .leading, spacing: 28) { side }
                     .frame(width: 760, alignment: .leading)
+                    .focusSection()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 28) { content }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -466,6 +469,7 @@ struct ConnectView: View {
                 }
                 .scrollClipDisabled()
                 .frame(maxWidth: .infinity)
+                .focusSection()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Tokens.ColorToken.canvas.ignoresSafeArea())
