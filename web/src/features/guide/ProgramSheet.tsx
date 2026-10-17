@@ -124,7 +124,7 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
               ) : null
             ) : null}
             {airing ? (
-              <button type="button" className="btn" disabled={hasPass} aria-label={named(hasPass ? t("guideUi.seriesRecording") : cat === "sports" ? t("guideUi.recordEvery") : t("guideUi.recordSeries"))} onClick={() => void recordSeries(airing.title, channel)}>
+              <button type="button" className="btn" disabled={hasPass} aria-label={named(hasPass ? t("guideUi.seriesRecording") : cat === "sports" ? t("guideUi.recordEvery") : t("guideUi.recordSeries"))} onClick={() => void recordSeries(airing.title, channel.id)}>
                 {hasPass ? t("guideUi.seriesRecording") : cat === "sports" ? t("guideUi.recordEvery") : t("guideUi.recordSeries")}
               </button>
             ) : null}
