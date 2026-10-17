@@ -82,3 +82,14 @@ test("the notice waits off the player and multiview", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(notice).toBeVisible();
 });
+
+test("Your home opens the Devices section", async ({ page }) => {
+  const ws = await socket(page);
+  await page.goto("/guide");
+  await settle(page);
+  await ws.announce();
+  const notice = page.getByRole("status").filter({ hasText: message });
+  await notice.getByRole("button", { name: "Your home" }).click();
+  await expect(page).toHaveURL(/\/settings\/devices$/);
+  await expect(notice).toHaveCount(0);
+});

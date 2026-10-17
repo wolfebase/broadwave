@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Guide } from "../features/guide/Guide";
 import { Home } from "../features/home/Home";
+import { sectionPath } from "../features/settings/sections";
 import { gateApp } from "../lib/compat";
 import { events } from "../lib/events";
 import { shellMessages } from "../i18n/messages/shell";
@@ -263,7 +264,16 @@ function HomeNotice({ message, onDismiss }: { message: string; onDismiss: () => 
   return (
     <div ref={ref} className="banner-home" role="status">
       <p>{message}</p>
-      <button type="button" className="btn small" onClick={() => navigate("/settings")}>{shell("shell.yourHome")}</button>
+      <button
+        type="button"
+        className="btn small"
+        onClick={() => {
+          navigate(sectionPath("devices"));
+          onDismiss();
+        }}
+      >
+        {shell("shell.yourHome")}
+      </button>
       <button type="button" className="btn small ghost" onClick={onDismiss}>{shell("shell.notNow")}</button>
     </div>
   );
