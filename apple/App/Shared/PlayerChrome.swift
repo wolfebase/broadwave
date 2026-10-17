@@ -471,9 +471,9 @@ struct TuneBackdrop: View {
                 SyncPill()
                 GlassEffectContainer(spacing: 8) {
                     HStack(spacing: 8) {
-                        AirPlayRoute(compact: true) {
+                        AirPlayRoute(compact: true, onPresent: {
                             nowPlaying.live.playLogNote("airplay open")
-                        }
+                        })
                         .frame(width: 44, height: 44)
                         if #available(iOS 26.4, *) {
                             SubtitlesMenu(player: nowPlaying.live.player)
