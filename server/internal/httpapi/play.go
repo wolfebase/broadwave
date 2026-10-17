@@ -36,6 +36,9 @@ type watchBody struct {
 	ConfirmLive bool       `json:"confirmLive"`
 	// Room is the sync room a player that starts on the room's frame joins.
 	Room string `json:"room"`
+	// Ticket names this request, so a page that leaves before reading the
+	// answer can stop the viewer it may have been counted as.
+	Ticket string `json:"ticket"`
 }
 
 // decide picks the rendition a watch plays: the one the player named, or the
@@ -145,6 +148,19 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		watchError(w, err)
 		return
 	}
+	// The viewer this request counted, released once: here or by the page's
+	// stop by ticket, whichever comes first.
+	counted, key0 := session.ChannelID, session.Rendition
+	release := func() {
+		if s.tickets.take(body.Ticket) {
+			s.Hub.Release(counted, key0)
+		}
+	}
+	if !s.tickets.count(body.Ticket, counted, key0) {
+		// The page stopped this watch before it was counted.
+		s.Hub.Release(counted, key0)
+		return
+	}
 	session.Stream.Reason = decision.Reason
 	if ch, err := s.Store.SourceChannel(r.Context(), body.ChannelID); err == nil && ch.PlaysAs != 0 {
 		session.Stream.Reason = "The 3.0 version is encrypted. Showing the regular broadcast."
@@ -152,12 +168,12 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	// The viewer is counted before a segment exists. A channel change closes
 	// this request; waiting out the deadline would keep that tuner.
 	if r.Context().Err() != nil {
-		s.Hub.Release(session.ChannelID, session.Rendition)
+		release()
 		return
 	}
 	state := waitServable(r.Context(), s.Hub, session.ChannelID, session.Rendition, servableWait)
 	if r.Context().Err() != nil || state != startServable {
-		s.Hub.Release(session.ChannelID, session.Rendition)
+		release()
 		switch {
 		case r.Context().Err() != nil:
 		case state == startDark:
@@ -180,7 +196,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	if inRoom && s.Hub.FromBuffer(session.ChannelID, session.Rendition) {
 		waitFrame(r.Context(), s.Hub, session.ChannelID, session.Rendition, room, roomFrameWait)
 		if r.Context().Err() != nil {
-			s.Hub.Release(session.ChannelID, session.Rendition)
+			release()
 			return
 		}
 	}
@@ -207,7 +223,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	// after the first segment already exists, so the player cannot start.
 	writeJSON(w, http.StatusOK, watchReply{Session: session, Boot: s.boot()})
 	if r.Context().Err() != nil {
-		s.Hub.Release(session.ChannelID, session.Rendition)
+		release()
 	}
 }
 
@@ -267,8 +283,20 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Rendition string `json:"rendition"`
 		Boot      string `json:"boot"`
+		Ticket    string `json:"ticket"`
 	}
 	_ = decodeJSON(r, &body)
+	// A page that left before reading its watch answer names the request.
+	// Tickets live in this process, so no boot check applies.
+	if body.Ticket != "" {
+		if s.Hub != nil {
+			if key, ok := s.tickets.stop(body.Ticket, id); ok {
+				s.Hub.Release(id, key)
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
 	// A watch counted by a process that has since restarted is gone with it.
 	// Releasing by rendition here would take someone else's viewer.
 	if s.Hub != nil && (body.Boot == "" || body.Boot == s.boot()) {
