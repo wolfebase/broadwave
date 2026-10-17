@@ -1,10 +1,11 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { guideUiMessages } from "../../i18n/messages/guideUi.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { useDialogFocus } from "../../ui/useDialogFocus";
 import { navigate } from "../../app/router";
+import { useLayout } from "../../app/layout";
 import { actionName } from "../../lib/actionName";
 import { categoryLabel, categoryOf, isRecording, liveChannel, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
@@ -14,6 +15,41 @@ import { ChannelBadge, LiveDot, Progress } from "../../ui/primitives";
 import { useAiringDetails } from "./useAiringDetails";
 
 const t = bind(guideUiMessages);
+
+type Step = "record" | "series";
+
+/**
+ * On a TV a remote's Enter opens the sheet with Record focused, so a second or held
+ * Enter would record. There the first press asks, and a second press records once the
+ * key was let go in between. A pointer click is deliberate and needs no release.
+ */
+function useConfirmStep(ask: boolean) {
+  const [armed, setArmed] = useState<Step | null>(null);
+  const released = useRef(true);
+  useEffect(() => {
+    if (!armed) return;
+    released.current = false;
+    const up = (event: KeyboardEvent) => {
+      if (event.key === "Enter" || event.key === " ") released.current = true;
+    };
+    window.addEventListener("keyup", up, true);
+    const timer = window.setTimeout(() => setArmed(null), 8000);
+    return () => {
+      window.removeEventListener("keyup", up, true);
+      window.clearTimeout(timer);
+    };
+  }, [armed]);
+  const press = (step: Step, event: MouseEvent, act: () => void) => {
+    if (!ask) return act();
+    if (armed === step && (released.current || event.detail > 0)) {
+      setArmed(null);
+      act();
+      return;
+    }
+    setArmed(step);
+  };
+  return { armed, press, disarm: () => setArmed(null) };
+}
 
 export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { channel: Channel; airing?: Airing; onClose: () => void; onWatch: (c: Channel) => void }) {
   const airing = useAiringDetails(listed);
@@ -33,6 +69,17 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
   const upcoming = airing ? Date.parse(airing.start) > now : false;
   const subject = airing?.title ?? channel.displayName;
   const named = (action: string) => actionName(action, subject);
+  const confirm = useConfirmStep(useLayout() === "tv");
+  const recordLabel = confirm.armed === "record" ? t("guideUi.confirmRecord") : t("guideUi.record");
+  const seriesLabel = hasPass
+    ? t("guideUi.seriesRecording")
+    : confirm.armed === "series"
+      ? cat === "sports"
+        ? t("guideUi.confirmEvery")
+        : t("guideUi.confirmSeries")
+      : cat === "sports"
+        ? t("guideUi.recordEvery")
+        : t("guideUi.recordSeries");
 
   return (
     <div className="sheet-layer" onClick={onClose}>
@@ -107,8 +154,14 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
                   <RecordIcon className="tally" /> {t("guideUi.stopRecording")}
                 </button>
               ) : (
-                <button type="button" className="btn" aria-label={named(t("guideUi.record"))} onClick={() => void record(channel, airing.title)}>
-                  <RecordIcon className="tally" /> {t("guideUi.record")}
+                <button
+                  type="button"
+                  className="btn"
+                  aria-label={named(recordLabel)}
+                  onBlur={confirm.disarm}
+                  onClick={(event) => confirm.press("record", event, () => void record(channel, airing.title))}
+                >
+                  <RecordIcon className="tally" /> {recordLabel}
                 </button>
               )
             ) : null}
@@ -118,14 +171,27 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
                   <RecordIcon className="tally" /> {t("guideUi.dontRecord")}
                 </button>
               ) : rec !== "scheduled" ? (
-                <button type="button" className="btn primary" aria-label={named(t("guideUi.record"))} onClick={() => void recordOnce(airing, channel)}>
-                  <RecordIcon className="tally" /> {t("guideUi.record")}
+                <button
+                  type="button"
+                  className="btn primary"
+                  aria-label={named(recordLabel)}
+                  onBlur={confirm.disarm}
+                  onClick={(event) => confirm.press("record", event, () => void recordOnce(airing, channel))}
+                >
+                  <RecordIcon className="tally" /> {recordLabel}
                 </button>
               ) : null
             ) : null}
             {airing ? (
-              <button type="button" className="btn" disabled={hasPass} aria-label={named(hasPass ? t("guideUi.seriesRecording") : cat === "sports" ? t("guideUi.recordEvery") : t("guideUi.recordSeries"))} onClick={() => void recordSeries(airing.title, channel.id)}>
-                {hasPass ? t("guideUi.seriesRecording") : cat === "sports" ? t("guideUi.recordEvery") : t("guideUi.recordSeries")}
+              <button
+                type="button"
+                className="btn"
+                disabled={hasPass}
+                aria-label={named(seriesLabel)}
+                onBlur={confirm.disarm}
+                onClick={(event) => confirm.press("series", event, () => void recordSeries(airing.title, channel.id))}
+              >
+                {seriesLabel}
               </button>
             ) : null}
             {/* The star is the channel's, not the show's, so it says so. */}
