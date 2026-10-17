@@ -81,6 +81,8 @@ test("a remote walks home, the guide, the player, and back", async ({ page }) =>
   await expect(page.locator("html")).toHaveAttribute("data-layout", "tv");
   await expectRing(page);
 
+  // The page's content has the first focus. The top bar is Up from it.
+  await until(page, "ArrowUp", async () => page.evaluate(() => Boolean(document.activeElement?.closest(".topbar"))), 8);
   await until(page, "ArrowRight", async () =>
     page.evaluate(() => {
       const el = document.activeElement;
@@ -104,7 +106,8 @@ test("a remote walks home, the guide, the player, and back", async ({ page }) =>
   const title = ((await cell.getAttribute("aria-label")) || "").split(",")[0].trim();
   expect(title.length).toBeGreaterThan(0);
 
-  await press(page, "Enter");
+  // OK on a show that is on now tunes it. Info opens its details.
+  await press(page, "i");
   const sheet = page.getByRole("dialog", { name: title });
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole("button", { name: "Watch", exact: true })).toBeFocused();
@@ -117,8 +120,6 @@ test("a remote walks home, the guide, the player, and back", async ({ page }) =>
   await expect(page).toHaveURL(/\/guide$/);
   await expectRing(page);
 
-  await press(page, "Enter");
-  await expect(sheet).toBeVisible();
   await press(page, "Enter");
   await expect(page).toHaveURL(/\/watch\?channel=\d+/);
   const player = page.getByRole("region", { name: "Player" });

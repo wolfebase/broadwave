@@ -57,7 +57,7 @@ test("a search result opens, and records just that airing", async ({ page }) => 
   // One airing takes pads, not series rules.
   await page.getByRole("listitem").filter({ hasText: /Late Local News · .+ only/ }).getByRole("button", { name: "Edit Late Local News" }).click();
   const editor = page.getByRole("form", { name: "Edit Late Local News" });
-  await expect(editor.getByLabel("After", { exact: true })).toBeVisible();
+  await expect(editor.getByRole("spinbutton", { name: "Minutes to end late" })).toBeVisible();
   await expect(editor.getByRole("combobox", { name: "Episodes" })).toHaveCount(0);
   await page.goto("/search?q=Late%20Local");
   await row.click();

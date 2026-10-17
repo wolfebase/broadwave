@@ -35,3 +35,8 @@ export function groupByShow<A extends Listing>(airings: A[], now: number, playab
   const first = (g: ShowGroup<A>) => Date.parse((g.onNow ?? g.airings[0]).start);
   return [...groups.values()].sort((a, b) => Number(Boolean(b.onNow)) - Number(Boolean(a.onNow)) || first(a) - first(b));
 }
+
+/** The channel a series pass from this row records on: any channel (0) when the show airs on more than one. */
+export function seriesChannelId<A>(g: ShowGroup<A>, leadChannelId: number): number {
+  return g.channels > 1 ? 0 : leadChannelId;
+}

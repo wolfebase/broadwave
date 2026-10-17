@@ -142,7 +142,10 @@ export function Nav({ path, layout, inert, recordingCount, online, freshAt }: { 
       <div className="topbar-right">
         {!online ? (
           <span className="offline" role="status">
-            {freshAt ? shell("shell.offlineSaved", { time: formatClock(new Date(freshAt)) }) : shell("shell.offline")}
+            <span className="offline-full">{freshAt ? shell("shell.offlineSaved", { time: formatClock(new Date(freshAt)) }) : shell("shell.offline")}</span>
+            <span className="offline-short" aria-hidden="true">
+              {freshAt ? shell("shell.offlineShortSaved", { time: formatClock(new Date(freshAt)) }) : shell("shell.offlineShort")}
+            </span>
           </span>
         ) : null}
         {phone ? null : (

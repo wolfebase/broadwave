@@ -31,6 +31,7 @@ import {
 } from "../../lib/guide";
 import { guideEnterAction, guidePageRow, isInfoKey, slotUnderNow } from "../../lib/guideKeys";
 import { scrollBehavior } from "../../lib/motion";
+import { markLogoTone } from "../../lib/logoTone";
 import { canonicalKey } from "../../lib/tvKey";
 import type { Airing, Channel } from "../../types";
 import { SearchIcon, StarIcon } from "../../ui/icons";
@@ -616,7 +617,7 @@ export function Guide() {
                   <span className="gc-num">{c.displayNumber}</span>
                   <span className="gc-body">
                     <span className="gc-name">
-                      {c.artUrl ? <img className="gc-logo" alt="" src={`/media/art/channel/${c.id}?w=72`} /> : null}
+                      {c.artUrl ? <img className="gc-logo" alt="" src={`/media/art/channel/${c.id}?w=72`} onLoad={(event) => markLogoTone(event.currentTarget)} /> : null}
                       <span className="gc-text" title={c.displayName}>
                         {c.displayName}
                       </span>

@@ -88,7 +88,8 @@ type Data = {
   notePaired: () => void;
   record: (channel: Channel, title: string) => Promise<void>;
   stopRecord: (id: number) => Promise<void>;
-  recordSeries: (title: string, channel: Channel) => Promise<void>;
+  /** A series pass on this channel, or on any channel when channelId is 0. */
+  recordSeries: (title: string, channelId: number) => Promise<void>;
   recordOnce: (airing: Airing, channel: Channel) => Promise<void>;
   removePass: (id: number) => Promise<void>;
   rediscover: (ip?: string) => Promise<void>;
@@ -539,8 +540,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await stopRecording(id);
         await refresh(["recordings"]);
       },
-      recordSeries: async (title, channel) => {
-        await addPass(title, channel.id);
+      recordSeries: async (title, channelId) => {
+        await addPass(title, channelId);
         await refresh(["passes"]);
       },
       recordOnce: async (airing, channel) => {
