@@ -725,3 +725,13 @@
   max-height: 24rem;
   font-size: var(--type-footnote-size);
 }
+
+.diag-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.diag-table td {
+  white-space: nowrap;
+  padding-right: 12px;
+}

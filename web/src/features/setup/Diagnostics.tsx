@@ -97,23 +97,26 @@ export function DiagnosticsPage() {
       <section className="settings-section">
         <h2>{t("diag.relay")}</h2>
         {(d.relay ?? []).length === 0 ? <p className="dim">{t("diag.nothingTuned")}</p> : null}
-        <table>
-          <tbody>
-            {(d.relay ?? []).map((f) => (
-              <tr key={f.channelId}>
-                <td>
-                  <strong>{f.guideNumber}</strong> {f.name}
-                </td>
-                <td>{t("diag.tunerLower", { number: f.tuner + 1 })}</td>
-                <td>{f.renditions.map((r) => `${r.key} (${r.viewers})`).join(", ") || "—"}</td>
-                <td>{f.recording ? t("diag.recording") : ""}</td>
-                <td>{f.exports ? t("diag.appStreams", { count: f.exports }) : ""}</td>
-                <td className="dim">{f.fieldOrder}</td>
-                <td className="dim">{bufferLine(f.buffer)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {/* A phone scrolls the table, not the page. A keyboard reaches it to scroll. */}
+        <div className="diag-table" role="region" aria-label={t("diag.relay")} tabIndex={0}>
+          <table>
+            <tbody>
+              {(d.relay ?? []).map((f) => (
+                <tr key={f.channelId}>
+                  <td>
+                    <strong>{f.guideNumber}</strong> {f.name}
+                  </td>
+                  <td>{t("diag.tunerLower", { number: f.tuner + 1 })}</td>
+                  <td>{f.renditions.map((r) => `${r.key} (${r.viewers})`).join(", ") || "—"}</td>
+                  <td>{f.recording ? t("diag.recording") : ""}</td>
+                  <td>{f.exports ? t("diag.appStreams", { count: f.exports }) : ""}</td>
+                  <td className="dim">{f.fieldOrder}</td>
+                  <td className="dim">{bufferLine(f.buffer)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="settings-section" aria-label={t("diag.starts")}>

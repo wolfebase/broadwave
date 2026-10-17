@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { groupByShow } from "./src/features/search/groups.ts";
+import { groupByShow, seriesChannelId } from "./src/features/search/groups.ts";
 
 const at = (h: number) => new Date(Date.UTC(2026, 9, 16, h)).toISOString();
 const now = Date.parse(at(12)) + 10 * 60_000;
@@ -25,4 +25,18 @@ test("one row per show, on now first, then the soonest", () => {
   assert.equal(nbc.art?.id, 2);
   // A show on a channel this screen cannot play is not "on now" to watch.
   assert.equal(groups[1].onNow, undefined);
+});
+
+test("a show on several stations records on any channel", () => {
+  const groups = groupByShow(
+    [
+      { id: 1, title: "Jeopardy!", start: at(13), end: at(14), channelId: 4 },
+      { id: 2, title: "Jeopardy!", start: at(15), end: at(16), channelId: 7 },
+      { id: 3, title: "Local Talk", start: at(13), end: at(14), channelId: 4 },
+    ],
+    now,
+  );
+  const show = (title: string) => groups.find((g) => g.title === title)!;
+  assert.equal(seriesChannelId(show("Jeopardy!"), 4), 0);
+  assert.equal(seriesChannelId(show("Local Talk"), 4), 4);
 });
