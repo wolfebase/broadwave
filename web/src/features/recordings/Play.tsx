@@ -9,6 +9,7 @@ import { markersForPlayback, playbackGrowing, progressSaveAction, releaseFileVid
 import { recordingsMessages } from "../../i18n/messages/recordings.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { copy } from "../../strings";
+import { applySound, saveSound } from "../player/extras";
 import { recordingSeekArrow } from "../player/keys";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
@@ -114,6 +115,8 @@ export function Play({
     let gen = 0;
     let hls: Hls | null = null;
     let detach: (() => void) | null = null;
+    // The level and mute live TV remembers. A recording used to start at full volume.
+    applySound(video);
     const track = document.createElement("track");
     track.kind = "captions";
     track.label = t("recordings.captions");
@@ -412,6 +415,10 @@ export function Play({
       position={where}
       duration={total}
       onKeyDown={onKey}
+      onSound={() => {
+        const video = videoRef.current;
+        if (video) saveSound(video);
+      }}
       onSeek={(value) => {
         sought();
         seekTo(value);
