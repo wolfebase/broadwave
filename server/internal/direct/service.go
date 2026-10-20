@@ -59,6 +59,8 @@ type Status struct {
 	Addresses []string  `json:"addresses"`
 	LastError string    `json:"lastError,omitempty"`
 	ErrorAt   time.Time `json:"errorAt,omitzero"`
+	// Reason says why the state is unavailable.
+	Reason string `json:"reason,omitempty"`
 }
 
 // state is saved as state.json in Dir.

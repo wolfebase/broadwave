@@ -2132,6 +2132,8 @@ export interface components {
             lastError?: string;
             /** Format: date-time */
             errorAt?: string;
+            /** @description Why the state is unavailable: started with BROADWAVE_DIRECT=0, the HTTPS port is in use, or a container on a bridge network (no certificate is requested there). */
+            reason?: string;
         };
         /** @description A newer Broadwave release. The message is the banner. */
         ServerUpdate: {

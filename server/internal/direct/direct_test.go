@@ -468,6 +468,59 @@ func TestPickPrefersTheRoutedInterface(t *testing.T) {
 	}
 }
 
+func TestPickSkipsAPrimaryOnABridgeOrTunnel(t *testing.T) {
+	a := netip.MustParseAddr
+	ifaces := []iface{
+		{Name: "wg0", Addrs: []netip.Addr{a("10.253.0.2")}},
+		{Name: "eth0", Addrs: []netip.Addr{a("192.168.1.20")}},
+	}
+	if got := addrStrings(pick(a("10.253.0.2"), ifaces)); !slices.Equal(got, []string{"192.168.1.20"}) {
+		t.Fatalf("got %v", got)
+	}
+	ifaces = []iface{{Name: "docker0", Addrs: []netip.Addr{a("172.17.0.1")}}}
+	if got := pick(a("172.17.0.1"), ifaces); len(got) != 0 {
+		t.Fatalf("published a bridge: %v", got)
+	}
+}
+
+func TestBridgedContainerAsksForNoName(t *testing.T) {
+	a := netip.MustParseAddr
+	bridge := []iface{{Name: "eth0", Addrs: []netip.Addr{a("172.17.0.4")}}}
+	picked := pick(a("172.17.0.4"), bridge)
+	if bridgedReason(true, bridge, picked) == "" {
+		t.Fatal("default bridge passed")
+	}
+	// A user-defined bridge network and Podman's default network.
+	for _, raw := range []string{"172.18.0.2", "172.31.5.9", "10.88.0.7"} {
+		ifs := []iface{{Name: "eth0", Addrs: []netip.Addr{a(raw)}}}
+		if bridgedReason(true, ifs, pick(a(raw), ifs)) == "" {
+			t.Errorf("%s passed", raw)
+		}
+	}
+	// Outside a container the same address is a real network.
+	if got := bridgedReason(false, bridge, picked); got != "" {
+		t.Fatalf("not a container: %q", got)
+	}
+	// Host networking sees the host's own bridges and its home address.
+	host := []iface{
+		{Name: "br0", Addrs: []netip.Addr{a("172.20.1.2")}},
+		{Name: "docker0", Addrs: []netip.Addr{a("172.17.0.1")}},
+	}
+	if got := bridgedReason(true, host, pick(a("172.20.1.2"), host)); got != "" {
+		t.Fatalf("host networking: %q", got)
+	}
+	// macvlan: the container has its own home network address.
+	mac := []iface{{Name: "eth0", Addrs: []netip.Addr{a("192.168.1.40")}}}
+	if got := bridgedReason(true, mac, pick(a("192.168.1.40"), mac)); got != "" {
+		t.Fatalf("macvlan: %q", got)
+	}
+	// 172.16.0.0/16 is not one of Docker's pools.
+	lan := []iface{{Name: "eth0", Addrs: []netip.Addr{a("172.16.4.2")}}}
+	if got := bridgedReason(true, lan, pick(a("172.16.4.2"), lan)); got != "" {
+		t.Fatalf("172.16 home network: %q", got)
+	}
+}
+
 func TestParseAddrs(t *testing.T) {
 	got := addrStrings(ParseAddrs(" 192.168.1.2, 8.8.8.8 ,fd00::1,junk,192.168.1.2"))
 	if !slices.Equal(got, []string{"192.168.1.2", "fd00::1"}) {

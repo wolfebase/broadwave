@@ -240,6 +240,11 @@ export const settingsHubMessages = {
   "about.license": "Broadwave is open source under the Apache License 2.0.",
   "about.setup": "Setup",
   "about.setupHint": "Walk through finding tuners and channels again. Nothing is removed.",
+  "about.secure": "Secure name",
+  "about.secureReady": "On",
+  "about.secureStarting": "Starting",
+  "about.secureError": "Not working",
+  "about.secureOff": "Off",
 
   "share.app": "App",
   "share.appPick": "Which app?",

@@ -11,6 +11,7 @@ export type {
   ChannelPatch,
   Device,
   DeviceHealth,
+  DirectStatus,
   FrameList,
   GameAlert,
   MultiviewPlan,

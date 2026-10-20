@@ -3153,6 +3153,7 @@ components:
           description: Home network addresses the name points at.
         lastError: { type: string }
         errorAt: { type: string, format: date-time }
+        reason: { type: string, description: "Why the state is unavailable: started with BROADWAVE_DIRECT=0, the HTTPS port is in use, or a container on a bridge network (no certificate is requested there)." }
     ServerUpdate:
       type: object
       required: [version, notesUrl, message]

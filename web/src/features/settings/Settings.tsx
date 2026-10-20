@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { CatalogBackup, ServerInfo, Settings, StorageInfo, StorageShow } from "../../types";
-import { getStorageShows, listBackups, restoreBackup } from "../../api";
+import type { CatalogBackup, DirectStatus, ServerInfo, Settings, StorageInfo, StorageShow } from "../../types";
+import { getDirect, getStorageShows, listBackups, restoreBackup } from "../../api";
 import { navigate } from "../../app/router";
 import { authHeaders } from "../../lib/deviceToken";
 import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
@@ -414,6 +414,7 @@ export function AboutSection({ server, settings, onChange }: { server: ServerInf
         <Row label={h("about.app")}>
           <span className="set-row-value">{appVersion}</span>
         </Row>
+        <SecureNameRow />
         <SwitchRow label={copy.settings.updates} hint={copy.settings.updatesHint} checked={settings.checkUpdates !== "0"} onChange={(on) => onChange({ checkUpdates: on ? "1" : "0" })} />
       </Group>
       <Group title={h("about.help")}>
@@ -455,6 +456,44 @@ export function AboutSection({ server, settings, onChange }: { server: ServerInf
       </Group>
     </>
   );
+}
+
+/** The secure name's state, and why it is off when the server turned it off itself. */
+function SecureNameRow() {
+  const [status, setStatus] = useState<DirectStatus | null>(null);
+  useEffect(() => {
+    let live = true;
+    getDirect()
+      .then((next) => {
+        if (live) setStatus(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!status) return null;
+  const { value, hint } = secureNameText(status);
+  return (
+    <Row label={h("about.secure")} hint={hint}>
+      <span className="set-row-value">{value}</span>
+    </Row>
+  );
+}
+
+function secureNameText(status: DirectStatus): { value: string; hint?: string } {
+  switch (status.state) {
+    case "ready":
+      return { value: h("about.secureReady"), hint: status.url ? status.url.replace(/^https:\/\//, "") : undefined };
+    case "starting":
+      return { value: h("about.secureStarting") };
+    case "error":
+      return { value: h("about.secureError"), hint: status.lastError };
+    case "unavailable":
+      return { value: h("about.secureOff"), hint: status.reason };
+    default:
+      return { value: h("about.secureOff") };
+  }
 }
 
 function backupKind(kind: string) {

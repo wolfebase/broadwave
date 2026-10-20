@@ -171,6 +171,7 @@ export type DirectStatus = {
   addresses: string[];
   lastError?: string;
   errorAt?: string;
+  reason?: string;
 };
 
 export type Event = {
