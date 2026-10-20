@@ -16,6 +16,8 @@ import { useHasFrame } from "../../ui/frames";
 import { LiveFrame } from "../../ui/LiveFrame";
 import { Atsc3Tag, ChannelBadge, Empty, LiveDot, Progress } from "../../ui/primitives";
 import { RecordingCard, Shelf } from "../../ui/shelf";
+import { isGame } from "../sports/kind";
+import { bareDate } from "../sports/matchup";
 import { gameKey, missingTuners } from "./homeRails";
 import "./home.css";
 
@@ -46,7 +48,8 @@ export function Home() {
   );
 
   const hero = useMemo(() => {
-    const score = (l: Live) => (l.cat === "sports" ? 4 : 0) + (l.channel.favorite ? 2 : 0) + (l.airing ? 1 : 0) + (l.channel.hd ? 0.5 : 0);
+    // A game leads; a sports talk show or a sitcom about a team does not.
+    const score = (l: Live) => (l.airing && isGame(l.airing) ? 4 : 0) + (l.channel.favorite ? 2 : 0) + (l.airing ? 1 : 0) + (l.channel.hd ? 0.5 : 0);
     return [...live].sort((a, b) => score(b) - score(a))[0];
   }, [live]);
   const heroFrame = useHasFrame(hero?.channel.id ?? 0);
@@ -79,7 +82,7 @@ export function Home() {
     for (const channel of channels) {
       for (const a of index.get(channel.id) ?? []) {
         const s = Date.parse(a.start);
-        if (Date.parse(a.end) > now && s < until && categoryOf(a) === "sports") out.push({ channel, airing: a });
+        if (Date.parse(a.end) > now && s < until && categoryOf(a) === "sports" && isGame(a)) out.push({ channel, airing: a });
       }
     }
     // A game on two stations, or already under Your teams, shows once.
@@ -284,7 +287,7 @@ export function Home() {
               <button key={airing.id} type="button" className="sport-card" onClick={() => (liveNow ? player.open(channel) : navigate("/sports"))}>
                 <span className="sc-when">{liveNow ? <LiveDot /> : `${dayLabel(airing.start, now)} · ${timeLabel(airing.start)}`}</span>
                 <span className="sc-title">{airing.title}</span>
-                {airing.subtitle ? <span className="sc-sub">{airing.subtitle}</span> : null}
+                {airing.subtitle && !bareDate(airing.subtitle) ? <span className="sc-sub">{airing.subtitle}</span> : null}
                 <ChannelBadge channel={channel} size="sm" />
               </button>
             );

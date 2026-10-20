@@ -16,7 +16,18 @@ export function matchup(a: { title: string; subtitle?: string }): [string, strin
 export function cardLabel(a: { title: string; subtitle?: string }): string {
   const sides = matchup(a);
   if (sides) return t("sports.matchup", { away: sides[0], home: sides[1] });
-  return a.subtitle || a.title;
+  return a.subtitle && !bareDate(a.subtitle) ? a.subtitle : a.title;
+}
+
+const months = "(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)";
+const bare = new RegExp(
+  `^((mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\\s+)?(${months}\\.?\\s+\\d{1,2}(st|nd|rd|th)?,?\\s+\\d{4}|\\d{1,2}/\\d{1,2}/\\d{2,4}|\\d{4}-\\d{2}-\\d{2})$`,
+  "i",
+);
+
+/** A subtitle that is only the air date ("October 20th 2026") says nothing a card needs. */
+export function bareDate(text: string | undefined): boolean {
+  return bare.test((text ?? "").trim());
 }
 
 const leagueKeys = {

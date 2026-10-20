@@ -193,3 +193,21 @@ func airingTitles(t *testing.T, body []byte) []string {
 	}
 	return out
 }
+
+func TestSportsListingLeavesOutStoriesAboutASport(t *testing.T) {
+	cases := []struct {
+		a    store.Airing
+		want bool
+	}{
+		{store.Airing{Title: "College Football", Subtitle: "Northfield at Riverton", Category: "Sport, Football"}, true},
+		{store.Airing{Title: "Mudtown Mavericks", Subtitle: "The Wedding Episode", Category: "Series, Comedy drama, Football"}, false},
+		{store.Airing{Title: "Field of Glory", Category: "Movie, Drama, Baseball"}, false},
+		{store.Airing{Title: "Any", Category: "Drama, Football", GameID: "401"}, true},
+		{store.Airing{Title: "Evening News", Category: "News"}, false},
+	}
+	for _, c := range cases {
+		if got := sportsListing(c.a); got != c.want {
+			t.Errorf("%q (%s): %v", c.a.Title, c.a.Category, got)
+		}
+	}
+}

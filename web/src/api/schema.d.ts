@@ -4004,7 +4004,8 @@ export interface operations {
                 hours?: number;
                 /**
                  * @description Only listings of this kind. sports is the apps' rule: a sports word in the category, or in a
-                 *     title that names a matchup (vs, at, @). A server that predates it returns every kind.
+                 *     title that names a matchup (vs, at, @), and not a comedy, drama, or movie about a sport
+                 *     unless it is matched to a scoreboard game. A server that predates it returns every kind.
                  */
                 kind?: "sports";
                 /**

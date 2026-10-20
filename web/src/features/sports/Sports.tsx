@@ -16,7 +16,7 @@ import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, Chip, Empty, LiveDot, Progress, RecDot } from "../../ui/primitives";
 import { layoutForCount, multiviewPath } from "../multiview/storage";
 import { teamScoreShown } from "./board";
-import { cardLabel, leagueLabel, matchup } from "./matchup";
+import { bareDate, cardLabel, leagueLabel, matchup } from "./matchup";
 import { isFiction, isGame, leagueOf, playsIn } from "./kind";
 import { scoreLine, useScoreboard, type ScoreGame, type ScoreTeam } from "./scores";
 import "../manage.css";
@@ -230,7 +230,7 @@ export function Sports() {
                   {sides ? (
                     <Matchup names={sides} game={gameOf(airing)} />
                   ) : (
-                    <h3 className="gc-title">{airing.subtitle || airing.title}</h3>
+                    <h3 className="gc-title">{cardLabel(airing)}</h3>
                   )}
                   {liveNow ? (
                     <div className="gc-progress">
@@ -325,7 +325,7 @@ export function Sports() {
                   <span className="sr-name">
                     {rec ? <RecDot scheduled={rec === "scheduled"} /> : null}
                     <strong>{airing.title}</strong>
-                    {airing.subtitle ? <span className="dim"> · {airing.subtitle}</span> : null}
+                    {airing.subtitle && !bareDate(airing.subtitle) ? <span className="dim"> · {airing.subtitle}</span> : null}
                   </span>
                   <ChannelBadge channel={channel} size="sm" />
                   <span className="sr-actions">

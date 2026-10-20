@@ -24,6 +24,12 @@ test("a listing is sports, news, a movie, or a show from its category, then its 
   assert.equal(categoryLabel.series, "Shows");
 });
 
+test("a sitcom or a movie about a sport is not sports", () => {
+  assert.equal(categoryOf(air({ start: "a", end: "b", title: "Mudtown Mavericks", category: "Series, Comedy drama, Football" })), "series");
+  assert.equal(categoryOf(air({ start: "a", end: "b", title: "Field of Glory", category: "Movie, Drama, Baseball" })), "movies");
+  assert.equal(categoryOf(air({ start: "a", end: "b", title: "Any", category: "Drama, Football", gameId: "401" })), "sports");
+});
+
 test("the show on now ends at the next listing's start, and a gap is empty", () => {
   const first = air({ id: 1, start: "2026-10-11T23:00:00Z", end: "2026-10-12T00:00:00Z", title: "Early" });
   const next = air({ id: 2, start: "2026-10-12T00:00:00Z", end: "2026-10-12T01:00:00Z", title: "Later" });
