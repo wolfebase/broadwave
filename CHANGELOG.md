@@ -5,10 +5,23 @@
 ### Added
 
 - Server: `BROADWAVE_RESET_SIGNIN=1` (or `-reset-signin`) turns device sign-in off at start, for a server whose admin devices are all lost.
+- Web: Settings › About shows whether the secure name is on, and why not when it is off.
+- Releases are published on GitHub with their notes, so the update notice finds them.
 
 ### Changed
 
 - Server: a reverse proxy at a public name (Nginx Proxy Manager, SWAG, Caddy, Traefik) now works like the Cloudflare tunnel: every request through it needs a paired device. A request by a public name, or that a proxy says came from outside the home network, counts as away from home. A device at home that opens a public name needs to be paired too; the server's address and `.local` name stay open, and so does a Tailscale MagicDNS name (`.ts.net`) or Tailscale Serve used from the tailnet. Tailscale Funnel needs a paired device.
+
+### Fixed
+
+- Device names with an apostrophe (like the default names of Apple devices) show correctly instead of as numbers.
+- Setup says when it found no tuner, and puts Add by address and the likely reasons first.
+- A guide with no listings says so and points to Settings › Guide; setup, Signal and labels fit playlist sources.
+- Sports: sitcoms and dramas tagged with a sport, studio shows and wrestling are no longer shown as games, and an air date is never shown as a game's title.
+- A server built from source no longer shows an update notice for an older release.
+- A server in a bridged Docker container no longer asks for a secure name it can't serve.
+- Quieter first-start log lines; the server's own browser is listed as This computer.
+- Install docs: the apps are coming to the App Store; guide length is about 2 days free (14 with a listings plan); Compose asks for your time zone and defaults to user 1000; away from home leads with Sign in with Cloudflare.
 
 ## 0.15.0 — 2026-10-19
 
