@@ -157,7 +157,7 @@ func TestAiringsKindSports(t *testing.T) {
 	rows := []store.Airing{
 		{ChannelID: id, Title: "NFL Football", Category: "Sports event", Start: at(0), End: at(1)},
 		{ChannelID: id, Title: "NBA Basketball: Lakers at Celtics", Start: at(1), End: at(2)},
-		{ChannelID: id, Title: "Chiefs at Bills Preview Show", Start: at(1), End: at(2)},
+		{ChannelID: id, Title: "Comets at Bills Preview Show", Start: at(1), End: at(2)},
 		{ChannelID: id, Title: "College Football Today", Start: at(2), End: at(3)},
 		{ChannelID: id, Title: "Evening News", Category: "News", Start: at(3), End: at(4)},
 		{ChannelID: id, Title: "Game Day", Category: "Game day", Start: at(4), End: at(5)},

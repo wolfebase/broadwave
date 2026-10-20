@@ -146,9 +146,9 @@ func TestKeepRulesCoverOnlyWhatAPassRecorded(t *testing.T) {
 	}
 	recs := []store.Recording{
 		rec(1, 7, "Bears at Bills", "Sports", 3),
-		rec(2, 7, "Chiefs at Raiders", "Sports", 1),
+		rec(2, 7, "Comets at Raiders", "Sports", 1),
 		rec(3, 0, "Lakers at Celtics", "Sports", 5), // recorded by hand, or a library file
-		rec(4, 9, "Royals at Twins", "Sports", 6),   // another pass's
+		rec(4, 9, "Otters at Twins", "Sports", 6),   // another pass's
 		rec(5, 0, "News", "News", 4),                // a title pass's, before recordings named their pass
 		rec(6, 0, "News", "News", 2),
 		rec(7, 7, "News", "Sports", 8),

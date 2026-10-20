@@ -141,7 +141,7 @@ func TestRestoreFromABackupWithoutTheOnceColumn(t *testing.T) {
 func TestATeamPassKeepsItsRulesWhenFollowedAgain(t *testing.T) {
 	st := openTestStore(t)
 	ctx := context.Background()
-	team := TeamFollow{Name: "Kansas City Chiefs", Short: "Chiefs", Record: true}
+	team := TeamFollow{Name: "Riverton Comets", Short: "Comets", Record: true}
 	if err := st.FollowTeam(ctx, team); err != nil {
 		t.Fatal(err)
 	}
