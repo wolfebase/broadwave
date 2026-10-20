@@ -26,7 +26,7 @@
 
 <p align="center"><img src=".github/readme/ticker.svg" alt="Live TV, whole-home sync, DVR, multiview, true 60 fps, 5.1 surround, 14-day guide, no account, no subscription, open source" width="100%"></p>
 
-<p align="center"><img src=".github/readme/stats.svg" alt="Free forever · 60 fps · 5.1 surround · 4 channels at once · 14 days of guide · 90-second setup" width="100%"></p>
+<p align="center"><img src=".github/readme/stats.svg" alt="Free forever · 60 fps · 5.1 surround · 4 channels at once · 14 days of guide with a paid listings plan · 90-second setup" width="100%"></p>
 
 <p align="center"><img src=".github/readme/devices.png" alt="Broadwave on a TV, a tablet, and a phone" width="100%"></p>
 
@@ -67,7 +67,7 @@ Three people watching the game in three rooms use **one** tuner, not three — a
 | --- | --- |
 | **Watch** | Live TV on every screen, in sync · one tune shared by everyone on a channel · true 60 fps, film restored to 24p · hardware transcoding on Intel and AMD graphics · 5.1 surround with a picker for languages and described video · ATSC 3.0 where the tuner receives it · buffers tuned for phones, desktops, and TVs · a stream panel that shows exactly what's happening |
 | **Record** | Shows, series, or every game for your team · the untouched broadcast, in original quality · games keep recording until they're final · a tuner held back for recordings · a heads-up before live TV would take a recording's tuner · a later airing suggested when one can't record · nightly backups with one-tap restore. [How recordings work](docs/recordings.md) |
-| **Guide** | Up to 14 days of listings · guide data from your tuner's provider, Schedules Direct, XMLTV, or the broadcast itself · artwork, seasons, premieres, and finales · search across the guide and your recordings · antenna and signal tools that say *Great, OK, Weak,* or *Lost* |
+| **Guide** | About 2 days of listings free from SiliconDust for an HDHomeRun, 14 days with an HDHomeRun DVR subscription or Schedules Direct · also XMLTV, or the broadcast itself · artwork, seasons, premieres, and finales · search across the guide and your recordings · antenna and signal tools that say *Great, OK, Weak,* or *Lost* |
 | **Multiview** | Side by side, one-big-plus-three, quad, and picture-in-picture · sound and 60 fps follow the tile you pick · a Game Switcher that moves the big tile to the game that matters · saved layouts |
 | **Sports** | Live scores for twelve leagues · follow teams and record every game · a heads-up when your team starts or a game gets close, with Watch · spoiler-safe scores you can hide |
 | **Setup** | Finds your tuners, servers, and screens on its own · done in about 90 seconds · a setup doctor for networking, graphics, disks, time zone, and permissions · a banner when a new device shows up · [what each error means](docs/troubleshooting.md) |
@@ -140,7 +140,7 @@ docker run -d --name broadwave --restart unless-stopped \
   ghcr.io/wolfebase/broadwave:latest
 ```
 
-Then open **`http://localhost:8477`**.
+Then open **`http://localhost:8477`**. The secure name (HTTPS and the lowest-latency live TV on Apple devices) needs port 8443 too: add `-p 8443:8443` and set `BROADWAVE_DIRECT_ADDRS` to your computer's home network address. Without them it stays off, and everything else works over 8477.
 
 <details>
 <summary><b>Docker Compose</b></summary>
@@ -151,7 +151,7 @@ curl -fsSLO https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/do
 docker compose pull && docker compose up -d
 ```
 
-Set `TZ` in `compose.yaml` first. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing — Docker will not start while they point at a path that is not there. On Unraid, leave `PUID` at 99 and `PGID` at 100.
+Set `TZ` in a `.env` file next to `compose.yaml` first (`TZ=America/Chicago`); Compose stops and says so when it is missing. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing — Docker will not start while they point at a path that is not there. `PUID` and `PGID` default to 1000; on Unraid set them to 99 and 100.
 
 </details>
 
@@ -205,8 +205,8 @@ Without an updater, the web app says when a new release is out.
 <br>
 
 - **Any browser** at `http://<your-server>:8477` — live TV, the guide, recordings, and multiview. Nothing to install.
-- **Native apps** for iPhone, iPad, and Apple TV list the servers they find on your home network. You pick one, or you type an address. The next launch connects to the one you saved. "Try the demo" plays sample films on the device.
-- **Away from home.** Use Tailscale and type that address with port 8477. Do not forward the port. [Away from home](docs/guide/remote.md) lists what stays open.
+- **Native apps** for iPhone, iPad, and Apple TV (coming to the App Store) list the servers they find on your home network. You pick one, or you type an address. The next launch connects to the one you saved. "Try the demo" plays sample films on the device.
+- **Away from home.** In Settings › Devices and away from home, choose Sign in with Cloudflare (0.15 and later): Broadwave makes a private tunnel and its own address on your domain, and only devices you pair or invite can open it. No domain? Use Tailscale and type that address with port 8477. Never forward the port. [Away from home](docs/guide/remote.md) has the details.
 
 </details>
 
@@ -284,7 +284,7 @@ Server flags: `-addr :8477`, `-config data`, `-hdhr <tuner address>` (or `HDHR_H
 
 ## License
 
-The server and web app are [Apache 2.0](LICENSE). The iPhone, iPad, and Apple TV apps are free on the App Store and are not open source. ffmpeg and comskip run as separate programs under their own licenses; see [`NOTICE`](NOTICE). [Privacy](PRIVACY.md) · [Support](SUPPORT.md). Demo imagery is from the Blender Foundation's open movies (CC BY).
+The server and web app are [Apache 2.0](LICENSE). The iPhone, iPad, and Apple TV apps are coming to the App Store and are not open source; the web app works on every device now. ffmpeg and comskip run as separate programs under their own licenses; see [`NOTICE`](NOTICE). [Privacy](PRIVACY.md) · [Support](SUPPORT.md). Demo imagery is from the Blender Foundation's open movies (CC BY).
 
 <p align="center">
   <img src=".github/readme/footer.svg" alt="" width="100%"><br>
