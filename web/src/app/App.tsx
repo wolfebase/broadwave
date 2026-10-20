@@ -13,6 +13,7 @@ import { NotFound } from "./NotFound";
 import { PlayerProvider, usePlayer } from "./player";
 import { focusRing, installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
+import { isSearchShortcut } from "./searchKey";
 import "./app.css";
 
 const shell = bind(shellMessages);
@@ -150,6 +151,21 @@ function Shell() {
       off();
     };
   }, []);
+
+  useEffect(() => {
+    if (layout === "tv") return;
+    const onKey = (event: KeyboardEvent) => {
+      const busy = fullPlayer || immersive || Boolean(document.querySelector("[role='dialog'], dialog[open]"));
+      if (!isSearchShortcut(event, busy)) return;
+      event.preventDefault();
+      // The guide filters in place and Search keeps its words. Every other page goes to Search, which focuses its field.
+      const field = path === "/guide" || path === "/search" ? document.querySelector<HTMLInputElement>(".guide-search input, .search-form input") : null;
+      if (field) field.select();
+      else navigate("/search");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [layout, path, fullPlayer, immersive]);
 
   const known = knownPaths.has(path);
   useEffect(() => {
