@@ -53,6 +53,18 @@
   scrollbar-width: none;
 }
 
+/* A scrolling row clips what is drawn outside it. Room for the focus ring,
+   given back by the margin so nothing moves. */
+:root:not([data-layout="phone"]) .tabs,
+:root .guide-chips {
+  padding: 8px;
+  margin-block: -8px;
+}
+
+:root .guide-chips {
+  margin-inline: -8px;
+}
+
 .tabs::-webkit-scrollbar {
   display: none;
 }

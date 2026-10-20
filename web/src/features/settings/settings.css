@@ -37,9 +37,17 @@
   background: var(--color-surface2);
 }
 
-.settings-menu-row:focus-visible {
+/* The list clips its rows to its corners, so the ring sits inside the row. */
+:root .settings-menu .settings-menu-row:focus-visible {
+  outline: 2px solid var(--color-accent);
   outline-offset: -3px;
+  box-shadow: none;
   border-radius: var(--radius-lg);
+}
+
+html[data-layout="tv"] .settings-menu .settings-menu-row:focus-visible {
+  outline-width: 4px;
+  outline-offset: -4px;
 }
 
 .settings-menu-icon {
