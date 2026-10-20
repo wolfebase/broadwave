@@ -7,6 +7,7 @@
 - Server: `BROADWAVE_RESET_SIGNIN=1` (or `-reset-signin`) turns device sign-in off at start, for a server whose admin devices are all lost.
 - Web: Settings › About shows whether the secure name is on, and why not when it is off.
 - Releases are published on GitHub with their notes, so the update notice finds them.
+- Web: press / to search from any page; on the guide it goes to the guide's search field.
 
 ### Changed
 
@@ -14,6 +15,12 @@
 
 ### Fixed
 
+- Web: the guide keeps its filter (Favorites, News, Sports…) when you leave it or reload.
+- Web: Tomorrow and the other day buttons in the guide land where there are listings, not on an empty evening past the end of a short guide.
+- Web: recordings play at the volume and mute you last chose, like live TV.
+- Web: the search field has one focus ring around the whole field and a larger icon.
+- Web: the guide's "Listings through" note starts at the visible edge after you scroll instead of being cut off, and a program you have nearly scrolled past no longer covers it.
+- Web: keyboard focus rings are no longer cut off on the top tabs, the guide's filter buttons, and the Settings list on the TV layout.
 - Device names with an apostrophe (like the default names of Apple devices) show correctly instead of as numbers.
 - Setup says when it found no tuner, and puts Add by address and the likely reasons first.
 - A guide with no listings says so and points to Settings › Guide; setup, Signal and labels fit playlist sources.
