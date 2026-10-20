@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## 0.15.0 — 2026-10-19
+
+### Added
+
+- Sign in with Cloudflare. In Settings, Devices and away from home, sign in, pick your domain and a name, and Broadwave makes the tunnel and the address itself. Pasting a tunnel token still works under Advanced. The tunnel's secret is kept outside the catalog, so it is not in backups.
+- A secure name on the home network. Each server gets its own HTTPS address with a trusted certificate, with nothing to install; the apps use it when it answers and the plain address when it doesn't. `BROADWAVE_DIRECT=0` turns it off.
+- Low-latency live TV on Apple devices over the secure name: about 4 seconds behind live, and channels start in about 1.5 seconds when the frequency is already tuned.
+- Apple TV: Down opens a channel strip with live pictures; Back keeps the channel playing in a corner of the guide; the transport bar shows the program's timeline; Info leads with the program; search shows results as you type; Recordings are poster shelves; Sports shows games only; Settings is a list of sections; a live Top Shelf; commercial breaks as chapters.
+- iPhone and iPad: pause, back 10 s, Start over, and a timeline with a LIVE mark on live TV; controls that hide themselves; iPad controls over the picture; the guide looks ahead to Tonight and Tomorrow; tap a row to watch; search by show while you type; Settings split into this device and the server; a mini player with the picture and play/pause; haptics.
+- Web: tap shows the controls on a phone and swipes change channel; Settings is split into sections with a searchable lineup; search groups by show; a 10-foot TV layout; Record series records a show on any channel it airs.
+- AirPlay and Google Cast play away from home with a short-lived link.
+
+### Changed
+
+- Channels you just watched come back in about a second: a tuner stays tuned 90 seconds after the last viewer leaves.
+- Watching through the tunnel always uses adaptive quality.
+- A channel with no signal says so in about 2 seconds the second time.
+- Recordings cut short by a restart keep what they have and record the rest; a recording that fails partway tries again.
+- A guide refresh writes every source at once, so a failing source can't empty the guide.
+- Search reaches the whole guide, with up to six airings per show.
+- Only tuners seen recently count when the schedule plans recordings.
+
+### Fixed
+
+- 29.4 and other channels whose sound never arrives now play without sound instead of not at all.
+- Multiview's second picture starts in about 4 seconds instead of 13.
+- Swiping a player panel closed no longer changes the channel.
+- A tune that makes room by stopping an idle mosaic no longer closes the channel being asked for.
+- Back to a page that was still starting watches again instead of waiting forever.
+- Pairing codes and invites are stored with a server key that is not in backups.
+
+
 ## 0.14.0 — 2026-10-13
 
 ### Added
