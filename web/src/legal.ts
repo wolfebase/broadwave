@@ -1,7 +1,7 @@
 import { legalMessages } from "./i18n/messages/legal.ts";
 import { translate } from "./i18n/runtime.ts";
 
-// Keep the Apple About text in apple/App/Shared/SportsView.swift in step with this string.
+// Keep the Apple apps' About text in step with this string.
 // tsc fails if Blender or CC BY is removed.
 export const blenderCredit = legalMessages["legal.blender"];
 

@@ -71,7 +71,7 @@ Three people watching the game in three rooms use **one** tuner, not three — a
 | **Multiview** | Side by side, one-big-plus-three, quad, and picture-in-picture · sound and 60 fps follow the tile you pick · a Game Switcher that moves the big tile to the game that matters · saved layouts |
 | **Sports** | Live scores for twelve leagues · follow teams and record every game · a heads-up when your team starts or a game gets close, with Watch · spoiler-safe scores you can hide |
 | **Setup** | Finds your tuners, servers, and screens on its own · done in about 90 seconds · a setup doctor for networking, graphics, disks, time zone, and permissions · a banner when a new device shows up · [what each error means](docs/troubleshooting.md) |
-| **Private** | No account, no ads, no analytics · everything stays on your server · support bundles with secrets stripped out · open source, Apache 2.0 |
+| **Private** | No account, no ads, no analytics · everything stays on your server · support bundles with secrets stripped out · open-source server, Apache 2.0 |
 
 </details>
 
@@ -230,7 +230,7 @@ Without an updater, the web app says when a new release is out.
 
 <details>
 <summary><b>Does it cost anything?</b></summary>
-<br>No. Broadwave is free and open source — no subscription, no account, no ads. Over-the-air TV is free too; you need an antenna and a network tuner.
+<br>No. Broadwave is free, and the server is open source — no subscription, no account, no ads. Over-the-air TV is free too; you need an antenna and a network tuner.
 </details>
 
 <details>
@@ -284,7 +284,7 @@ Server flags: `-addr :8477`, `-config data`, `-hdhr <tuner address>` (or `HDHR_H
 
 ## License
 
-[Apache 2.0](LICENSE). ffmpeg and comskip run as separate programs under their own licenses; see [`NOTICE`](NOTICE). [Privacy](PRIVACY.md) · [Support](SUPPORT.md). Demo imagery is from the Blender Foundation's open movies (CC BY).
+The server and web app are [Apache 2.0](LICENSE). The iPhone, iPad, and Apple TV apps are free on the App Store and are not open source. ffmpeg and comskip run as separate programs under their own licenses; see [`NOTICE`](NOTICE). [Privacy](PRIVACY.md) · [Support](SUPPORT.md). Demo imagery is from the Blender Foundation's open movies (CC BY).
 
 <p align="center">
   <img src=".github/readme/footer.svg" alt="" width="100%"><br>

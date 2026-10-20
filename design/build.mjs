@@ -1,6 +1,6 @@
 // Generates web CSS variables and the Swift theme from tokens.json.
 // Usage: node design/build.mjs
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -75,4 +75,6 @@ function write(path, body) {
 }
 
 write(join(root, "web/src/theme/tokens.css"), css());
-write(join(root, "apple/Packages/BroadwaveUI/Sources/BroadwaveUI/Theme+Tokens.swift"), swift());
+// The Apple apps are a separate private repo checked out at apple/.
+const ui = join(root, "apple/Packages/BroadwaveUI/Sources/BroadwaveUI");
+if (existsSync(ui)) write(join(ui, "Theme+Tokens.swift"), swift());

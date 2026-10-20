@@ -6,7 +6,7 @@ Phases run roughly in order. Later phases can start when their dependencies are 
 
 ## 1. Foundation
 
-- [x] Git, CI, monorepo layout (`server/`, `web/`, `apple/`, `design/`), Makefile
+- [x] Git, CI, monorepo layout (`server/`, `web/`, `design/`), Makefile
 - [x] Architecture notes and decision records
 - [x] Fix-first bugs: macOS disk stats, periodic guide refresh, fan-out subscriber leak
 - [x] Numbered SQL migrations

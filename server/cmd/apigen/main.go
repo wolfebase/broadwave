@@ -37,8 +37,11 @@ func main() {
 	swift := renderSwift(names, schemas)
 	ts := renderTS(names, schemas)
 	files := map[string]string{
-		filepath.Join(*root, "apple/Packages/BroadwaveKit/Sources/BroadwaveKit/Generated.swift"): swift,
-		filepath.Join(*root, "web/src/api/generated.ts"):                                         ts,
+		filepath.Join(*root, "web/src/api/generated.ts"): ts,
+	}
+	// The Apple apps are a separate private repo checked out at apple/.
+	if kit := filepath.Join(*root, "apple/Packages/BroadwaveKit/Sources/BroadwaveKit"); dirExists(kit) {
+		files[filepath.Join(kit, "Generated.swift")] = swift
 	}
 	if *check {
 		bad := false
@@ -438,4 +441,9 @@ func renderTS(names []string, schemas map[string]map[string]any) string {
 		writeObj(name, merged)
 	}
 	return strings.TrimRight(b.String(), "\n") + "\n"
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }

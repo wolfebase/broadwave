@@ -13,6 +13,9 @@ import { recordingCountLabel } from "./src/lib/guide.ts";
 import { copy } from "./src/strings.ts";
 import { formatClock, lastSeenPhrase } from "./src/time.ts";
 
+// The Apple apps are a separate private repo checked out at apple/.
+const appleCheckedOut = fs.existsSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../apple/App"));
+
 test("english stays the shipped language and pseudo doubles translated text", () => {
   assert.equal(shippedLocale, "en");
   assert.equal(localeMode(), "en");
@@ -188,7 +191,7 @@ test("user-visible text in the pages comes from the catalog", () => {
   assert.deepEqual(hits, []);
 });
 
-test("the Apple catalogs are English and hold the strings the apps look up", () => {
+test("the Apple catalogs are English and hold the strings the apps look up", { skip: !appleCheckedOut }, () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const app = JSON.parse(fs.readFileSync(path.join(root, "apple/App/Localizable.xcstrings"), "utf8")) as {
     sourceLanguage: string;
@@ -216,7 +219,7 @@ test("the Apple catalogs are English and hold the strings the apps look up", () 
   assert.deepEqual(missing, []);
 });
 
-test("a recording count of one uses the catalog plural", () => {
+test("a recording count of one uses the catalog plural", { skip: !appleCheckedOut }, () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const app = JSON.parse(fs.readFileSync(path.join(root, "apple/App/Localizable.xcstrings"), "utf8")) as {
     strings: Record<string, { localizations?: { en?: { variations?: { plural?: { one?: { stringUnit?: { value?: string } } } } } } }>;

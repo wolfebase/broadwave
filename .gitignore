@@ -14,12 +14,8 @@ web/dist/
 *.out
 
 # Apple
-apple/**/xcuserdata/
-apple/**/DerivedData/
-apple/build/
-apple/*.xcodeproj/
-apple/Packages/*/.build/
-apple/Packages/*/.swiftpm/
+# The Apple apps: private repo wolfebase/broadwave-apple, checked out here.
+/apple/
 *.xcresult
 
 # Misc

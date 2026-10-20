@@ -1,4 +1,4 @@
-.PHONY: help web server run dev test vet lint check build docker clean tokens apple apple-test docs
+.PHONY: help web server run dev test vet lint check build docker clean tokens docs
 
 CONFIG ?= data
 ADDR ?= :8477
@@ -7,12 +7,11 @@ help:
 	@echo "make run      build the web app, then run the server on $(ADDR) with ./$(CONFIG)"
 	@echo "make dev      run the server with -dev; pair with 'npm run dev' in web/"
 	@echo "make test     go test + web typecheck"
-	@echo "make lint     gofmt, go vet, eslint, swiftlint, and swiftformat"
+	@echo "make lint     gofmt, go vet, and eslint"
 	@echo "make check    everything CI runs before a push: test + lint + web budgets + API drift + fake-tuner relay smoke"
 	@echo "make build    web + server binary in bin/"
 	@echo "make docker   build the container image"
-	@echo "make apple    generate the Xcode project and build the iOS and tvOS apps"
-	@echo "make tokens   regenerate CSS and Swift from design/tokens.json"
+	@echo "make tokens   regenerate CSS (and the Apple theme, when apple/ is checked out) from design/tokens.json"
 	@echo "make docs     write the static docs site to docs/sitegen/dist"
 
 web/node_modules: web/package-lock.json
@@ -48,13 +47,10 @@ lint: web/node_modules
 	@test -z "$$(gofmt -l server docs/sitegen)" || { gofmt -l server docs/sitegen; echo "run: gofmt -w server docs/sitegen"; exit 1; }
 	go vet ./server/...
 	cd web && npm run lint
-	swiftlint lint --strict
-	swiftformat --lint .
 
 check: test lint web
 	scripts/bundle-budget.sh
 	scripts/home-paint.sh
-	cd apple/Packages/BroadwaveKit && swift test
 	go run ./server/cmd/apigen -check
 	FAKE=1 scripts/relay-smoke.sh
 
@@ -71,11 +67,3 @@ tokens:
 
 docs:
 	cd docs/sitegen && go run . -out dist
-
-apple:
-	cd apple && xcodegen generate
-	cd apple && xcodebuild -project Broadwave.xcodeproj -scheme Broadwave -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build-for-testing
-	cd apple && xcodebuild -project Broadwave.xcodeproj -scheme BroadwaveTV -destination 'generic/platform=tvOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build-for-testing
-
-apple-test:
-	cd apple/Packages/BroadwaveKit && swift test
