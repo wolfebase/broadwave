@@ -46,6 +46,9 @@ func friendlyName(entry *zeroconf.ServiceEntry) string {
 	return name
 }
 
+// unescapeDNS undoes RFC 1035 master-file escapes: \X is X, and \DDD is the
+// byte with that decimal value, so UTF-8 names arrive as several \DDD bytes.
+// Bytes that do not make valid UTF-8 are replaced.
 func unescapeDNS(s string) string {
 	if !strings.Contains(s, `\`) {
 		return s
@@ -53,9 +56,32 @@ func unescapeDNS(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
 		if s[i] == '\\' && i+1 < len(s) {
+			if v, ok := decimalEscape(s[i+1:]); ok {
+				b.WriteByte(v)
+				i += 3
+				continue
+			}
 			i++
 		}
 		b.WriteByte(s[i])
 	}
-	return b.String()
+	return strings.ToValidUTF8(b.String(), "\uFFFD")
+}
+
+// decimalEscape reads the DDD of a \DDD escape (000–255).
+func decimalEscape(s string) (byte, bool) {
+	if len(s) < 3 {
+		return 0, false
+	}
+	n := 0
+	for _, c := range s[:3] {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	if n > 255 {
+		return 0, false
+	}
+	return byte(n), true
 }
