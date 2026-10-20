@@ -1,33 +1,17 @@
 import { sportsMessages } from "../../i18n/messages/sports.ts";
 import { bind } from "../../i18n/runtime.ts";
 
-const t = bind(sportsMessages);
+import { bareDate, matchup } from "./listing.ts";
 
-/** Splits "Bears at Bills" or "Lakers vs. Celtics" into a matchup. */
-export function matchup(a: { title: string; subtitle?: string }): [string, string] | null {
-  const text = a.subtitle && / (at|vs\.?|@) /i.test(a.subtitle) ? a.subtitle : a.title;
-  const m = text.match(/^(.*?)\s+(?:at|vs\.?|@)\s+(.*)$/i);
-  if (!m) return null;
-  const clean = (s: string) => s.replace(/^.*?:\s*/, "").trim();
-  return [clean(m[1]), clean(m[2])];
-}
+export { bareDate, matchup };
+
+const t = bind(sportsMessages);
 
 /** The name on the card. Two games can share a program title and still be different matchups. */
 export function cardLabel(a: { title: string; subtitle?: string }): string {
   const sides = matchup(a);
   if (sides) return t("sports.matchup", { away: sides[0], home: sides[1] });
   return a.subtitle && !bareDate(a.subtitle) ? a.subtitle : a.title;
-}
-
-const months = "(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)";
-const bare = new RegExp(
-  `^((mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\\s+)?(${months}\\.?\\s+\\d{1,2}(st|nd|rd|th)?,?\\s+\\d{4}|\\d{1,2}/\\d{1,2}/\\d{2,4}|\\d{4}-\\d{2}-\\d{2})$`,
-  "i",
-);
-
-/** A subtitle that is only the air date ("October 20th 2026") says nothing a card needs. */
-export function bareDate(text: string | undefined): boolean {
-  return bare.test((text ?? "").trim());
 }
 
 const leagueKeys = {

@@ -16,8 +16,7 @@ import { useHasFrame } from "../../ui/frames";
 import { LiveFrame } from "../../ui/LiveFrame";
 import { Atsc3Tag, ChannelBadge, Empty, LiveDot, Progress } from "../../ui/primitives";
 import { RecordingCard, Shelf } from "../../ui/shelf";
-import { isGame } from "../sports/kind";
-import { bareDate } from "../sports/matchup";
+import { bareDate, isGame } from "../sports/listing";
 import { gameKey, missingTuners } from "./homeRails";
 import "./home.css";
 

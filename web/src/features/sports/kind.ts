@@ -1,22 +1,7 @@
 import { isFiction } from "../../lib/guide.ts";
-import { matchup } from "./matchup.ts";
+import { isGame, type Listing } from "./listing.ts";
 
-type Listing = { title: string; subtitle?: string; category?: string; gameId?: string };
-
-const event = /\bsports? event\b/i;
-// Scripted bouts ("Star vs. Star") and studio shows ("Postgame Live at the Garden")
-// can read like a matchup. Neither has a result.
-const staged = /\b(pro wrestling|entertainment)\b/i;
-const studio = /\b(sports talk|talk|interview|magazine|sports non-event|documentary|reality|news)\b/i;
-
-/** A game, a race, or a match: something with a result. Talk, magazine, and pro wrestling shows are not. */
-export function isGame(a: Listing): boolean {
-  if (a.gameId) return true;
-  const category = a.category ?? "";
-  if (isFiction(a) || staged.test(category) || studio.test(category)) return false;
-  if (event.test(category)) return true;
-  return matchup(a) != null;
-}
+export { isGame };
 
 /** Listings the sports page leaves out altogether. */
 export { isFiction };
