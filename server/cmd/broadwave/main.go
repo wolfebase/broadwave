@@ -55,6 +55,7 @@ func main() {
 	healthcheck := flag.Bool("healthcheck", false, "check a running server on -addr and exit (for container health checks)")
 	updateCheck := flag.Bool("update-check", false, "exit 75 when a running server on -addr is busy (a tuner in use, or a recording within 2 h), 0 when it may update")
 	staging := flag.Bool("staging", false, "test copy beside a real server: never record, scan, or pull the guide; tune only when someone watches")
+	resetSignin := flag.Bool("reset-signin", envOn(os.Getenv(resetSignInEnv)), "turn device sign-in off at start, when every admin device is lost (or set "+resetSignInEnv+"=1)")
 	flag.Parse()
 	addrGiven := false
 	flag.Visit(func(f *flag.Flag) { addrGiven = addrGiven || f.Name == "addr" })
@@ -82,6 +83,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer st.Close()
+	if *resetSignin {
+		if err := resetSignIn(context.Background(), st); err != nil {
+			slog.Error(fmt.Sprintf("reset-signin: %v", err))
+			os.Exit(1)
+		}
+	}
 
 	assets, err := fs.Sub(embedded, "assets/web")
 	if err != nil {
