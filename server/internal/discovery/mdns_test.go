@@ -64,3 +64,35 @@ func noMulticastRoute() string {
 	}
 	return ""
 }
+
+func TestUnescapeDNSDecodesDecimalEscapes(t *testing.T) {
+	cases := map[string]string{
+		`Plain Name`:                    "Plain Name",
+		`Living\032Room`:                "Living Room",
+		`Alex\226\128\153s MacBook Air`: "Alex’s MacBook Air",
+		`Den\.TV`:                       "Den.TV",
+		`Back\\slash`:                   `Back\slash`,
+		`Caf\195\169`:                   "Café",
+		`Odd\999`:                       "Odd999",
+		`Short\12`:                      "Short12",
+		`Broken\255Byte`:                "Broken�Byte",
+		`Trailing\`:                     `Trailing\`,
+	}
+	for in, want := range cases {
+		if got := unescapeDNS(in); got != want {
+			t.Errorf("unescapeDNS(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestFriendlyNameUnescapesInstanceAndLabel(t *testing.T) {
+	entry := &zeroconf.ServiceEntry{}
+	entry.Instance = `Alex\226\128\153s iPad`
+	if got := friendlyName(entry); got != "Alex’s iPad" {
+		t.Fatalf("instance: %q", got)
+	}
+	entry.Text = []string{`fn=Kitchen\032TV`}
+	if got := friendlyName(entry); got != "Kitchen TV" {
+		t.Fatalf("fn label: %q", got)
+	}
+}

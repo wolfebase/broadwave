@@ -26,7 +26,11 @@ func (s *Server) directHost(name string) bool {
 
 func (s *Server) directStatus(w http.ResponseWriter, r *http.Request) {
 	if s.Direct == nil {
-		writeJSON(w, http.StatusOK, direct.Status{State: "unavailable", Addresses: []string{}})
+		reason := s.DirectOff
+		if reason == "" {
+			reason = "This server was started with BROADWAVE_DIRECT=0."
+		}
+		writeJSON(w, http.StatusOK, direct.Status{State: "unavailable", Addresses: []string{}, Reason: reason})
 		return
 	}
 	writeJSON(w, http.StatusOK, s.Direct.Status())
@@ -41,7 +45,11 @@ func (s *Server) putDirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.Direct == nil {
-		httpError(w, "This server was started with BROADWAVE_DIRECT=0.", http.StatusConflict)
+		reason := s.DirectOff
+		if reason == "" {
+			reason = "This server was started with BROADWAVE_DIRECT=0."
+		}
+		httpError(w, reason, http.StatusConflict)
 		return
 	}
 	if err := s.Direct.SetEnabled(*body.Enabled); err != nil {

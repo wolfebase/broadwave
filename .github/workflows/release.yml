@@ -45,3 +45,30 @@ jobs:
           build-args: VERSION=${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # The server's update check and the README badge read GitHub's "Latest"
+  # release, so each tag gets one, with its CHANGELOG section as the notes.
+  release:
+    needs: image
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Notes from the CHANGELOG
+        env:
+          TAG: ${{ github.ref_name }}
+        run: scripts/release-notes.sh "${TAG#v}" > "$RUNNER_TEMP/notes.md"
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=()
+          case "$TAG" in *-*) prerelease=(--prerelease) ;; *) prerelease=(--latest) ;; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "Broadwave ${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md" "${prerelease[@]}"
+          else
+            gh release create "$TAG" --verify-tag --title "Broadwave ${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md" "${prerelease[@]}"
+          fi

@@ -347,3 +347,26 @@ func TestSetupFinishRunsItself(t *testing.T) {
 		t.Fatalf("favorites %#v", fav)
 	}
 }
+
+func TestSetupForAPlaylistPointsAtAGuideAndSkipsSignal(t *testing.T) {
+	ctx := context.Background()
+	st := testStore(t)
+	if err := st.UpsertDevice(ctx, hdhr.Device{DeviceID: "src-1", FriendlyName: "Playlist", BaseURL: "http://playlist.invalid", TunerCount: 0}, nil); err != nil {
+		t.Fatal(err)
+	}
+	api := &Server{Store: st}
+	run := newFinishStatus()
+	api.finishRun = &run
+	api.stepGuide(ctx)
+	api.stepSignal(ctx)
+	got := map[string]finishStep{}
+	for _, step := range api.finishRun.Steps {
+		got[step.ID] = step
+	}
+	if g := got["guide"]; strings.Contains(g.Detail, "broadcast") || !strings.Contains(g.Detail, "Settings › Guide") {
+		t.Fatalf("guide %+v", g)
+	}
+	if s := got["signal"]; s.State != "skipped" || strings.Contains(s.Detail, "No signal reading") {
+		t.Fatalf("signal %+v", s)
+	}
+}

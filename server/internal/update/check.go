@@ -258,7 +258,12 @@ func notesURL(raw, tag string) string {
 	return u.String()
 }
 
+// enabled is false for an unversioned build (dev, a branch SHA): it has no
+// release to compare, so it neither asks GitHub nor shows a banner.
 func (c *Checker) enabled(ctx context.Context) bool {
+	if _, _, _, ok := parseVersion(c.Current); !ok {
+		return false
+	}
 	if c.Enabled == nil {
 		return true
 	}
@@ -302,7 +307,7 @@ func cloneNotice(n *Notice) *Notice {
 
 // newerRelease reports whether latest is a newer semver than current.
 // The display string is latest without a leading v. An unversioned current
-// build (a dev binary) is behind any real release.
+// build (a dev binary) is never behind: it has nothing to compare.
 func newerRelease(latest, current string) (string, bool) {
 	lmaj, lmin, lpat, lok := parseVersion(latest)
 	if !lok {
@@ -316,7 +321,7 @@ func newerRelease(latest, current string) (string, bool) {
 	}
 	cmaj, cmin, cpat, cok := parseVersion(current)
 	if !cok {
-		return display, true
+		return display, false
 	}
 	if lmaj != cmaj {
 		return display, lmaj > cmaj

@@ -9,11 +9,18 @@ export type Category = "sports" | "news" | "movies" | "kids" | "series" | "other
 const sportsWords =
   /\b(sports?|football|basketball|baseball|hockey|soccer|golf|tennis|racing|nascar|motorsports?|boxing|mma|ufc|wrestling|olympics?|nfl|nba|mlb|nhl|mls|wnba|ncaa|college (football|basketball)|bowl|playoffs?|pregame|postgame|game day)\b/i;
 const vs = /\b(vs\.?|at|@)\b/;
+// A sitcom or a movie about a sport carries the sport in its category. It is not sports.
+const fiction = /\b(comedy|drama|sitcom|soap|animated|animation|cartoon|movie|film|thriller|romance)\b/i;
 
-export function categoryOf(airing: Pick<Airing, "category" | "title"> | undefined): Category {
+/** A story about a sport, not a sport: a sitcom, a drama, a movie. A scoreboard match always counts as sports. */
+export function isFiction(a: { category?: string; gameId?: string }): boolean {
+  return !a.gameId && fiction.test(a.category ?? "");
+}
+
+export function categoryOf(airing: Pick<Airing, "category" | "title" | "gameId"> | undefined): Category {
   if (!airing) return "other";
   const c = `${airing.category ?? ""}`;
-  if (sportsWords.test(c) || (sportsWords.test(airing.title) && vs.test(airing.title))) return "sports";
+  if (!isFiction(airing) && (sportsWords.test(c) || (sportsWords.test(airing.title) && vs.test(airing.title)))) return "sports";
   if (/news/i.test(c) || /\bnews\b/i.test(airing.title)) return "news";
   if (/movie|film/i.test(c)) return "movies";
   if (/child|kids|animat|family|educational/i.test(c)) return "kids";

@@ -10,9 +10,12 @@ services:
     # command in the README instead.
     network_mode: host
     environment:
-      TZ: UTC
-      PUID: "99"
-      PGID: "100"
+      # Your time zone, such as America/Chicago. Pass times and the recording
+      # schedule use it. Put TZ=... in a .env file next to this one.
+      TZ: ${TZ:?Set TZ to your time zone, such as TZ=America/Chicago, in .env next to compose.yaml}
+      # The user and group that own config and recordings. Unraid uses 99 and 100.
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
       UMASK: "022"
       # HDHR_HOST: 192.168.1.50   # only if discovery cannot reach the tuner
       # BROADWAVE_CAST_APP_ID: "" # Google Cast application id. Empty hides Cast.
@@ -42,7 +45,7 @@ services:
     image: nickfedor/watchtower:1
     profiles: [updater]
     environment:
-      TZ: UTC
+      TZ: ${TZ:?Set TZ to your time zone, such as TZ=America/Chicago, in .env next to compose.yaml}
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_LIFECYCLE_HOOKS: "true"
       WATCHTOWER_SCHEDULE: "0 30 3 * * *"

@@ -1,23 +1,10 @@
-import { matchup } from "./matchup.ts";
+import { isFiction } from "../../lib/guide.ts";
+import { isGame, type Listing } from "./listing.ts";
 
-type Listing = { title: string; subtitle?: string; category?: string; gameId?: string };
-
-// A sitcom or a movie about a sport carries the sport in its category. It is not sports.
-const fiction = /\b(comedy|drama|sitcom|soap|animated|animation|cartoon|movie|film|thriller|romance)\b/i;
-const event = /\bsports? event\b/i;
-
-/** A game, a race, or a match: something with a result. Talk and magazine shows are not. */
-export function isGame(a: Listing): boolean {
-  if (a.gameId) return true;
-  if (fiction.test(a.category ?? "")) return false;
-  if (event.test(a.category ?? "")) return true;
-  return matchup(a) != null;
-}
+export { isGame };
 
 /** Listings the sports page leaves out altogether. */
-export function isFiction(a: Listing): boolean {
-  return !a.gameId && fiction.test(a.category ?? "");
-}
+export { isFiction };
 
 // Board league ids (the scoreboard API) to the names listings use.
 const boardLeagues: Record<string, string> = {

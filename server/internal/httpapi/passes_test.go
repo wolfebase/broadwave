@@ -53,8 +53,8 @@ func TestAKeywordPassKeepsItsRules(t *testing.T) {
 		t.Fatalf("rules not kept: %+v", p)
 	}
 	passes = passList(t, sendJSON(t, h, http.MethodPatch, fmt.Sprintf("/api/v1/passes/%d", p.ID),
-		`{"title":"ignored","rename":"Chiefs","matchKind":"title","days":[],"timeStart":"","timeEnd":""}`))
-	if p := passes[0]; p.Title != "Chiefs" || p.MatchKind != "title" || len(p.Days) != 0 || p.TimeStart != "" || p.KeepCount != 3 {
+		`{"title":"ignored","rename":"Comets","matchKind":"title","days":[],"timeStart":"","timeEnd":""}`))
+	if p := passes[0]; p.Title != "Comets" || p.MatchKind != "title" || len(p.Days) != 0 || p.TimeStart != "" || p.KeepCount != 3 {
 		t.Fatalf("edit: %+v", p)
 	}
 	for _, bad := range []string{
@@ -77,7 +77,7 @@ func TestAKeywordPassKeepsItsRules(t *testing.T) {
 			t.Errorf("patch %s: %d %s", bad, rec.Code, rec.Body.String())
 		}
 	}
-	if got := passList(t, get(t, h, "/api/v1/passes")); len(got) != 1 || got[0].Title != "Chiefs" {
+	if got := passList(t, get(t, h, "/api/v1/passes")); len(got) != 1 || got[0].Title != "Comets" {
 		t.Fatalf("a refused change saved something: %+v", got)
 	}
 }
@@ -85,7 +85,7 @@ func TestAKeywordPassKeepsItsRules(t *testing.T) {
 func TestATeamPassKeepsItsTeam(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
-	if err := st.FollowTeam(ctx, store.TeamFollow{Name: "Kansas City Chiefs", Short: "Chiefs", Record: true}); err != nil {
+	if err := st.FollowTeam(ctx, store.TeamFollow{Name: "Riverton Comets", Short: "Comets", Record: true}); err != nil {
 		t.Fatal(err)
 	}
 	h := (&Server{Store: st}).Handler()
@@ -95,7 +95,7 @@ func TestATeamPassKeepsItsTeam(t *testing.T) {
 	}
 	passes = passList(t, sendJSON(t, h, http.MethodPatch, fmt.Sprintf("/api/v1/passes/%d", passes[0].ID),
 		`{"title":"Bears","matchKind":"contains","padAfter":30,"keepMode":"last","keepCount":2}`))
-	if p := passes[0]; p.Title != "Chiefs" || p.MatchKind != "team" || p.PadAfter != 30 || p.KeepCount != 2 {
+	if p := passes[0]; p.Title != "Comets" || p.MatchKind != "team" || p.PadAfter != 30 || p.KeepCount != 2 {
 		t.Fatalf("%+v", p)
 	}
 }

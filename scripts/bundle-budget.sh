@@ -54,13 +54,17 @@
 # start focus waits for the page and yields to the viewer's keys, the remote
 # skips the skip link, and the top bar has a short offline note. The guide and
 # shell load up front. Measured entry gzip 102563, plus 300 bytes of slack.
+# JS raised 2026-10-20: the guide says where listings come from when there are
+# none, and Home's hero and Sports shelf take games only (the fiction, studio,
+# and pro wrestling rules and the bare-date check). The guide and Home load up
+# front. Measured entry gzip 103496, plus 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=102863
+JS_GZIP_MAX=103796
 CSS_GZIP_MAX=13608
 
 if [[ ! -f "$INDEX" ]]; then

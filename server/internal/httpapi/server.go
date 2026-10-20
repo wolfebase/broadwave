@@ -123,7 +123,9 @@ type Server struct {
 	cfOnce    sync.Once
 	vaultOnce sync.Once
 	// Direct is the secure name on the home network. Nil in tests.
-	Direct    Direct
+	Direct Direct
+	// DirectOff says why Direct is nil, for Settings.
+	DirectOff string
 	remoteMu  sync.Mutex
 	remoteVal string
 	remoteAt  time.Time

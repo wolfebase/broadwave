@@ -12,11 +12,15 @@ import { ChevronIcon } from "../../ui/icons";
 import { noteAfterFetch } from "./fetchNote";
 import { guideAfterFree, hitsAfterLook } from "./lookHits";
 import { HomeList } from "./HomeList";
-import { setupSummary } from "./summary";
+import { foundHeading, setupSummary } from "./summary";
 import "../manage.css";
 import "./setup.css";
 
 const t = bind(setupMessages);
+
+// How long setup looks before it says nothing answered. Discovery answers in a
+// few seconds when a tuner is there.
+const SEARCH_WINDOW_MS = 15_000;
 
 type Step = "sources" | "finish";
 const steps: { id: Step; readonly title: string }[] = [
@@ -49,11 +53,13 @@ export function Setup() {
   const [xtreamPass, setXtreamPass] = useState("");
   const [progress, setProgress] = useState<SetupFinish | null>(null);
   const [held, setHeld] = useState(false);
+  const [gaveUp, setGaveUp] = useState(false);
   const hold = useRef(false);
   const lookN = useRef(0);
   const freeN = useRef(0);
   const continueRef = useRef<HTMLButtonElement>(null);
   const lookRef = useRef<HTMLButtonElement>(null);
+  const addressRef = useRef<HTMLInputElement>(null);
   const watchRef = useRef<HTMLButtonElement>(null);
   const autoFocus = useRef<HTMLElement | null>(null);
   const found = devices.length > 0 || channels.length > 0;
@@ -71,6 +77,13 @@ export function Setup() {
   useEffect(() => {
     if (devices.length === 0) void rediscover();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (found) return;
+    const timer = window.setTimeout(() => setGaveUp(true), SEARCH_WINDOW_MS);
+    return () => window.clearTimeout(timer);
+  }, [found]);
+  const noneFound = gaveUp && !found;
 
   useEffect(() => {
     if (step !== "sources" || hold.current) return;
@@ -117,13 +130,13 @@ export function Setup() {
       const placed = active instanceof HTMLElement && active !== document.body && active.closest(".setup");
       // Focus this effect put on Look harder moves on to Continue once a tuner turns up.
       if (placed && active !== autoFocus.current) return;
-      const target = step === "finish" ? watchRef.current : found ? continueRef.current : lookRef.current;
+      const target = step === "finish" ? watchRef.current : found ? continueRef.current : noneFound ? addressRef.current : lookRef.current;
       if (!target) return;
       autoFocus.current = target;
       focusRing(target);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [step, ready, found]);
+  }, [step, ready, found, noneFound]);
 
   const index = steps.findIndex((s) => s.id === step);
 
@@ -134,7 +147,8 @@ export function Setup() {
     navigate(id ? `/watch?channel=${id}` : "/");
   }
 
-  const lead = !found ? t("setup.leadSearching") : held ? t("setup.leadHeld") : t("setup.leadFound");
+  const lead = noneFound ? t("setup.leadNoneFound") : !found ? t("setup.leadSearching") : held ? t("setup.leadHeld") : t("setup.leadFound");
+  const heading = devices.length > 0 ? foundHeading(devices) : noneFound ? t("setup.noneFound") : t("setup.looking");
 
   return (
     <div className="setup manage" data-setup={step}>
@@ -163,7 +177,7 @@ export function Setup() {
         {step === "sources" ? (
           <section className="setup-card" aria-labelledby="setup-sources-title" onPointerDownCapture={stay} onKeyDownCapture={stay}>
             <div className="setup-card-head">
-              <h2 id="setup-sources-title">{devices.length > 0 ? t("setup.yourTuner") : t("setup.looking")}</h2>
+              <h2 id="setup-sources-title">{heading}</h2>
               <p className="dim">{lead}</p>
             </div>
             {devices.length > 0 ? (
@@ -185,15 +199,15 @@ export function Setup() {
                   </li>
                 ))}
               </ul>
-            ) : (
+            ) : noneFound && !busy ? null : (
               <p className="setup-searching" role="status">
                 <span className="setup-spinner" aria-hidden="true" />
-                {busy ? t("setup.searching") : t("setup.noTuner")}
+                {t("setup.searching")}
               </p>
             )}
 
-            <div className="setup-block">
-              <h3>{t("setup.notSeeing")}</h3>
+            <div className={noneFound ? "setup-block setup-block-first" : "setup-block"}>
+              <h3>{noneFound ? t("setup.addByAddress") : t("setup.notSeeing")}</h3>
               <form
                 className="setup-address"
                 onSubmit={(event) => {
@@ -209,6 +223,7 @@ export function Setup() {
                   <label htmlFor="setup-address">{copy.sources.address}</label>
                   <div className="setup-inline">
                     <input
+                      ref={addressRef}
                       id="setup-address"
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
@@ -226,6 +241,16 @@ export function Setup() {
                   </span>
                 </div>
               </form>
+              {noneFound ? (
+                <div className="setup-causes">
+                  <h4>{t("setup.causesTitle")}</h4>
+                  <ul>
+                    <li>{t("setup.causeNetwork")}</li>
+                    <li>{t("setup.causeDocker")}</li>
+                    <li>{t("setup.causePower")}</li>
+                  </ul>
+                </div>
+              ) : null}
               <div className="setup-row">
                 <button
                   ref={lookRef}
@@ -238,9 +263,11 @@ export function Setup() {
                     void lookHarder()
                       .then((res) => {
                         setHits((shown) => hitsAfterLook(mine, lookN.current, shown, true, res.found) ?? shown);
+                        if (mine === lookN.current && (res.found ?? []).length === 0) setGaveUp(true);
                       })
                       .catch(() => {
                         setHits((shown) => hitsAfterLook(mine, lookN.current, shown, false, undefined) ?? shown);
+                        if (mine === lookN.current) setGaveUp(true);
                       })
                       .finally(() => {
                         if (mine === lookN.current) setBusy(false);

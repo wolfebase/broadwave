@@ -1,4 +1,4 @@
-import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, ClientDevice, Device, DeviceHealth, FrameList, MultiviewPlan, NewPass, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StoragePlan, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, ClientDevice, Device, DeviceHealth, DirectStatus, FrameList, MultiviewPlan, NewPass, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StoragePlan, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 import { requestFailedMessage } from "./i18n/messages/requestFailed.ts";
 import { translate } from "./i18n/runtime.ts";
 import { authHeaders, noteIfUnauthorized } from "./lib/deviceToken.ts";
@@ -176,6 +176,10 @@ export function getClientMe() {
 
 export function getStorage() {
   return request<StorageInfo>("/api/v1/storage");
+}
+
+export function getDirect() {
+  return request<DirectStatus>("/api/v1/direct");
 }
 
 export function getStorageShows() {

@@ -130,8 +130,14 @@ func TestDirectSwitch(t *testing.T) {
 	}
 	bare := &Server{Store: api.Store, Version: "dev"}
 	_ = json.Unmarshal(get(t, bare.Handler(), "/api/v1/direct").Body.Bytes(), &st)
-	if st.State != "unavailable" {
+	if st.State != "unavailable" || !strings.Contains(st.Reason, "BROADWAVE_DIRECT=0") {
 		t.Fatalf("no service: %+v", st)
+	}
+	bridged := &Server{Store: api.Store, Version: "dev", DirectOff: "The secure name is off: the container is on a bridge network."}
+	st = direct.Status{}
+	_ = json.Unmarshal(get(t, bridged.Handler(), "/api/v1/direct").Body.Bytes(), &st)
+	if st.State != "unavailable" || st.Reason != bridged.DirectOff {
+		t.Fatalf("bridged: %+v", st)
 	}
 }
 

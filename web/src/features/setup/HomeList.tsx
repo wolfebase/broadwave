@@ -185,7 +185,10 @@ export function HomeList({
 }
 
 function Place({ place, fresh, children }: { place: HomePlace; fresh: boolean; children: ReactNode }) {
-  const detail = [place.group === "screen" ? kindName(place) : place.detail, place.addr].filter(Boolean).join(" · ");
+  // A browser on the server's own machine reaches it over loopback (::1, 127.0.0.1): say so, not the address.
+  const detail = isLoopback(place.addr)
+    ? h("home.thisComputer")
+    : [place.group === "screen" ? kindName(place) : place.detail, place.addr].filter(Boolean).join(" · ");
   return (
     <li className={fresh ? "home-row fresh" : "home-row"}>
       <span className="home-icon" aria-hidden="true">
@@ -221,4 +224,9 @@ function PlaceAction({ place, busy, onAdd, onUse }: { place: HomePlace; busy: bo
   if (place.action === "added") return <span className="home-state ok">{h("home.added")}</span>;
   if (place.action === "here") return <span className="home-state">{t("setup.onServer")}</span>;
   return null;
+}
+
+function isLoopback(addr: string | undefined): boolean {
+  const host = (addr ?? "").trim().replace(/^\[|\]$/g, "").toLowerCase();
+  return host === "::1" || host === "localhost" || /^127\./.test(host) || host === "::ffff:127.0.0.1";
 }

@@ -63,9 +63,17 @@ func startDirect(ctx context.Context, st *store.Store, api *httpapi.Server, conf
 		slog.Error(fmt.Sprintf("direct: %v", err))
 		return nil
 	}
+	fixed := strings.TrimSpace(os.Getenv("BROADWAVE_DIRECT_ADDRS")) != ""
+	if why := direct.Bridged(); why != "" && !fixed {
+		// Each certificate counts against a weekly limit shared by every server.
+		api.DirectOff = "The secure name is off: " + why + "."
+		slog.Info("direct: " + api.DirectOff)
+		return nil
+	}
 	listen := secureAddr(addr)
 	ln, err := net.Listen("tcp", listen)
 	if err != nil {
+		api.DirectOff = fmt.Sprintf("The secure name is off: port %d is in use. Set BROADWAVE_SECURE_ADDR to another port.", portOf(listen))
 		slog.Warn(fmt.Sprintf("direct: the secure name is off: %v (set BROADWAVE_SECURE_ADDR to another port)", err))
 		return nil
 	}
@@ -76,9 +84,9 @@ func startDirect(ctx context.Context, st *store.Store, api *httpapi.Server, conf
 		Port:      portOf(listen),
 		Directory: acmeDirectory(),
 	}
-	if raw := os.Getenv("BROADWAVE_DIRECT_ADDRS"); strings.TrimSpace(raw) != "" {
-		fixed := direct.ParseAddrs(raw)
-		cfg.Addrs = func() []direct.Addr { return fixed }
+	if fixed {
+		list := direct.ParseAddrs(os.Getenv("BROADWAVE_DIRECT_ADDRS"))
+		cfg.Addrs = func() []direct.Addr { return list }
 	}
 	svc, err := direct.New(cfg)
 	if err != nil {

@@ -2132,6 +2132,8 @@ export interface components {
             lastError?: string;
             /** Format: date-time */
             errorAt?: string;
+            /** @description Why the state is unavailable: started with BROADWAVE_DIRECT=0, the HTTPS port is in use, or a container on a bridge network (no certificate is requested there). */
+            reason?: string;
         };
         /** @description A newer Broadwave release. The message is the banner. */
         ServerUpdate: {
@@ -4002,7 +4004,8 @@ export interface operations {
                 hours?: number;
                 /**
                  * @description Only listings of this kind. sports is the apps' rule: a sports word in the category, or in a
-                 *     title that names a matchup (vs, at, @). A server that predates it returns every kind.
+                 *     title that names a matchup (vs, at, @), and not a comedy, drama, or movie about a sport
+                 *     unless it is matched to a scoreboard game. A server that predates it returns every kind.
                  */
                 kind?: "sports";
                 /**

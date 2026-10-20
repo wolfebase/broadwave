@@ -186,7 +186,7 @@ func main() {
 			}
 		}()
 	}
-	slog.Info(fmt.Sprintf("encoder: %s deint: %s smooth: %s", encoder, hub.DeintBroadcast, hub.DeintSmooth))
+	slog.Info("encoder: " + encoderLine(encoder, hub.DeintBroadcast, hub.DeintSmooth))
 	bus := realtime.NewBus()
 	bus.MediaStart = hub.EarliestMedia
 	bus.LongHold = hub.LongGroups
@@ -417,11 +417,31 @@ func releaseCheck(st *store.Store, version string) *update.Checker {
 	return c
 }
 
+// encoderLine names the encoder and the deinterlacer each picture mode uses.
+// Without a working GPU deinterlacer both use bwdif on the CPU.
+func encoderLine(encoder, broadcast, smooth string) string {
+	if broadcast == "" {
+		broadcast = "bwdif"
+	}
+	if smooth == "" {
+		smooth = broadcast
+	}
+	line := encoder + ", deinterlace " + broadcast
+	if smooth != broadcast {
+		line += " (smooth: " + smooth + ")"
+	}
+	return line
+}
+
 func refreshGuide(api *httpapi.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	if _, err := api.RefreshGuide(ctx); err != nil {
-		slog.Error(fmt.Sprintf("guide: %v", err))
+		if errors.Is(err, httpapi.ErrNoTuner) {
+			slog.Info("guide: no tuner yet; listings load once one is added")
+		} else {
+			slog.Error(fmt.Sprintf("guide: %v", err))
+		}
 		api.DeferGuide(ctx, guide.RetryAfterError)
 	}
 }

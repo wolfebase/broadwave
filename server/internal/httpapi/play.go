@@ -557,9 +557,14 @@ func gridListing(a store.Airing) store.Airing {
 var (
 	sportsWords = regexp.MustCompile(`(?i)\b(sports?|football|basketball|baseball|hockey|soccer|golf|tennis|racing|nascar|motorsports?|boxing|mma|ufc|wrestling|olympics?|nfl|nba|mlb|nhl|mls|wnba|ncaa|college (football|basketball)|bowl|playoffs?|pregame|postgame|game day)\b`)
 	versus      = regexp.MustCompile(`\b(vs\.?|at|@)\b`)
+	// A sitcom or a movie about a sport carries the sport in its category.
+	fiction = regexp.MustCompile(`(?i)\b(comedy|drama|sitcom|soap|animated|animation|cartoon|movie|film|thriller|romance)\b`)
 )
 
 func sportsListing(a store.Airing) bool {
+	if a.GameID == "" && fiction.MatchString(a.Category) {
+		return false
+	}
 	return sportsWords.MatchString(a.Category) || (sportsWords.MatchString(a.Title) && versus.MatchString(a.Title))
 }
 

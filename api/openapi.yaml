@@ -772,7 +772,8 @@ paths:
           schema: { type: string, enum: [sports] }
           description: |
             Only listings of this kind. sports is the apps' rule: a sports word in the category, or in a
-            title that names a matchup (vs, at, @). A server that predates it returns every kind.
+            title that names a matchup (vs, at, @), and not a comedy, drama, or movie about a sport
+            unless it is matched to a scoreboard game. A server that predates it returns every kind.
         - in: query
           name: fields
           schema: { type: string, enum: [grid] }
@@ -3153,6 +3154,7 @@ components:
           description: Home network addresses the name points at.
         lastError: { type: string }
         errorAt: { type: string, format: date-time }
+        reason: { type: string, description: "Why the state is unavailable: started with BROADWAVE_DIRECT=0, the HTTPS port is in use, or a container on a bridge network (no certificate is requested there)." }
     ServerUpdate:
       type: object
       required: [version, notesUrl, message]

@@ -42,7 +42,7 @@ export const scheduleMessages = {
   "schedule.words": "Words",
   "schedule.titleField": "Title",
   "schedule.placeholderCategory": "Sports",
-  "schedule.placeholderWords": "Chiefs",
+  "schedule.placeholderWords": "Comets",
   "schedule.placeholderTitle": "Jeopardy!",
   "schedule.channel": "Channel",
   "schedule.anyChannel": "Any channel",

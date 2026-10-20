@@ -157,7 +157,7 @@ func TestAiringsKindSports(t *testing.T) {
 	rows := []store.Airing{
 		{ChannelID: id, Title: "NFL Football", Category: "Sports event", Start: at(0), End: at(1)},
 		{ChannelID: id, Title: "NBA Basketball: Lakers at Celtics", Start: at(1), End: at(2)},
-		{ChannelID: id, Title: "Chiefs at Bills Preview Show", Start: at(1), End: at(2)},
+		{ChannelID: id, Title: "Comets at Bills Preview Show", Start: at(1), End: at(2)},
 		{ChannelID: id, Title: "College Football Today", Start: at(2), End: at(3)},
 		{ChannelID: id, Title: "Evening News", Category: "News", Start: at(3), End: at(4)},
 		{ChannelID: id, Title: "Game Day", Category: "Game day", Start: at(4), End: at(5)},
@@ -192,4 +192,22 @@ func airingTitles(t *testing.T, body []byte) []string {
 		out[i] = row.Title
 	}
 	return out
+}
+
+func TestSportsListingLeavesOutStoriesAboutASport(t *testing.T) {
+	cases := []struct {
+		a    store.Airing
+		want bool
+	}{
+		{store.Airing{Title: "College Football", Subtitle: "Northfield at Riverton", Category: "Sport, Football"}, true},
+		{store.Airing{Title: "Mudtown Mavericks", Subtitle: "The Wedding Episode", Category: "Series, Comedy drama, Football"}, false},
+		{store.Airing{Title: "Field of Glory", Category: "Movie, Drama, Baseball"}, false},
+		{store.Airing{Title: "Any", Category: "Drama, Football", GameID: "401"}, true},
+		{store.Airing{Title: "Evening News", Category: "News"}, false},
+	}
+	for _, c := range cases {
+		if got := sportsListing(c.a); got != c.want {
+			t.Errorf("%q (%s): %v", c.a.Title, c.a.Category, got)
+		}
+	}
 }

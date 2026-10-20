@@ -321,9 +321,31 @@ func TestVersionCompare(t *testing.T) {
 	if got, ok := newerRelease("1.2.3.4", "1.0.0"); ok || got != "" {
 		t.Fatalf("four components %q %v", got, ok)
 	}
-	got, ok := newerRelease("v2.0.0", "dev")
-	if !ok || got != "2.0.0" {
+	if got, ok := newerRelease("v2.0.0", "dev"); ok {
 		t.Fatalf("dev %q %v", got, ok)
+	}
+}
+
+func TestAnUnversionedBuildNeverAsks(t *testing.T) {
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		_, _ = w.Write([]byte(`{"tag_name":"v9.0.0"}`))
+	}))
+	t.Cleanup(srv.Close)
+	for _, current := range []string{"dev", "", "327579cc"} {
+		c := &Checker{Current: current, FeedURL: srv.URL, Client: srv.Client()}
+		n, err := c.Check(context.Background())
+		if err != nil || n != nil {
+			t.Fatalf("%q: %+v %v", current, n, err)
+		}
+		c.last = &Notice{Version: "9.0.0", Message: "Broadwave 9.0.0 is available"}
+		if v := c.Visible(context.Background()); v != nil {
+			t.Fatalf("%q shows %+v", current, v)
+		}
+	}
+	if hits != 0 {
+		t.Fatalf("%d requests from unversioned builds", hits)
 	}
 }
 
