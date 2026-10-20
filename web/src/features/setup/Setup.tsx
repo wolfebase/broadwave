@@ -202,7 +202,7 @@ export function Setup() {
             ) : noneFound && !busy ? null : (
               <p className="setup-searching" role="status">
                 <span className="setup-spinner" aria-hidden="true" />
-                {busy ? t("setup.searching") : t("setup.looking")}
+                {t("setup.searching")}
               </p>
             )}
 

@@ -720,3 +720,9 @@ html[data-theme="dark"] .gc-logo[data-tone="dark"] {
 .guide-rowhead {
   display: contents;
 }
+
+/* No listings at all: the note lines up with the rows under it. */
+.guide-page.phone .guide-nolistings {
+  width: 100%;
+  margin-inline: 0;
+}
