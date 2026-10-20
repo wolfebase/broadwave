@@ -103,6 +103,14 @@ Enter the tuner's address, or run Search the network from Settings › Tuners an
 
 "Broadwave can't save this recording. Check the recordings folder, then try again." The folder refused the write. On Docker and Unraid that folder is the one mounted at `/config/work/recordings`.
 
+## Sign in from a paired device
+
+"Sign in from a paired device."
+
+The request needs a paired device. That is every request from away from home: through a Cloudflare tunnel, by a public name such as a reverse proxy's `tv.example.com` or a MagicDNS name, or through a proxy that says the client is outside the home network. It is every request on the home network too, while Settings, Devices, Require a device to sign in is on. Pair the device with a code or an invite. At home, the server's address and its `.local` name need no code while sign-in is off.
+
+When sign-in is on and no admin device is left, start the server once with `BROADWAVE_RESET_SIGNIN=1` (Docker and Unraid) or `-reset-signin`. The log says "reset-signin: DEVICE SIGN-IN IS NOW OFF". Pair an admin device, turn sign-in back on if you want it, and remove the setting, or every start turns sign-in off again. [Away from home](guide/remote.md#locked-out) has the steps.
+
 ## Diagnostics
 
 Open Diagnostics from Settings. On the web, the page is a snapshot of this server:

@@ -72,6 +72,7 @@ The optional updater is [`deploy/unraid/broadwave-updater.xml`](https://github.c
 | `BROADWAVE_RECORDINGS` | The recordings folder, when it is not `/config/work/recordings`. |
 | `BROADWAVE_ENCODER` | `gpu` or `software`, to skip the automatic choice. |
 | `BROADWAVE_HOSTS` | Public names the server answers to. See [Security](security.md). |
+| `BROADWAVE_RESET_SIGNIN` | `1` turns device sign-in off when the server starts, for when every admin device is lost. Remove it afterwards. See [Away from home](remote.md#locked-out). |
 | `BROADWAVE_DIRECT` | `0` turns off the secure name on the home network. See [Security](../security.md#secure-name-on-the-home-network). |
 | `BROADWAVE_LL_HINTS` | `0` leaves the low-latency preload hint out of live playlists on the secure name, so Apple players play segments as they do over plain HTTP. |
 | `BROADWAVE_SECURE_ADDR` | The HTTPS port for the secure name, such as `:9443`. By default 8443, or the HTTP port plus one when that is not 8477. |

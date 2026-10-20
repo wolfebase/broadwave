@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Server: `BROADWAVE_RESET_SIGNIN=1` (or `-reset-signin`) turns device sign-in off at start, for a server whose admin devices are all lost.
+
+### Changed
+
+- Server: a reverse proxy at a public name (Nginx Proxy Manager, SWAG, Caddy, Traefik) now works like the Cloudflare tunnel: every request through it needs a paired device. A request by a public name, or that a proxy says came from outside the home network, counts as away from home. A device at home that opens a public name, such as a MagicDNS name, needs to be paired too; the server's address and `.local` name stay open.
+
 ## 0.15.0 — 2026-10-19
 
 ### Added

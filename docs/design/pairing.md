@@ -65,7 +65,7 @@ Last seen is updated at most once a minute per device. A revoked token does not 
 
 Enabling sign-in from a request that is not already an admin mints an admin token for that browser, named "This browser", and returns it once as `deviceToken` on that settings response, with the cookie set. The setting and that token are one transaction: if the token cannot be saved, sign-in stays off. The web app stores the token and does not send it back as a setting. Echoing `deviceToken` on a later save is ignored.
 
-While sign-in is on, the last admin device cannot be revoked; pair another admin first. If every admin token is lost anyway, the server stays locked. Recovery is on the machine that holds the catalog: set `deviceAuth` to `0` in the `settings` table, or delete the `client_devices` rows, and start the server again. There is no network backdoor. Loopback is not treated as an exception, because a reverse proxy on the same computer would look like loopback and would reopen the API.
+While sign-in is on, the last admin device cannot be revoked; pair another admin first. If every admin token is lost anyway, the server stays locked. Recovery is on the machine that holds the catalog: start the server with `-reset-signin` (or `BROADWAVE_RESET_SIGNIN=1` in a container), which sets `deviceAuth` to `0` before it listens and logs it loudly. There is no network backdoor. Loopback is not treated as an exception, because a reverse proxy on the same computer would look like loopback and would reopen the API.
 
 ## Pairing
 

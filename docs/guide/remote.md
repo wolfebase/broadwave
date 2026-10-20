@@ -4,6 +4,7 @@ There are two ways to watch from somewhere else.
 
 - **Sign in with Cloudflare.** Broadwave gets a public `https` address, such as `tv.example.com`. You invite family, and only the phones, TVs, and browsers you invited can open it. Nothing on your router changes. This is the way to share with people outside the house.
 - **A VPN only your devices join**, such as [Tailscale](https://tailscale.com/). See [Tailscale](#tailscale) below.
+- **A reverse proxy you already run**, such as Nginx Proxy Manager, SWAG, Caddy, or Traefik. It works like the Cloudflare tunnel: everything that comes in through it needs a paired device. See [Your own reverse proxy](#your-own-reverse-proxy).
 
 Either way, the tuner stays home. Your phone talks to Broadwave, and Broadwave talks to the tuner. One tune of a channel still feeds every screen and every recording. Do not forward port 8477 or 8478 on your router.
 
@@ -79,6 +80,25 @@ Devices you invited are listed under **Settings**, **Devices**. **Revoke** stops
 - Device sign-in at home (**Settings**, **Devices**, **Require a device to sign in**) is separate. Leave it off if everyone in the house should keep watching without a code.
 - The HDHomeRun port, 8478, is never on the tunnel.
 
+## Your own reverse proxy
+
+A reverse proxy with its own certificate can publish Broadwave at a name such as `tv.example.com`. Point the name at `http://<the server's address>:8477` and turn on WebSockets for it (Nginx Proxy Manager calls it Websockets Support). Broadwave treats those requests like the Cloudflare tunnel: each one needs a paired device, whatever device sign-in is set to. That includes the guide, the video, recordings, settings, the support bundle, the playlist (`/export/lineup.m3u`), and the stream URLs. The home network does not change.
+
+1. On the home network, open **Settings**, **Away from home**, **Advanced**, and type the name into **Public address**, such as `tv.example.com`. Broadwave then answers to that name from the apps too, and invite links use it.
+2. [Invite family](#3-invite-family) the same way as with Cloudflare. A browser opens the invite link. The Apple apps choose **Join a home server** and type the address and the code.
+
+A request counts as outside the house when any of these is true:
+
+- The name it asks for is a public name, in `Host` or in `X-Forwarded-Host`. An address, a one-word name, a home name (`.local`, `.lan`, `.home.arpa`, and the others in [Security](security.md)), and the server's own secure name are not.
+- An address in `Forwarded`, `X-Forwarded-For`, or `X-Real-IP` is not on the home network, or cannot be read. Home addresses are private ones (`10/8`, `172.16/12`, `192.168/16`, IPv6 ULA), loopback, link-local, Tailscale's `100.64.0.0/10`, and IPv6 addresses on the server's own networks.
+- The connection comes straight from an address outside the home network, such as through a forwarded port.
+
+These headers can only ask for more. A device in the house that sends them locks only itself out, and none of them opens anything that would otherwise need a code. Nginx Proxy Manager, SWAG, Caddy, and Traefik send the client's address. If your proxy rewrites the name to the server's address, it has to send `X-Forwarded-For` or `X-Real-IP`, or Broadwave cannot tell the request came from outside.
+
+Opening the public name from inside the house asks for a paired device too. Use the server's address or its `.local` name at home to watch with no code.
+
+Do not proxy port 8478. The HDHomeRun port never asks for a code.
+
 ## What you open
 
 The server listens on port 8477 on every network interface, unless you started it on another address. That port is the web app, the API, and the shared playlist.
@@ -129,7 +149,7 @@ Leave Act as an HDHomeRun off unless a media server in the house needs it. On th
 
 ### A name instead of the address
 
-A MagicDNS name ends in `ts.net`. That is a public name. `http://<the-name>:8477` is refused until you set `BROADWAVE_HOSTS` to that name. The page names it:
+A MagicDNS name ends in `ts.net`. That is a public name. `http://<the-name>:8477` is refused until you set `BROADWAVE_HOSTS` to that name, and once it works, every device that opens the name needs to be paired, like a request through [your own reverse proxy](#your-own-reverse-proxy). The Tailscale address needs no code. The page names it:
 
 ```text
 This server does not answer to <the-name>. If you reach it by that name, set BROADWAVE_HOSTS=<the-name> on the server.
@@ -149,6 +169,8 @@ Whether the name works depends on the Host header Serve sends, which Broadwave d
 - The MagicDNS name on port 443, or with no port, is allowed when the browser's `Sec-Fetch-Site` header is still on the request.
 - The same name on port 8477 is refused until `BROADWAVE_HOSTS` lists it.
 
+A request by the MagicDNS name is a public name, so a device needs to be paired. The Tailscale address needs no code.
+
 If the page says the server does not answer to a name, set `BROADWAVE_HOSTS` to the name in that message. The Apple apps should keep using the Tailscale address and port 8477.
 
 Do not enable Funnel.
@@ -159,9 +181,22 @@ A Tailscale subnet router can let the phone reach the server's home address. Mul
 
 ## Keep it small
 
-- Reach the server through a Cloudflare tunnel or Tailscale. Do not forward 8477 or 8478, and do not put Broadwave on any other proxy the public internet can open.
+- Reach the server through a Cloudflare tunnel, Tailscale, or a reverse proxy with a certificate. Through the tunnel or a proxy, every request needs a paired device. Do not forward 8477 or 8478: a forwarded 8477 asks for a paired device too, but it is plain `http`, so the device's sign-in travels unencrypted.
 - Use the Tailscale address. Add a public name to `BROADWAVE_HOSTS` only when you actually open that name.
 - Leave Act as an HDHomeRun off when nothing in the house needs port 8478. That port has no device code.
 - The playlist and `/export/stream/` are open on port 8477 whenever the server is. A stream opened in an app, or directly in a browser, starts a tune and uses a tuner. A page on another site is refused.
 - Device sign-in covers the guide, recordings, and settings in Broadwave. It does not cover the playlist, the stream URLs, or port 8478.
 - Invite only the people who should be able to watch. Everyone on the tailnet can open the server.
+
+## Locked out
+
+If **Require a device to sign in** is on and no admin device is left (a browser's data was cleared, a phone was reset), the server can be unlocked from the machine that runs it. Start it once with device sign-in turned off:
+
+- **Docker, Compose, or Unraid.** Add the variable `BROADWAVE_RESET_SIGNIN=1` to the container and restart it. On Unraid, edit the container, choose **Add another Path, Port, Variable, Label or Device**, pick **Variable**, and set key `BROADWAVE_RESET_SIGNIN` to `1`.
+- **Running the program yourself.** Add `-reset-signin`, such as `broadwave -config data -reset-signin`.
+
+The log says `reset-signin: DEVICE SIGN-IN IS NOW OFF`. The home network is open again, the way it is before sign-in is ever turned on. Devices that were already paired keep working, and a request from outside the house still needs a paired device. Then:
+
+1. On the home network, open **Settings**, **Devices**, and pair an admin device.
+2. Turn **Require a device to sign in** back on, if you want it.
+3. Remove `BROADWAVE_RESET_SIGNIN` or `-reset-signin`, and restart. While it is set, every start turns sign-in off again, and the log says so each time.

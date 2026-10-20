@@ -72,6 +72,10 @@ Before 0.12.15, a channel with no signal froze the other pictures, including the
 
 ## The apps
 
+**Every page asks for a code, and no admin device is left.** Device sign-in is on and the browsers or apps that could change settings are gone. Start the server once with `BROADWAVE_RESET_SIGNIN=1` (Docker and Unraid) or `-reset-signin`. [Away from home](remote.md#locked-out) has the steps.
+
+**A device at home asks for a code, with sign-in off.** It opened the server by a public name, such as a proxy's `tv.example.com` or a MagicDNS name, or through a proxy that named an outside address. Those count as away from home. Use the server's address or its `.local` name, or pair the device. [Your own reverse proxy](remote.md#your-own-reverse-proxy) is the rule.
+
 **The app found the server and could not open it.** Type the address. On iPhone and iPad the heading is "Or enter an address". On Apple TV the button is "Enter an address". Then Connect. With no port, the app uses 8477. If device sign-in is on, a new browser needs a code, and the iPhone, iPad, and Apple TV apps cannot enter one. Leave "Require a device to sign in" off while you use the apps. [Away from home](remote.md) is the rest.
 
 **Only one of two servers on the same computer showed up.** Before 0.12.13, the one that started second was missed when Bonjour could not reach the app. Update the apps and the server to 0.12.13 or later.

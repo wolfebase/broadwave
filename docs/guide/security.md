@@ -8,6 +8,10 @@ The server refuses a public name it was not given. Set `BROADWAVE_HOSTS` when yo
 
 This stops a web page from calling your server by pointing the page's own name at your server's address.
 
+## Locked out
+
+If device sign-in is on and every admin device is gone, start the server once with `BROADWAVE_RESET_SIGNIN=1` (Docker and Unraid) or `-reset-signin`. It turns sign-in off and says so in the log. Then pair an admin device and remove the setting. [Away from home](remote.md#locked-out) has the steps.
+
 ## Secrets
 
 The tuner's `DeviceAuth` value is not stored and is not written to the log. Passwords for a guide account or a playlist are stored so the server can refresh them, and Settings does not show a saved password. The Schedules Direct password and the movie artwork key stay blank and say Saved, on the web and in the Apple apps. The TheSportsDB key field says Saved on the web and stays blank in the Apple apps.
@@ -18,6 +22,6 @@ A support bundle leaves passwords, tuner credentials, and the tunnel token out. 
 
 ## Away from home
 
-Use Sign in with Cloudflare, or Tailscale, or another VPN that only your devices can join. Sign in with Cloudflare only starts from the home network, on an admin device. Do not forward port 8477 or 8478, and do not turn on Tailscale Funnel. [Away from home](remote.md) covers the address, MagicDNS names, device sign-in, and the playlist and port 8478, which stay open with no code.
+Use Sign in with Cloudflare, Tailscale or another VPN that only your devices can join, or a reverse proxy with a certificate. Sign in with Cloudflare only starts from the home network, on an admin device. A request through the tunnel, by a public name, or that a proxy says came from an address outside the home network always needs a paired device, whatever device sign-in is set to. Do not forward port 8477 or 8478, and do not turn on Tailscale Funnel. [Away from home](remote.md) covers the address, MagicDNS names, device sign-in, and the playlist and port 8478, which stay open with no code.
 
 The apps do not install tuner firmware.
