@@ -269,22 +269,49 @@ func (s *Server) stepGuide(ctx context.Context) {
 		s.setFinish("guide", "skipped", "A test server does not pull the guide.")
 		return
 	}
+	// Only an antenna tuner hears listings in the broadcast. A playlist needs a guide source.
+	more := " Add a guide in Settings › Guide: Schedules Direct or an XMLTV link."
+	if s.hasAntennaTuner(ctx) {
+		more = " More listings arrive from the broadcast."
+	}
 	if listed == 0 {
 		pullCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		n, err := s.RefreshGuide(pullCtx)
 		cancel()
 		if err != nil {
 			slog.Error(fmt.Sprintf("setup: guide: %v", err))
-			s.setFinish("guide", "check", "Listings did not load. More listings arrive from the broadcast.")
+			s.setFinish("guide", "check", "Listings did not load."+more)
 			return
 		}
 		listed = s.listedChannels(ctx)
 		if listed == 0 {
-			s.setFinish("guide", "check", fmt.Sprintf("Loaded %d listings. More listings arrive from the broadcast.", n))
+			if n == 0 {
+				s.setFinish("guide", "check", "No listings yet."+more)
+				return
+			}
+			s.setFinish("guide", "check", fmt.Sprintf("Loaded %d listings.", n)+more)
 			return
 		}
 	}
-	s.setFinish("guide", "done", fmt.Sprintf("Listings for %s. More listings arrive from the broadcast.", countLine(listed, "channel", "channels")))
+	detail := fmt.Sprintf("Listings for %s.", countLine(listed, "channel", "channels"))
+	if s.hasAntennaTuner(ctx) {
+		detail += more
+	}
+	s.setFinish("guide", "done", detail)
+}
+
+// hasAntennaTuner reports a device with tuners: a playlist or Xtream source has none.
+func (s *Server) hasAntennaTuner(ctx context.Context) bool {
+	devices, err := s.Store.Devices(ctx)
+	if err != nil {
+		return false
+	}
+	for _, device := range devices {
+		if device.TunerCount > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) stepFolder(ctx context.Context) {
@@ -349,6 +376,10 @@ func (s *Server) stepEncoder(ctx context.Context) {
 }
 
 func (s *Server) stepSignal(ctx context.Context) {
+	if !s.hasAntennaTuner(ctx) {
+		s.setFinish("signal", "skipped", "Streamed channels have no antenna signal to check.")
+		return
+	}
 	s.setFinish("signal", "running", "Checking the antenna.")
 	if s.SetupSignal != nil {
 		great, ok, weak, lost, err := s.SetupSignal(ctx)

@@ -72,7 +72,7 @@ function dayWord(midnight: number, now: number) {
 }
 
 export function Guide() {
-  const { channels, index, now, planned, recordings, virtuals, favorite, editChannel } = useData();
+  const { channels, devices, index, now, planned, recordings, virtuals, favorite, editChannel, ready } = useData();
   const player = usePlayer();
   const layout = useLayout();
   const [filter, setFilterRaw] = useState<Filter>("all");
@@ -91,6 +91,9 @@ export function Guide() {
 
   const tv = layout === "tv";
   const grid = guideShowsGrid(layout, landscape);
+  // Channels with not one listing: a playlist without a guide, or a listings fetch that failed.
+  const noListings = ready && channels.length > 0 && index.size === 0;
+  const antenna = devices.some((d) => d.tunerCount > 0);
   const rowH = tv ? 96 : 68;
   const pxPerMin = tv ? 9.6 : 6.4;
   const channelW = tv ? 280 : 220;
@@ -485,6 +488,7 @@ export function Guide() {
           onTonight={() => setWhen("tonight")}
           compact
         />
+        {noListings ? <NoListings antenna={antenna} /> : null}
         {rows.length === 0 ? <NoMatch filter={filter} query={query} onClear={clearFilters} /> : null}
         <ul className="onnow-list">
           {rows.map((c) => {
@@ -547,6 +551,7 @@ export function Guide() {
         onTonight={tonight}
         onDay={jumpToDay}
       />
+      {noListings ? <NoListings antenna={antenna} /> : null}
       {rows.length === 0 ? <NoMatch filter={filter} query={query} onClear={clearFilters} /> : null}
       <div
         ref={scrollRef}
@@ -750,6 +755,20 @@ const filterWords: Record<Filter, () => string> = {
   series: () => t("guideUi.noCategory", { category: categoryLabel.series }),
   other: () => t("guideUi.nothingHint"),
 };
+
+/** No channel has a listing. Channels still play; the guide needs a listings source. */
+function NoListings({ antenna }: { antenna: boolean }) {
+  return (
+    <div className="banner-update guide-nolistings" role="status">
+      <p>
+        <strong>{t("guideUi.noListingsTitle")}</strong> {antenna ? t("guideUi.noListingsAntenna") : t("guideUi.noListingsHint")}
+      </p>
+      <button type="button" className="btn small" onClick={() => navigate("/settings/guide")}>
+        {t("guideUi.guideSettings")}
+      </button>
+    </div>
+  );
+}
 
 /** A filter or search with no rows says why and offers the way back. */
 function NoMatch({ filter, query, onClear }: { filter: Filter; query: string; onClear: () => void }) {
