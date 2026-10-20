@@ -472,6 +472,9 @@ func clientIP(r *http.Request) string {
 	if ip := tunnelClientIP(r); ip != "" {
 		return ip
 	}
+	if ip := proxyClientIP(r); ip != "" {
+		return ip
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 
 func init() {
 	testHosts = []string{"example.com"}
+	testPeers = []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")}
 }
 
 func TestAnotherSiteCannotPostToTheServer(t *testing.T) {

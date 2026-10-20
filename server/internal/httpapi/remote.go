@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"broadwave/internal/store"
@@ -61,20 +62,179 @@ func (s *Server) forgetRemote() {
 }
 
 // isRemote reports a request that came in from outside the house: through
-// Cloudflare, or by the public name. It always needs a paired device. A
-// device on the home network that adds the header only locks itself out.
+// Cloudflare, by a public name, through a reverse proxy for a client that is
+// not on the home network, or straight from such a client. It always needs a
+// paired device. The headers can only make a request more restricted: a
+// device on the home network that adds them only locks itself out.
 func (s *Server) isRemote(r *http.Request) bool {
-	if cloudflareRequest(r) {
+	if cloudflareRequest(r) || !homePeer(r) {
 		return true
 	}
 	host := store.RemoteHost(s.remoteURL(r.Context()))
-	if host == "" {
-		return false
-	}
 	name, _, _ := splitHost(r.Host)
-	return name == host
+	if host != "" && name == host {
+		return true
+	}
+	if s.publicName(r.Host) || s.publicName(firstValue(r.Header.Get("X-Forwarded-Host"))) {
+		return true
+	}
+	return forwardedOutside(r)
 }
 
+// publicName reports a Host that the internet can resolve, such as a name a
+// proxy with a real certificate answers for. The secure name points only at
+// home network addresses, so it stays home.
+func (s *Server) publicName(hostport string) bool {
+	hostport = strings.TrimSpace(hostport)
+	if hostport == "" {
+		return false
+	}
+	name, _, ok := splitHost(hostport)
+	if !ok {
+		return true
+	}
+	if name == "" || localName(name) || s.directHost(name) {
+		return false
+	}
+	for _, h := range testHosts {
+		if name == h {
+			return false
+		}
+	}
+	return true
+}
+
+func firstValue(v string) string {
+	first, _, _ := strings.Cut(v, ",")
+	return first
+}
+
+// forwardedOutside reports a proxied request whose client is not on the home
+// network. Every address a proxy names counts, so a client cannot hide behind
+// a private one it wrote itself; one that cannot be read counts as outside.
+func forwardedOutside(r *http.Request) bool {
+	for _, raw := range forwardedClients(r) {
+		ip, ok := parseForwardedAddr(raw)
+		if !ok || !homeAddr(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// forwardedClients lists the client addresses in Forwarded, X-Forwarded-For,
+// and X-Real-IP, oldest hop first.
+func forwardedClients(r *http.Request) []string {
+	var out []string
+	for _, line := range r.Header.Values("Forwarded") {
+		for _, hop := range strings.Split(line, ",") {
+			for _, pair := range strings.Split(hop, ";") {
+				k, v, ok := strings.Cut(strings.TrimSpace(pair), "=")
+				if ok && strings.EqualFold(strings.TrimSpace(k), "for") {
+					out = append(out, v)
+				}
+			}
+		}
+	}
+	for _, line := range r.Header.Values("X-Forwarded-For") {
+		out = append(out, strings.Split(line, ",")...)
+	}
+	for _, line := range r.Header.Values("X-Real-Ip") {
+		out = append(out, line)
+	}
+	return out
+}
+
+// parseForwardedAddr reads "1.2.3.4", "1.2.3.4:80", "[2001:db8::1]:80", or a
+// quoted Forwarded value. "unknown" and obfuscated names do not parse.
+func parseForwardedAddr(raw string) (netip.Addr, bool) {
+	raw = strings.Trim(strings.TrimSpace(raw), `"`)
+	if ip, err := netip.ParseAddr(strings.Trim(raw, "[]")); err == nil {
+		return ip.Unmap(), true
+	}
+	if ap, err := netip.ParseAddrPort(raw); err == nil {
+		return ap.Addr().Unmap(), true
+	}
+	return netip.Addr{}, false
+}
+
+// homePeer reports a connection from the home network, or from a proxy on it.
+func homePeer(r *http.Request) bool {
+	addr, err := netip.ParseAddrPort(r.RemoteAddr)
+	return err == nil && homeAddr(addr.Addr().Unmap())
+}
+
+// sharedSpace is 100.64.0.0/10, which Tailscale hands out to a tailnet.
+var sharedSpace = netip.MustParsePrefix("100.64.0.0/10")
+
+// testPeers holds httptest's default client address, 192.0.2.1.
+var testPeers []netip.Prefix
+
+// homeAddr reports an address on the home network: private, loopback, link
+// local, a tailnet, or an IPv6 address on one of this machine's own networks
+// (a home's IPv6 addresses are public ones).
+func homeAddr(ip netip.Addr) bool {
+	ip = ip.Unmap()
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || sharedSpace.Contains(ip) {
+		return true
+	}
+	for _, p := range testPeers {
+		if p.Contains(ip) {
+			return true
+		}
+	}
+	return ip.Is6() && localIPv6.has(ip)
+}
+
+// localIPv6 caches this machine's IPv6 networks. A router can hand out a new
+// prefix at any time, so they are read again after a minute.
+var localIPv6 localV6
+
+type localV6 struct {
+	mu       sync.Mutex
+	at       time.Time
+	prefixes []netip.Prefix
+}
+
+func (l *localV6) has(ip netip.Addr) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.at.IsZero() || time.Since(l.at) > time.Minute {
+		l.prefixes, l.at = interfaceIPv6(), time.Now()
+	}
+	for _, p := range l.prefixes {
+		if p.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// interfaceIPv6 lists the global IPv6 networks of this machine, at most a /48
+// wide so a misconfigured short prefix cannot take in the internet.
+func interfaceIPv6() []netip.Prefix {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	var out []netip.Prefix
+	for _, a := range addrs {
+		n, ok := a.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		ip, ok := netip.AddrFromSlice(n.IP)
+		if !ok || !ip.Is6() || ip.Is4In6() || !ip.IsGlobalUnicast() {
+			continue
+		}
+		bits, _ := n.Mask.Size()
+		if bits < 48 {
+			continue
+		}
+		out = append(out, netip.PrefixFrom(ip, bits).Masked())
+	}
+	return out
+}
 func cloudflareRequest(r *http.Request) bool {
 	return r.Header.Get("Cf-Connecting-Ip") != "" || r.Header.Get("Cf-Ray") != ""
 }
@@ -107,6 +267,30 @@ func tunnelClientIP(r *http.Request) string {
 		return ""
 	}
 	return "cf:" + ip.Unmap().String()
+}
+
+// proxyClientIP is the client a reverse proxy on this network names: its
+// X-Real-IP, or else the last X-Forwarded-For hop, which the proxy itself
+// added. Pairing counts guesses by it, so strangers behind one proxy do not
+// share a single limit.
+func proxyClientIP(r *http.Request) string {
+	if !trustedProxyPeer(r) {
+		return ""
+	}
+	raw := strings.TrimSpace(r.Header.Get("X-Real-Ip"))
+	if raw == "" {
+		hops := r.Header.Values("X-Forwarded-For")
+		if len(hops) == 0 {
+			return ""
+		}
+		parts := strings.Split(hops[len(hops)-1], ",")
+		raw = parts[len(parts)-1]
+	}
+	ip, ok := parseForwardedAddr(raw)
+	if !ok {
+		return ""
+	}
+	return "fwd:" + ip.String()
 }
 
 type remoteStatus struct {
