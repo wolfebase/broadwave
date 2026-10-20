@@ -235,3 +235,49 @@ func TestProxyClientsAreLimitedByTheirOwnAddress(t *testing.T) {
 		t.Fatal("second client behind the proxy shared the first one's cap")
 	}
 }
+
+func TestTailnetNamesStayHome(t *testing.T) {
+	api, h := remoteServer(t)
+	api.Hosts = []string{"tv.tail1234.ts.net"}
+	send := func(host, peer string, headers map[string]string) int {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/channels", nil)
+		req.Host, req.RemoteAddr = host, peer
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	open := []struct {
+		name, host, peer string
+		headers          map[string]string
+	}{
+		{"magicdns", "tv.tail1234.ts.net:8477", "100.101.102.103:5000", nil},
+		{"magicdns v6", "tv.tail1234.ts.net:8477", "[fd7a:115c:a1e0::9]:5000", nil},
+		{"serve", "tv.tail1234.ts.net", "127.0.0.1:5000", map[string]string{"X-Forwarded-For": "100.101.102.103", "Sec-Fetch-Site": "same-origin"}},
+		{"serve v6", "tv.tail1234.ts.net", "[::1]:5000", map[string]string{"X-Forwarded-For": "fd7a:115c:a1e0::9", "Sec-Fetch-Site": "same-origin"}},
+	}
+	for _, c := range open {
+		if got := send(c.host, c.peer, c.headers); got != http.StatusOK {
+			t.Fatalf("%s: %d", c.name, got)
+		}
+	}
+	closed := []struct {
+		name, host, peer string
+		headers          map[string]string
+	}{
+		{"funnel", "tv.tail1234.ts.net", "127.0.0.1:5000", map[string]string{"X-Forwarded-For": "203.0.113.9", "Sec-Fetch-Site": "same-origin"}},
+		{"funnel header", "tv.tail1234.ts.net", "127.0.0.1:5000", map[string]string{"X-Forwarded-For": "100.101.102.103", "Tailscale-Funnel-Request": "?1", "Sec-Fetch-Site": "same-origin"}},
+		{"serve without a client", "tv.tail1234.ts.net", "127.0.0.1:5000", map[string]string{"Sec-Fetch-Site": "same-origin"}},
+		{"lan peer", "tv.tail1234.ts.net:8477", "192.168.1.20:5000", nil},
+		{"tailnet peer naming an outsider", "tv.tail1234.ts.net:8477", "100.101.102.103:5000", map[string]string{"X-Forwarded-For": "203.0.113.9"}},
+		{"tailnet peer, other public name", "tv.example.org", "100.101.102.103:5000", map[string]string{"Sec-Fetch-Site": "same-origin"}},
+		{"ts.net forwarded host from the lan", "192.168.1.2:8477", "192.168.1.3:5000", map[string]string{"X-Forwarded-Host": "tv.tail1234.ts.net", "X-Forwarded-For": "192.168.1.20"}},
+	}
+	for _, c := range closed {
+		if got := send(c.host, c.peer, c.headers); got != http.StatusUnauthorized {
+			t.Fatalf("%s: %d", c.name, got)
+		}
+	}
+}

@@ -89,9 +89,10 @@ A reverse proxy with its own certificate can publish Broadwave at a name such as
 
 A request counts as outside the house when any of these is true:
 
-- The name it asks for is a public name, in `Host` or in `X-Forwarded-Host`. An address, a one-word name, a home name (`.local`, `.lan`, `.home.arpa`, and the others in [Security](security.md)), and the server's own secure name are not.
+- The name it asks for is a public name, in `Host` or in `X-Forwarded-Host`. An address, a one-word name, a home name (`.local`, `.lan`, `.home.arpa`, and the others in [Security](security.md)), and the server's own secure name are not. Neither is a Tailscale `.ts.net` name opened from a device on the tailnet, directly or through Tailscale Serve.
 - An address in `Forwarded`, `X-Forwarded-For`, or `X-Real-IP` is not on the home network, or cannot be read. Home addresses are private ones (`10/8`, `172.16/12`, `192.168/16`, IPv6 ULA), loopback, link-local, Tailscale's `100.64.0.0/10`, and IPv6 addresses on the server's own networks.
 - The connection comes straight from an address outside the home network, such as through a forwarded port.
+- It came through Tailscale Funnel.
 
 These headers can only ask for more. A device in the house that sends them locks only itself out, and none of them opens anything that would otherwise need a code. Nginx Proxy Manager, SWAG, Caddy, and Traefik send the client's address. If your proxy rewrites the name to the server's address, it has to send `X-Forwarded-For` or `X-Real-IP`, or Broadwave cannot tell the request came from outside.
 
@@ -149,7 +150,7 @@ Leave Act as an HDHomeRun off unless a media server in the house needs it. On th
 
 ### A name instead of the address
 
-A MagicDNS name ends in `ts.net`. That is a public name. `http://<the-name>:8477` is refused until you set `BROADWAVE_HOSTS` to that name, and once it works, every device that opens the name needs to be paired, like a request through [your own reverse proxy](#your-own-reverse-proxy). The Tailscale address needs no code. The page names it:
+A MagicDNS name ends in `ts.net`. That is a public name. `http://<the-name>:8477` is refused until you set `BROADWAVE_HOSTS` to that name. Once it works, a device on the tailnet opens it with no code, like the Tailscale address. The page names it:
 
 ```text
 This server does not answer to <the-name>. If you reach it by that name, set BROADWAVE_HOSTS=<the-name> on the server.
@@ -169,7 +170,7 @@ Whether the name works depends on the Host header Serve sends, which Broadwave d
 - The MagicDNS name on port 443, or with no port, is allowed when the browser's `Sec-Fetch-Site` header is still on the request.
 - The same name on port 8477 is refused until `BROADWAVE_HOSTS` lists it.
 
-A request by the MagicDNS name is a public name, so a device needs to be paired. The Tailscale address needs no code.
+A request through Serve from a device on the tailnet needs no code, like the Tailscale address. A request through Funnel comes from the public internet and needs a paired device, like [your own reverse proxy](#your-own-reverse-proxy).
 
 If the page says the server does not answer to a name, set `BROADWAVE_HOSTS` to the name in that message. The Apple apps should keep using the Tailscale address and port 8477.
 

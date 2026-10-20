@@ -8,7 +8,7 @@
 
 ### Changed
 
-- Server: a reverse proxy at a public name (Nginx Proxy Manager, SWAG, Caddy, Traefik) now works like the Cloudflare tunnel: every request through it needs a paired device. A request by a public name, or that a proxy says came from outside the home network, counts as away from home. A device at home that opens a public name, such as a MagicDNS name, needs to be paired too; the server's address and `.local` name stay open.
+- Server: a reverse proxy at a public name (Nginx Proxy Manager, SWAG, Caddy, Traefik) now works like the Cloudflare tunnel: every request through it needs a paired device. A request by a public name, or that a proxy says came from outside the home network, counts as away from home. A device at home that opens a public name needs to be paired too; the server's address and `.local` name stay open, and so does a Tailscale MagicDNS name (`.ts.net`) or Tailscale Serve used from the tailnet. Tailscale Funnel needs a paired device.
 
 ## 0.15.0 — 2026-10-19
 

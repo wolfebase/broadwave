@@ -67,7 +67,7 @@ func (s *Server) forgetRemote() {
 // paired device. The headers can only make a request more restricted: a
 // device on the home network that adds them only locks itself out.
 func (s *Server) isRemote(r *http.Request) bool {
-	if cloudflareRequest(r) || !homePeer(r) {
+	if cloudflareRequest(r) || r.Header.Get("Tailscale-Funnel-Request") != "" || !homePeer(r) {
 		return true
 	}
 	host := store.RemoteHost(s.remoteURL(r.Context()))
@@ -75,10 +75,51 @@ func (s *Server) isRemote(r *http.Request) bool {
 	if host != "" && name == host {
 		return true
 	}
-	if s.publicName(r.Host) || s.publicName(firstValue(r.Header.Get("X-Forwarded-Host"))) {
-		return true
+	tailnet := tailnetRequest(r)
+	for _, h := range []string{r.Host, firstValue(r.Header.Get("X-Forwarded-Host"))} {
+		if s.publicName(h) && !(tailnet && tailnetName(h)) {
+			return true
+		}
 	}
 	return forwardedOutside(r)
+}
+
+// tailnetIPv6 is the range Tailscale gives each device beside its 100.x one.
+var tailnetIPv6 = netip.MustParsePrefix("fd7a:115c:a1e0::/48")
+
+func tailnetAddr(ip netip.Addr) bool {
+	ip = ip.Unmap()
+	return sharedSpace.Contains(ip) || tailnetIPv6.Contains(ip)
+}
+
+// tailnetName reports a MagicDNS name. Only a device on the tailnet can
+// resolve it, unless Funnel publishes it, and Funnel is refused above.
+func tailnetName(hostport string) bool {
+	name, _, ok := splitHost(strings.TrimSpace(hostport))
+	return ok && strings.HasSuffix(name, ".ts.net")
+}
+
+// tailnetRequest reports a request from a device on the tailnet: straight
+// from a tailnet address, or through Tailscale Serve on this machine, which
+// connects from loopback and names the tailnet client in X-Forwarded-For.
+// Every address it names has to be on the tailnet.
+func tailnetRequest(r *http.Request) bool {
+	peer, err := netip.ParseAddrPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	clients := forwardedClients(r)
+	ip := peer.Addr().Unmap()
+	if !tailnetAddr(ip) && !(ip.IsLoopback() && len(clients) > 0) {
+		return false
+	}
+	for _, raw := range clients {
+		c, ok := parseForwardedAddr(raw)
+		if !ok || !tailnetAddr(c) {
+			return false
+		}
+	}
+	return true
 }
 
 // publicName reports a Host that the internet can resolve, such as a name a
