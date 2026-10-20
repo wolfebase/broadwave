@@ -38,6 +38,7 @@ import { SearchIcon, StarIcon } from "../../ui/icons";
 import { Atsc3Tag, ChannelBadge, Chip, Empty, Progress, RecDot } from "../../ui/primitives";
 import { useScoreMap } from "../sports/scores";
 import { LiveFrame } from "../../ui/LiveFrame";
+import { dayJumpTarget, readGuideFilter, saveGuideFilter, type GuideFilter } from "./prefs";
 import "./guide.css";
 
 const t = bind(guideUiMessages);
@@ -45,7 +46,7 @@ const t = bind(guideUiMessages);
 // The sheet opens after a cell is chosen, so it stays out of the first script.
 const ProgramSheet = lazy(() => import("./ProgramSheet").then((m) => ({ default: m.ProgramSheet })));
 
-type Filter = "all" | "favorites" | Category | "recording";
+type Filter = GuideFilter;
 const MIN = 60_000;
 const ORDER_KEY = "broadwave-guide-order";
 
@@ -75,7 +76,7 @@ export function Guide() {
   const { channels, devices, index, now, planned, recordings, virtuals, favorite, editChannel, ready } = useData();
   const player = usePlayer();
   const layout = useLayout();
-  const [filter, setFilterRaw] = useState<Filter>("all");
+  const [filter, setFilterRaw] = useState<Filter>(readGuideFilter);
   const [query, setQueryRaw] = useState("");
   const [when, setWhen] = useState<"now" | "tonight">("now");
   const [sheet, setSheet] = useState<{ channel: Channel; airing?: Airing } | null>(null);
@@ -227,9 +228,13 @@ export function Guide() {
       scrollToTime(now - 30 * MIN);
       return;
     }
-    const prime = new Date(midnight);
-    prime.setHours(20, 0, 0, 0);
-    scrollToTime(prime.getTime() - 30 * MIN);
+    const lastEnds: number[] = [];
+    for (const list of index.values()) {
+      const last = list[list.length - 1];
+      if (last) lastEnds.push(Date.parse(last.end));
+    }
+    const visible = ((scrollRef.current?.clientWidth ?? 1200) - channelW) * (MIN / pxPerMin);
+    scrollToTime(dayJumpTarget(midnight, lastEnds, visible));
   }
 
   function reorder(fromId: number, toId: number) {
@@ -279,6 +284,7 @@ export function Guide() {
 
   function setFilter(next: Filter) {
     setFilterRaw(next);
+    saveGuideFilter(next);
     toTop();
   }
 
@@ -289,6 +295,7 @@ export function Guide() {
 
   function clearFilters() {
     setFilterRaw("all");
+    saveGuideFilter("all");
     setQueryRaw("");
     toTop();
   }
@@ -655,11 +662,20 @@ export function Guide() {
                     <span className="cell-title">{gapLabel}</span>
                   </div>
                 ) : null}
-                {programs.length > 0 && !gap && Date.parse(programs[programs.length - 1].end) < end - 60_000 ? (
-                  <div role="gridcell" id={trailId} className="guide-cell empty" style={{ left: channelW + ((Math.max(origin, Date.parse(programs[programs.length - 1].end)) - origin) / MIN) * pxPerMin + 4, width: 280 }}>
-                    <span className="cell-title">{emptyGuideLabel(programs, end)}</span>
-                  </div>
-                ) : null}
+                {list.length > 0 && !gap && Date.parse(programs[programs.length - 1].end) < end - 60_000
+                  ? (() => {
+                      // The note runs to the end of the grid and starts at the visible edge, as a title does.
+                      // With no program in view, the empty cell above already says it.
+                      const left = channelW + ((Math.max(origin, Date.parse(programs[programs.length - 1].end)) - origin) / MIN) * pxPerMin + 4;
+                      const w = Math.max(280, channelW + width - left - 4);
+                      const inset = Math.min(Math.max(0, view.left + channelW - left), w - 280);
+                      return (
+                        <div role="gridcell" id={trailId} className="guide-cell empty" style={{ left, width: w, paddingLeft: 14 + inset }}>
+                          <span className="cell-title">{emptyGuideLabel(programs, end)}</span>
+                        </div>
+                      );
+                    })()
+                  : null}
                 {list.map((a) => {
                   const s = Math.max(origin, Date.parse(a.start));
                   const e2 = Math.min(end, Date.parse(a.end));
@@ -672,8 +688,9 @@ export function Guide() {
                   const focused = r === focus.row && Date.parse(a.start) <= focus.at && Date.parse(a.end) > focus.at;
                   const dim = filter !== "all" && filter !== "favorites" && filter !== "recording" && cat !== filter;
                   const hidden = view.left + channelW - left;
-                  // The title starts at the visible edge. Capping the inset let it slide back under the channel name.
-                  const inset = hidden > 0 ? hidden : 0;
+                  // The title starts at the visible edge. Capping the inset let it slide back under the channel name,
+                  // but past the cell's end the padding widened the cell over what follows. Only the last sliver is capped.
+                  const inset = hidden > 0 ? Math.min(hidden, Math.max(0, w - 26 - (a.imageUrl && w > 220 ? 64 : 0))) : 0;
                   return (
                     <button
                       key={a.id}
