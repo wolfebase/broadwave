@@ -26,7 +26,7 @@ func TestGuideKeyPinsAChannelTheFeedNamesDifferently(t *testing.T) {
     <title>Noticias</title>
   </programme>
 </tv>`)
-	got, _, err := Parse(raw, []store.Channel{{ID: 5, GuideNumber: "14.1", GuideName: "KUKC", GuideKey: "DIGI.14"}})
+	got, _, err := Parse(raw, []store.Channel{{ID: 5, GuideNumber: "14.1", GuideName: "KOPQ", GuideKey: "DIGI.14"}})
 	if err != nil || len(got) != 1 || got[0].ChannelID != 5 {
 		t.Fatalf("%v %+v", err, got)
 	}
@@ -41,7 +41,7 @@ func TestMissingFeedChannelStaysEmpty(t *testing.T) {
 </tv>`)
 	got, _, err := Parse(raw, []store.Channel{
 		{ID: 1, GuideNumber: "4.1", GuideName: "KBWV-DT"},
-		{ID: 5, GuideNumber: "14.1", GuideName: "KUKC"},
+		{ID: 5, GuideNumber: "14.1", GuideName: "KOPQ"},
 	})
 	if err != nil || len(got) != 1 || got[0].ChannelID != 1 {
 		t.Fatalf("%v %+v", err, got)

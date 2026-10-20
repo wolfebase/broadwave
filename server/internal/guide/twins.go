@@ -3,7 +3,7 @@ package guide
 import "broadwave/internal/store"
 
 // ShareTwins gives each ATSC 3.0 channel with no listings of its own the
-// listings and logo of its 1.0 twin (104.1 WDAF carries 4.1 WDAF-DT's guide),
+// listings and logo of its 1.0 twin (104.1 KBWV carries 4.1 KBWV-DT's guide),
 // and the other way when only the 3.0 channel was listed.
 func ShareTwins(rows []store.Airing, art map[int64]string, lineup []store.Channel) []store.Airing {
 	have := map[int64]bool{}

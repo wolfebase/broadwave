@@ -26,7 +26,7 @@ func TestDataVersionsCountWhatClientsSee(t *testing.T) {
 		return v
 	}
 	dev := hdhr.Device{DeviceID: "D1", FriendlyName: "DUO", BaseURL: "http://127.0.0.1:1", TunerCount: 2}
-	lineup := []hdhr.Channel{{GuideNumber: "4.1", GuideName: "KBWV"}, {GuideNumber: "5.1", GuideName: "KCTV"}}
+	lineup := []hdhr.Channel{{GuideNumber: "4.1", GuideName: "KBWV"}, {GuideNumber: "5.1", GuideName: "KRVT"}}
 	if err := st.UpsertDevice(ctx, dev, lineup); err != nil {
 		t.Fatal(err)
 	}

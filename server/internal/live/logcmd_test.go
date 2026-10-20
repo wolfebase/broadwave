@@ -38,7 +38,7 @@ func TestFFmpegProgressDropsAPassword(t *testing.T) {
 	}
 }
 
-// The lines 29.4 wrote when its copied AC-3 had no rate are a sound
+// The lines ffmpeg writes when a copied AC-3 track has no rate are a sound
 // failure, not a GPU one.
 var soundHeaderDeath = []string{
 	"[mpegts @ 0x5573] Could not find codec parameters for stream 1 (Audio: ac3 (AC-3 / 0x332D4341), 0 channels, fltp): unspecified sample rate",
@@ -97,7 +97,7 @@ func TestProcessLogIsTaggedAndRateLimited(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prevSlog) })
 	var buf bytes.Buffer
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	l := &procLog{tag: "ffmpeg 29.4 1080.copy.broadcast.hevc"}
+	l := &procLog{tag: "ffmpeg 9.4 1080.copy.broadcast.hevc"}
 	for i := range 40 {
 		fmt.Fprintf(l, "[mp4 @ 0x1] sample rate not set %d\n", i)
 	}
@@ -106,7 +106,7 @@ func TestProcessLogIsTaggedAndRateLimited(t *testing.T) {
 	if n := strings.Count(out, "sample rate not set"); n != procLogBurst {
 		t.Fatalf("%d warnings logged, want %d:\n%s", n, procLogBurst, out)
 	}
-	if !strings.Contains(out, "ffmpeg 29.4 1080.copy.broadcast.hevc: [mp4") || !strings.Contains(out, "level=WARN") {
+	if !strings.Contains(out, "ffmpeg 9.4 1080.copy.broadcast.hevc: [mp4") || !strings.Contains(out, "level=WARN") {
 		t.Fatalf("lines are not tagged warnings:\n%s", out)
 	}
 	if strings.Contains(out, "mmco") {

@@ -25,7 +25,7 @@ func IsATSC3(video, audio string) bool {
 	return strings.Contains(strings.ToUpper(strings.ReplaceAll(audio, "-", "")), "AC4")
 }
 
-// callKey is the station call sign in a guide name: WDAF-DT, KCPT-1, and WDAF are all WDAF.
+// callKey is the station call sign in a guide name: KBWV-DT, KBWV-1, and KBWV are all KBWV.
 // It is empty when the name doesn't look like one.
 func callKey(name string) string {
 	s := strings.ToUpper(strings.TrimSpace(name))

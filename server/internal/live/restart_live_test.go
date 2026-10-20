@@ -134,7 +134,7 @@ func TestACrashedEncodeKeepsItsPlaylistAndItsDates(t *testing.T) {
 }
 
 // An encode that reads its input and writes nothing never trips the output
-// watchdog, which waits for a playlist that grew once. libx265 on 29.4 did
+// watchdog, which waits for a playlist that grew once. libx265 on a silent channel did
 // that. A start that writes nothing in startStall is ended and started
 // again, and the budget still gives the tuner back.
 func TestAStartThatWritesNothingIsStartedAgain(t *testing.T) {

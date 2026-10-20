@@ -13,7 +13,7 @@ import (
 func TestCallKey(t *testing.T) {
 	for name, want := range map[string]string{
 		"KBWV-DT": "KBWV", "KBWV": "KBWV", "KRVT-1": "KRVT", "KRVT-2": "KRVT", "WTSTDT1": "WTST",
-		"KLMN-HD": "KLMN", "KOPQ-TV": "KOPQ", "WGN-TV": "WGN", "KCTV": "KCTV", "ZLiving": "", "beIN": "", "MTRSPR1": "",
+		"KLMN-HD": "KLMN", "KOPQ-TV": "KOPQ", "WGN-TV": "WGN", "KXQR": "KXQR", "ZLiving": "", "beIN": "", "MTRSPR1": "",
 	} {
 		if got := callKey(name); got != want {
 			t.Errorf("callKey(%q) = %q, want %q", name, got, want)

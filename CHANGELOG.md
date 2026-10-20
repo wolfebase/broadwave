@@ -26,7 +26,7 @@
 
 ### Fixed
 
-- 29.4 and other channels whose sound never arrives now play without sound instead of not at all.
+- Channels that list a sound track but never send it now play the picture without sound instead of not playing at all.
 - Multiview's second picture starts in about 4 seconds instead of 13.
 - Swiping a player panel closed no longer changes the channel.
 - A tune that makes room by stopping an idle mosaic no longer closes the channel being asked for.
@@ -73,7 +73,7 @@
 
 ### Changed
 
-- A shown ATSC 3.0 channel (104.1) sits next to its 1.0 channel (4.x) in the guide, Channels, the antenna list, and exports. When two channels share a number, the real one comes first, then by name.
+- A shown ATSC 3.0 channel (often numbered 100 higher, such as 104.1) sits next to its station's 1.0 channel in the guide, Channels, the antenna list, and exports. When two channels share a number, the real one comes first, then by name.
 - iPad plays recordings full screen, with Close, Start over, Next, and Breaks in the top bar. Apple TV Home opens a recording full screen.
 - A TV browser: OK on the picture opens the player controls at Play; arrows on the picture still change channel and seek. Arrows walk each row and list in order, reach the shelf's heading action or the mini player at the end of a row, move between a recording's buttons, reach Sort under Show, and leave a multiview at its edges. Back works on LG, Samsung, and Fire TV remotes.
 - Find commercials catches breaks that cut straight from one ad to the next, two-ad breaks with one black frame between them, black frames of uneven length, and one at the very start of a recording. A repeated ad is still learned when one black frame runs longer.

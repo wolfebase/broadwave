@@ -1438,7 +1438,7 @@ func (p restartPlan) String() string {
 // planRestart picks what follows an encode's exit. early is a death within
 // the fallback window of its start; stalled is a start the watchdog ended
 // for writing nothing; silent is a main sound that sent no frame while the
-// picture played (29.4 lists an AC-3 track that carries nothing: a copy
+// picture played (a channel can list an AC-3 track that carries nothing: a copy
 // cannot write its header, and AAC waits for it forever).
 //
 // Sound the muxer could not describe (a copied AC-3 track whose rate the

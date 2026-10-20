@@ -8,7 +8,7 @@ const flex = { deviceId: "F", friendlyName: "HDHomeRun FLEX 4K" } as Device;
 const duo = { deviceId: "D", friendlyName: "HDHomeRun CONNECT DUO", offline: true } as Device;
 
 function ch(over: Partial<Channel>): Channel {
-  return { id: 1, deviceId: "F", displayNumber: "4.1", guideNumber: "4.1", displayName: "WDAF", guideName: "WDAF", enabled: true, hidden: false, present: true, ...over } as Channel;
+  return { id: 1, deviceId: "F", displayNumber: "4.1", guideNumber: "4.1", displayName: "KBWV", guideName: "KBWV", enabled: true, hidden: false, present: true, ...over } as Channel;
 }
 
 test("a duplicate names its own tuner and the one the guide uses, and hides by default", () => {
@@ -42,7 +42,7 @@ test("the 1.0 half of a pair follows its 3.0 twin's choice", () => {
 test("a number search matches from the start; words match names", () => {
   assert.equal(matchesLineup(ch({ displayNumber: "4.1" }), "4"), true);
   assert.equal(matchesLineup(ch({ displayNumber: "14.1", guideNumber: "14.1" }), "4"), false);
-  assert.equal(matchesLineup(ch({ displayName: "KCTV" }), "kc"), true);
+  assert.equal(matchesLineup(ch({ displayName: "KRVT" }), "kr"), true);
   assert.equal(matchesLineup(ch({}), "  "), true);
 });
 

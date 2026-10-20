@@ -265,7 +265,7 @@ func TestFailedLadderRebuildReleasesAnEmptyTune(t *testing.T) {
 	}
 }
 
-// libx265 runs a 1080 picture far slower than real time: on 29.4 it never
+// libx265 runs a 1080 picture far slower than real time: on a silent channel it never
 // wrote a fragment and the Apple TV waited 12 s for nothing. A GPU HEVC
 // encode that fails at its start moves to the processor as H.264.
 func TestEarlyHEVCFallbackIsH264(t *testing.T) {
