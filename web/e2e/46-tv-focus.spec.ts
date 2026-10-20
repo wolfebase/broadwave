@@ -28,7 +28,8 @@ function focused(page: Page) {
     const box = el.getBoundingClientRect();
     return {
       where: grid ? "grid" : el.matches(".stage.mini") ? "mini player" : el.closest(".topbar") ? "bar" : el.tagName.toLowerCase(),
-      ring: el.matches(":focus-visible") && getComputedStyle(el).boxShadow !== "none",
+      // A search field draws its ring around the whole field.
+      ring: el.matches(":focus-visible") && getComputedStyle(el.closest(".search-form, .guide-search") ?? el).boxShadow !== "none",
       number: cell?.closest("[role='row']")?.querySelector(".gc-num")?.textContent ?? "",
       label: (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim(),
       x: (box.left + box.right) / 2,

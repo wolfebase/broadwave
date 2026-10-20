@@ -12,7 +12,8 @@ type Ring = { body: boolean; visible: boolean; drawn: boolean; label: string; ro
 function readRing(): Ring {
   const el = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const body = !el || el === document.body || el === document.documentElement;
-  const style = el ? getComputedStyle(el) : null;
+  // A search field draws its ring around the whole field, not on the input.
+  const style = el ? getComputedStyle(el.closest(".search-form, .guide-search") ?? el) : null;
   const outline = style && style.outlineStyle !== "none" ? Number.parseFloat(style.outlineWidth) || 0 : 0;
   const shadow = style?.boxShadow ?? "none";
   return {
