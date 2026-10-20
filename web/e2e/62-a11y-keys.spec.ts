@@ -21,7 +21,8 @@ function focused(page: Page) {
     const grid = el.getAttribute("role") === "grid";
     return {
       where: grid ? "grid" : el.closest("[role='dialog']") ? "dialog" : el.tagName.toLowerCase(),
-      ring: el.matches(":focus-visible") && getComputedStyle(el).boxShadow !== "none",
+      // A search field draws its ring around the whole field.
+      ring: el.matches(":focus-visible") && getComputedStyle(el.closest(".search-form, .guide-search") ?? el).boxShadow !== "none",
       label: (el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80),
     };
   });
@@ -51,7 +52,10 @@ test("a TV remote reaches home, guide, search, recordings, and settings", async 
     await settle(page);
     if (path === "/search") {
       const box = page.getByRole("searchbox", { name: "Search shows, people, and recordings" });
-      await expect.poll(() => box.evaluate((el) => el === document.activeElement && el.matches(":focus-visible") && getComputedStyle(el).boxShadow !== "none")).toBe(true);
+      // The ring is drawn around the whole field, not on the input inside it.
+      await expect
+        .poll(() => box.evaluate((el) => el === document.activeElement && el.matches(":focus-visible") && getComputedStyle(el.closest(".search-form") ?? el).boxShadow !== "none"))
+        .toBe(true);
     }
     // Start on a known control. A bare Tab from the last field leaves the page.
     const start = path === "/settings" ? page.getByRole("link", { name: "Settings", exact: true }) : page.getByRole("navigation", { name: "Primary" }).locator("[aria-current=page]");
