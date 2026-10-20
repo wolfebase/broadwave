@@ -93,6 +93,10 @@ func mergeGuide(channels []int64, feeds []guideFeed, prev store.GuideCoverage, n
 	return m
 }
 
+// ErrNoTuner is RefreshGuide before any tuner or source was added: nothing
+// to pull a guide for yet, which a fresh server expects.
+var ErrNoTuner = errors.New("no tuner")
+
 // RefreshGuide reads every listing source, merges them, and writes the guide
 // once, in one transaction. A source that fails keeps what it listed before.
 func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
@@ -101,7 +105,7 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	if len(devices) == 0 {
-		return 0, errors.New("no tuner")
+		return 0, ErrNoTuner
 	}
 	channels, err := s.Store.Channels(ctx, false)
 	if err != nil {

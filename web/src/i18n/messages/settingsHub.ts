@@ -66,6 +66,7 @@ export const settingsHubMessages = {
   "home.servers": "Media servers",
   "home.tuners": "Tuners",
   "home.new": "New",
+  "home.thisComputer": "This computer",
   "home.showAll": { one: "Show {count} more", other: "Show {count} more" },
   "home.showLess": "Show less",
   "home.scan": "Scan again",

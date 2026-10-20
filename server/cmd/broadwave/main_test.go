@@ -38,3 +38,17 @@ func TestChecksFindAServerStartedOnAnotherPort(t *testing.T) {
 		t.Fatalf("an -addr on the command line wins: %s", got)
 	}
 }
+
+func TestEncoderLineNamesEveryValue(t *testing.T) {
+	cases := map[[3]string]string{
+		{"libx264", "", ""}: "libx264, deinterlace bwdif",
+		{"h264_vaapi", "motion_adaptive", "motion_adaptive"}:    "h264_vaapi, deinterlace motion_adaptive",
+		{"h264_vaapi", "motion_adaptive", "motion_compensated"}: "h264_vaapi, deinterlace motion_adaptive (smooth: motion_compensated)",
+		{"h264_vaapi", "", "motion_compensated"}:                "h264_vaapi, deinterlace bwdif (smooth: motion_compensated)",
+	}
+	for in, want := range cases {
+		if got := encoderLine(in[0], in[1], in[2]); got != want {
+			t.Errorf("%v: %q, want %q", in, got, want)
+		}
+	}
+}
