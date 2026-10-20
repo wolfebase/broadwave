@@ -3,18 +3,38 @@
   align-items: center;
   gap: 10px;
   max-width: 760px;
-  padding: 10px 14px;
+  padding: 4px 16px;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-md);
   background: var(--color-surface1);
 }
 
-.search-form input {
+.search-form > svg {
+  flex: none;
+  font-size: 20px;
+  color: var(--color-text-secondary);
+}
+
+/* The frame is the field. The input inside drew a second box and ring of its own. */
+:root .search-form input[type="search"] {
   flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
+}
+
+:root .search-form input[type="search"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.search-form:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
 }
 
 .search-list {
@@ -199,4 +219,8 @@ button.search-main {
 .layout-tv .search-form,
 .layout-tv .search-list {
   max-width: 1120px;
+}
+
+.layout-tv .search-form > svg {
+  font-size: 28px;
 }

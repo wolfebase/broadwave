@@ -97,6 +97,21 @@
   outline: none;
 }
 
+/* One ring on the pill, not a second box inside it. */
+:root .guide-search input[type="search"] {
+  border: 0;
+  background: transparent;
+}
+
+:root .guide-search input[type="search"]:focus-visible {
+  box-shadow: none;
+}
+
+.guide-search:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
+}
+
 .guide-scroll {
   position: relative;
   flex: 1;
