@@ -11,6 +11,10 @@ func TestAppsDoNotFetchTheScoreboard(t *testing.T) {
 	roots := []string{"../../../web/src", "../../../apple"}
 	banned := []string{"site.api.espn.com", "thesportsdb.com", "a.espncdn.com"}
 	for _, root := range roots {
+		// The Apple apps are a separate private repo, checked out at apple/ only when present.
+		if _, err := os.Stat(root); os.IsNotExist(err) {
+			continue
+		}
 		err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
 				return err
