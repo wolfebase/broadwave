@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
+
+	"broadwave/internal/network"
 )
 
 // Twin choices. A pair shows its 3.0 channel, its 1.0 channel, or both.
@@ -84,37 +87,33 @@ func StandIns(chs []Channel) map[int64]int64 {
 }
 
 // pairs matches 3.0 rows to their station's 1.0 main channels: the clear 3.0
-// rows, or with encrypted the protected ones.
+// rows, or with encrypted the protected ones. A station is found by its call
+// sign, then by a shared guide station id, then by the tuner's numbering
+// (104.1 is 4.1's 3.0 copy) when the minor or the network agrees. Two
+// channels on different networks never pair.
 func pairs(chs []Channel, encrypted bool) map[int64][]int64 {
-	byKey := map[string][]Channel{}
+	var ones []Channel
 	for _, ch := range chs {
 		if strings.HasPrefix(ch.DeviceID, "src-") || IsATSC3(ch.VideoCodec, ch.AudioCodec) {
 			continue
 		}
-		if key := callKey(ch.GuideName); key != "" {
-			byKey[key] = append(byKey[key], ch)
+		ones = append(ones, ch)
+	}
+	nets := map[int64]string{}
+	netOf := func(ch Channel) string {
+		net, ok := nets[ch.ID]
+		if !ok {
+			net = channelNetwork(ch)
+			nets[ch.ID] = net
 		}
+		return net
 	}
 	out := map[int64][]int64{}
 	for _, c3 := range chs {
 		if strings.HasPrefix(c3.DeviceID, "src-") || c3.Protected != encrypted || !IsATSC3(c3.VideoCodec, c3.AudioCodec) {
 			continue
 		}
-		cands := byKey[callKey(c3.GuideName)]
-		if len(cands) == 0 {
-			continue
-		}
-		// Only the station's lowest subchannel is its main program: 19.2 is not 119.1's twin.
-		low := minor(cands[0].GuideNumber)
-		for _, c := range cands {
-			low = min(low, minor(c.GuideNumber))
-		}
-		var mains []Channel
-		for _, c := range cands {
-			if minor(c.GuideNumber) == low && !c.Protected {
-				mains = append(mains, c)
-			}
-		}
+		mains := twinMains(c3, ones, netOf)
 		sort.SliceStable(mains, func(i, j int) bool {
 			if (mains[i].DeviceID == c3.DeviceID) != (mains[j].DeviceID == c3.DeviceID) {
 				return mains[i].DeviceID == c3.DeviceID
@@ -129,6 +128,90 @@ func pairs(chs []Channel, encrypted bool) map[int64][]int64 {
 		}
 	}
 	return out
+}
+
+// twinMains is the 1.0 main channels of c3's station, every tuner's copy.
+func twinMains(c3 Channel, ones []Channel, netOf func(Channel) string) []Channel {
+	net3 := netOf(c3)
+	agree := func(c Channel) bool {
+		net1 := netOf(c)
+		return net1 == "" || net3 == "" || net1 == net3
+	}
+	pick := func(match func(Channel) bool) []Channel {
+		var cands []Channel
+		for _, c := range ones {
+			if match(c) && agree(c) {
+				cands = append(cands, c)
+			}
+		}
+		return lowestMinor(cands)
+	}
+	if key := callKey(c3.GuideName); key != "" {
+		if mains := pick(func(c Channel) bool { return callKey(c.GuideName) == key }); len(mains) > 0 {
+			return mains
+		}
+	}
+	if key := strings.TrimSpace(c3.GuideKey); key != "" {
+		if mains := pick(func(c Channel) bool { return strings.EqualFold(strings.TrimSpace(c.GuideKey), key) }); len(mains) > 0 {
+			return mains
+		}
+	}
+	// HDHomeRun lists a station's 3.0 copy 100 above its 1.0 number.
+	m3 := major(c3.GuideNumber)
+	if m3 < 100 {
+		return nil
+	}
+	sameMajor := func(c Channel) bool { return major(c.GuideNumber) == m3-100 }
+	var exact []Channel
+	for _, c := range ones {
+		if sameMajor(c) && minor(c.GuideNumber) == minor(c3.GuideNumber) && agree(c) && !c.Protected {
+			exact = append(exact, c)
+		}
+	}
+	if len(exact) > 0 {
+		return exact
+	}
+	if net3 == "" {
+		return nil
+	}
+	return pick(func(c Channel) bool { return sameMajor(c) && netOf(c) == net3 })
+}
+
+// lowestMinor keeps the station's lowest subchannel, its main program: 19.2
+// is not 119.1's twin.
+func lowestMinor(cands []Channel) []Channel {
+	if len(cands) == 0 {
+		return nil
+	}
+	low := minor(cands[0].GuideNumber)
+	for _, c := range cands {
+		low = min(low, minor(c.GuideNumber))
+	}
+	var mains []Channel
+	for _, c := range cands {
+		if minor(c.GuideNumber) == low && !c.Protected {
+			mains = append(mains, c)
+		}
+	}
+	return mains
+}
+
+// channelNetwork is the network a guide stored, else the one its name says.
+func channelNetwork(ch Channel) string {
+	if ch.Network != "" {
+		return ch.Network
+	}
+	return network.Of([]string{ch.GuideName, ch.DisplayName})
+}
+
+// major is the channel of a guide number, -1 when it has none.
+func major(number string) int {
+	before, _, _ := strings.Cut(strings.TrimSpace(number), ".")
+	n, err := strconv.Atoi(before)
+	if err != nil {
+		return -1
+	}
+	return n
 }
 
 // markTwins fills Standard, TwinID, TwinChoice, and PlaysAs on a full channel list.

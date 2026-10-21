@@ -161,11 +161,12 @@ func brandedNetwork(name string) string {
 }
 
 // cleanName is a guide name in capitals with accents, runs of spaces, and a
-// trailing HD or DT taken off ("Télé-Québec HD" reads as "TELE-QUEBEC").
+// trailing HD, DT, or 3.0 taken off ("Télé-Québec HD" reads as "TELE-QUEBEC").
 func cleanName(name string) string {
 	s := strings.ToUpper(strings.TrimSpace(foldAccents(name)))
 	s = strings.Join(strings.Fields(s), " ")
-	for _, suf := range []string{" HD", "-HD", " DT", "-DT"} {
+	// A 3.0 copy often carries the 1.0 name plus "3.0" ("ABC7 3.0").
+	for _, suf := range []string{" 3.0", "-3.0", " HD", "-HD", " DT", "-DT"} {
 		s = strings.TrimSuffix(s, suf)
 	}
 	return s

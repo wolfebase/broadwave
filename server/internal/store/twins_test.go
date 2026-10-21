@@ -452,3 +452,71 @@ func TestARefreshDoesNotBringBackARemovedTuner(t *testing.T) {
 		t.Fatalf("4.1 rows after a search %+v", got)
 	}
 }
+
+func twinRow(id int64, number, name string, atsc3 bool) Channel {
+	ch := Channel{ID: id, DeviceID: "FLEX1", GuideNumber: number, GuideName: name, VideoCodec: "MPEG2", AudioCodec: "AC3", Present: true}
+	if atsc3 {
+		ch.VideoCodec, ch.AudioCodec = "HEVC", "AC4"
+	}
+	return ch
+}
+
+func twinNumbers(chs []Channel) map[string]string {
+	num := map[int64]string{}
+	for _, ch := range chs {
+		num[ch.ID] = ch.GuideNumber
+	}
+	out := map[string]string{}
+	for c3, ones := range Twins(chs) {
+		out[num[c3]] = num[ones[0]]
+	}
+	return out
+}
+
+func TestTwinsPairBrandedNamesByTheirNumber(t *testing.T) {
+	chs := []Channel{
+		twinRow(1, "5.1", "FOX 5", false),
+		twinRow(2, "5.2", "Antenna", false),
+		twinRow(3, "105.1", "FOX 5", true),
+		twinRow(4, "7.1", "ABC7", false),
+		twinRow(5, "107.3", "ABC7 3.0", true),
+		twinRow(6, "9.1", "NBC9", false),
+		twinRow(7, "109.1", "CBS 9", true),
+	}
+	got := twinNumbers(chs)
+	if got["105.1"] != "5.1" {
+		t.Fatalf("105.1 FOX 5 pairs with %q, want 5.1 (%v)", got["105.1"], got)
+	}
+	if got["107.3"] != "7.1" {
+		t.Fatalf("107.3 pairs with %q, want 7.1 by network (%v)", got["107.3"], got)
+	}
+	if _, ok := got["109.1"]; ok {
+		t.Fatalf("a CBS 3.0 channel paired with an NBC 1.0 channel: %v", got)
+	}
+}
+
+func TestTwinsPairByGuideStationID(t *testing.T) {
+	one := twinRow(1, "22.1", "Hometown", false)
+	one.GuideKey = "I10234.sd"
+	three := twinRow(2, "36.1", "HOMETWN", true)
+	three.GuideKey = "i10234.sd"
+	other := twinRow(3, "36.2", "Other", true)
+	got := twinNumbers([]Channel{one, three, other})
+	if got["36.1"] != "22.1" || len(got) != 1 {
+		t.Fatalf("pairs %v, want 36.1 with 22.1 only", got)
+	}
+}
+
+func TestTwinsNeverPairTwoNetworks(t *testing.T) {
+	one := twinRow(1, "4.1", "KBWV-DT", false)
+	one.Network = "NBC"
+	three := twinRow(2, "104.1", "KBWV", true)
+	three.Network = "Telemundo"
+	if got := twinNumbers([]Channel{one, three}); len(got) != 0 {
+		t.Fatalf("two networks paired: %v", got)
+	}
+	// Neither name nor number ties these together.
+	if got := twinNumbers([]Channel{twinRow(1, "4.1", "Local", false), twinRow(2, "105.1", "Local 3", true)}); len(got) != 0 {
+		t.Fatalf("unrelated channels paired: %v", got)
+	}
+}

@@ -72,7 +72,7 @@ func TestAffiliationReadsPSIPShortNames(t *testing.T) {
 		"CBC": "CBC", "CTV": "CTV", "CTV2": "CTV 2", "CTV 2": "CTV 2", "GLOBAL": "Global",
 		"CITYTV": "Citytv", "TVO": "TVO", "TÉLÉ-QUÉBEC": "Télé-Québec", "Télé-Québec HD": "Télé-Québec",
 		"ICI TELE": "Radio-Canada", "TVA": "TVA", "NOOVO": "Noovo",
-		"KBWV-NBC": "NBC", "WBWV CW": "CW", "KBWV-DT (PBS)": "PBS", "CBWV CTV": "CTV",
+		"KBWV-NBC": "NBC", "WBWV CW": "CW", "KBWV-DT (PBS)": "PBS", "CBWV CTV": "CTV", "ABC7 3.0": "ABC", "FOX 3.0": "FOX",
 	}
 	for name, want := range cases {
 		if got := Of([]string{name}, "KQQQ"); got != want {
