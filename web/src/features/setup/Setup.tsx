@@ -308,8 +308,9 @@ export function Setup() {
                   {copy.sources.free}
                 </button>
               </div>
+              {/* The guide below says it all once FastChannels did not answer. */}
               <p className="hint" role="status">
-                {findingFree ? copy.sources.freeLooking : copy.sources.freeHint}
+                {findingFree ? copy.sources.freeLooking : freeGuide ? "" : copy.sources.freeHint}
               </p>
               {hits.length > 0 || feeds.length > 0 ? (
                 <ul className="setup-list">
