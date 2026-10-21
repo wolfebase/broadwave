@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Server: timed recordings. Record a channel from a start time for a set number of minutes, once on a date or on the weekdays you pick, whether or not the guide lists anything then. They plan with the other recordings: tuner conflicts, priority, padding, retries, resume after a restart, keep and limit rules, and Skip all apply.
+- Server: times stay on the server's clock across daylight saving changes; a 10:00 PM recording stays at 10:00 PM. A time the spring change skips starts an hour later.
+- Server: when the guide later lists a show at that time, the recording takes its title and details; a name you gave it wins.
+- API: `POST /passes` with `kind: "manual"`, `channelId`, `timeStart`, `duration`, and `date` or `days`; the same fields in `PATCH /passes/{id}` and `POST /passes/preview`. Planned items carry `manual`, and `POST /schedule/skip` takes `passId` to skip one time.
+- Web: Record a time on the Schedule page, and from a channel's sheet in the guide (tap a channel with no listings to open it): channel, date or days, start, length (30 min to 2 hours, or custom), with the plan and conflicts shown before you save.
+
+### Changed
+
+- Web: the Schedule page calls passes "Recording rules", and each one says what it is: Series, One time, Timed, or Games. One-time recordings show their channel, so two of the same show tell apart.
+
 ## 0.15.1 — 2026-10-21
 
 ### Added
