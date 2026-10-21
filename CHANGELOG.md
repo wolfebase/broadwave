@@ -4,6 +4,8 @@
 
 - Web: an iPad (or any touch screen) gets the regular layout, not the TV one; the TV layout is for TV browsers, or `?layout=tv`, which this browser then remembers (`?layout=auto` forgets it).
 - Web: a recording shows Play and Delete; Mark watched, Keep forever, Download, Rename file, and Add as a channel (was Make channel, now with a line on what it does) are under the ⋯ button.
+- Web: Settings › Devices says which device this browser is signed in as instead of offering to pair it again, and warns before you revoke this browser or the only admin device.
+- Web: the Pair screen tells an owner who is locked out how to get back in (`BROADWAVE_RESET_SIGNIN=1`), with a link to the steps.
 - Web: the sync pill in the player says Waiting or Syncing until it is in sync, and Sync on when this is the only screen.
 
 ## 0.15.1 — 2026-10-21

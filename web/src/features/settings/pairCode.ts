@@ -99,3 +99,16 @@ export function detectKind(ua: string, touch: number, layout = ""): PairKind {
 export function codeLooksLikeInvite(raw: string): boolean {
   return /[A-Za-z]/.test(raw);
 }
+
+type Revokable = { id: string; scopes?: string[] };
+
+/** What revoking this device costs, said before it happens. */
+export function revokeWarnings(device: Revokable, devices: Revokable[], selfId: string, signInOn: boolean): string[] {
+  const lines: string[] = [];
+  if (device.id === selfId) lines.push(t("devices.revokeSelf"));
+  const isAdmin = (item: Revokable) => (item.scopes ?? []).includes("admin");
+  if (isAdmin(device) && !devices.some((item) => item.id !== device.id && isAdmin(item))) {
+    lines.push(signInOn ? t("devices.revokeLastAdminOn") : t("devices.revokeLastAdmin"));
+  }
+  return lines;
+}

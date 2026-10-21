@@ -16,6 +16,10 @@ export const pairMessages = {
   "pair.kindTv": "TV",
   "pair.pairing": "Pairing…",
   "pair.or": "No code?",
+  "pair.lockedTitle": "Locked out of your own server?",
+  "pair.lockedLede":
+    "If no signed-in device is left, restart the server once with the setting BROADWAVE_RESET_SIGNIN=1 (in Docker or the Unraid template). It turns sign-in off, so this browser can open Settings and pair. Then remove the setting.",
+  "pair.lockedLink": "Step by step",
   "pair.orLede": "Show a code here, then approve it from a device that is already signed in.",
   "pair.waiting": "Waiting for approval…",
   "pair.yourCode": "Your code",

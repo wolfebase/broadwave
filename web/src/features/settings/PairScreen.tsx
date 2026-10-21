@@ -12,6 +12,7 @@ import "./pair.css";
 
 const t = bind(settingsUiMessages);
 const p = bind(pairMessages);
+const lockedOutURL = "https://wolfebase.github.io/broadwave/docs/remote.html#locked-out";
 
 type PairSession = { id: string; secret: string };
 
@@ -291,6 +292,15 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
             <button ref={showRef} type="button" className="btn" disabled={busy} onClick={() => void showCode()}>
               {issued || showError ? p("pair.newCode") : t("pair.showCode")}
             </button>
+          </div>
+        )}
+        {invite ? null : (
+          <div className="pair-alt pair-locked">
+            <h2>{p("pair.lockedTitle")}</h2>
+            <p className="hint">{p("pair.lockedLede")}</p>
+            <a href={lockedOutURL} target="_blank" rel="noreferrer">
+              {p("pair.lockedLink")}
+            </a>
           </div>
         )}
       </section>

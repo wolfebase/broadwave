@@ -5,7 +5,7 @@ import { bind } from "../../i18n/runtime.ts";
 import { approvePair, createPairCode, listClients, revokeClient } from "./pairApi";
 import { navigate } from "../../app/router";
 import { isForbidden, isUnauthorized } from "../../lib/deviceToken";
-import { canEditSignIn, formatPairCode, kindLabel, normalizePairCode, scopeLabel, scopesForAccess } from "./pairCode";
+import { canEditSignIn, formatPairCode, revokeWarnings, kindLabel, normalizePairCode, scopeLabel, scopesForAccess } from "./pairCode";
 import { lastSeenPhrase } from "../../time";
 import type { ClientDevice } from "../../types";
 import { ChoiceRow, Group, SwitchRow } from "./rows";
@@ -30,6 +30,8 @@ export function PairedDevices({
 }) {
   const [devices, setDevices] = useState<ClientDevice[] | null>(null);
   const [canEdit, setCanEdit] = useState(true);
+  // The device this browser is signed in as, when it is.
+  const [self, setSelf] = useState<{ id: string; name: string } | null>(null);
   const [access, setAccess] = useState<Access>("watch");
   const [issued, setIssued] = useState("");
   const [code, setCode] = useState("");
@@ -60,7 +62,9 @@ export function PairedDevices({
     let stop = false;
     void getClientMe()
       .then((seat) => {
-        if (!stop) setCanEdit(canEditSignIn(seat));
+        if (stop) return;
+        setCanEdit(canEditSignIn(seat));
+        setSelf(seat?.device ? { id: seat.device.id, name: seat.device.name } : null);
       })
       .catch(() => {
         if (!stop) setCanEdit(false);
@@ -209,21 +213,39 @@ export function PairedDevices({
               </button>
             </div>
           </form>
-          <div className="set-row">
-            <div className="set-row-text">
-              <span className="set-row-label">{t("devices.thisBrowser")}</span>
-              <span className="set-row-hint">{t("devices.thisBrowserHint")}</span>
+          {self ? (
+            <div className="set-row">
+              <div className="set-row-text">
+                <span className="set-row-label">{t("devices.thisBrowser")}</span>
+                <span className="set-row-hint">{t("devices.signedInAs", { name: self.name })}</span>
+              </div>
             </div>
-            <button type="button" className="btn small ghost" onClick={() => navigate("/pair")}>
-              {t("devices.pairBrowser")}
-            </button>
-          </div>
+          ) : (
+            <div className="set-row">
+              <div className="set-row-text">
+                <span className="set-row-label">{t("devices.thisBrowser")}</span>
+                <span className="set-row-hint">{t("devices.thisBrowserHint")}</span>
+              </div>
+              <button type="button" className="btn small ghost" onClick={() => navigate("/pair")}>
+                {t("devices.pairBrowser")}
+              </button>
+            </div>
+          )}
         </Group>
       ) : null}
       {asking ? (
         <Confirm
           title={t("devices.revokeNamed", { name: asking.name })}
-          body={<p>{t("devices.revokeConfirm", { name: asking.name })}</p>}
+          body={
+            <>
+              <p>{t("devices.revokeConfirm", { name: asking.name })}</p>
+              {revokeWarnings(asking, devices ?? [], self?.id ?? "", on).map((line) => (
+                <p key={line}>
+                  <strong>{line}</strong>
+                </p>
+              ))}
+            </>
+          }
           confirm={t("devices.revoke")}
           cancel={h("backups.cancel")}
           busy={busy}

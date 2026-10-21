@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { TOKEN_KEY, authHeaders, isForbidden, isUnauthorized, mediaURL, noteIfUnauthorized, onUnauthorized, readToken, settingsForWatcher, writeToken } from "./src/lib/deviceToken.ts";
-import { canEditSignIn, codeAfterPoll, codeLooksLikeInvite, detectKind, formatPairCode, kindLabel, normalizeClaimCode, normalizeInviteCode, normalizePairCode, pairPollStep, scopeLabel, scopesForAccess } from "./src/features/settings/pairCode.ts";
+import { canEditSignIn, codeAfterPoll, codeLooksLikeInvite, detectKind, formatPairCode, kindLabel, normalizeClaimCode, normalizeInviteCode, normalizePairCode, pairPollStep, revokeWarnings, scopeLabel, scopesForAccess } from "./src/features/settings/pairCode.ts";
 
 test("a pair code is six digits, with spaces and dashes ignored", () => {
   assert.equal(normalizePairCode("482913"), "482913");
@@ -222,4 +222,16 @@ test("letters in the code field mean an invite", () => {
   assert.equal(codeLooksLikeInvite(""), false);
   assert.equal(codeLooksLikeInvite("ABCD-EFGH-JK"), true);
   assert.equal(codeLooksLikeInvite("abcd"), true);
+});
+
+test("revoking this browser, or the only admin, is said before it happens", () => {
+  const me = { id: "a", scopes: ["watch", "record", "admin"] };
+  const tv = { id: "b", scopes: ["watch"] };
+  assert.deepEqual(revokeWarnings(tv, [me, tv], "a", true), []);
+  const alone = revokeWarnings(me, [me, tv], "a", false);
+  assert.equal(alone.length, 2);
+  assert.match(alone[0], /browser you are using/);
+  assert.match(alone[1], /only admin device/);
+  assert.match(revokeWarnings(me, [me, tv], "", true)[0], /server keeps it/);
+  assert.deepEqual(revokeWarnings(me, [me, { id: "c", scopes: ["admin"] }], "", true), []);
 });
