@@ -72,7 +72,7 @@ func NextExtension(id int64, ends time.Time, game sports.Game, found bool, now t
 // and baseball an hour, and a golf round, race, or tennis match (rain,
 // playoffs, a fifth set) an hour and a half. Talk and highlight shows end on time.
 func SportsTail(airing store.Airing) time.Duration {
-	if airing.GameID != "" {
+	if airing.GameID != "" || airing.ManualPass != 0 {
 		return 0
 	}
 	text := airing.Category

@@ -32,8 +32,8 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   await settle(page);
 
   // A category pass held to the hour of the basketball game: the game already on stays out.
-  await page.getByRole("button", { name: "New pass" }).click();
-  const draft = page.getByRole("form", { name: "New pass" });
+  await page.getByRole("button", { name: "New series" }).click();
+  const draft = page.getByRole("form", { name: "New series" });
   await draft.getByRole("group", { name: "Match", exact: true }).getByRole("button", { name: "Category", exact: true }).click();
   await draft.getByLabel("Category", { exact: true }).fill("Sports");
   await expect(draft.getByRole("status")).toContainText("NFL: Bears at Bills");
@@ -43,14 +43,14 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   await expect(draft.getByRole("status")).toContainText("Records 1 airing in the next 2 weeks.");
   await expect(draft.getByRole("status")).toContainText("NBA: Lakers at Celtics");
   await expect(draft.getByRole("status")).not.toContainText("NFL");
-  await draft.getByRole("button", { name: "Add pass" }).click();
+  await draft.getByRole("button", { name: "Add series" }).click();
   await expect(page.getByText("Sports (category)")).toBeVisible();
 
   // Words in a title, on a day it doesn't air, then on its day.
   const late = serverDate(seeded + 100 * 60_000).getUTCDay();
   const other = (late + 3) % 7;
   const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  await page.getByRole("button", { name: "New pass" }).click();
+  await page.getByRole("button", { name: "New series" }).click();
   await draft.getByRole("group", { name: "Match", exact: true }).getByRole("button", { name: "Title has", exact: true }).click();
   await draft.getByLabel("Words", { exact: true }).fill("late local");
   await draft.getByRole("button", { name: names[other], exact: true }).click();
@@ -59,7 +59,7 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   await draft.getByRole("button", { name: names[late], exact: true }).click();
   await expect(draft.getByRole("status")).toContainText("Records 1 airing in the next 2 weeks.");
   await expect(draft.getByRole("status")).toContainText("Late Local News");
-  await draft.getByRole("button", { name: "Add pass" }).click();
+  await draft.getByRole("button", { name: "Add series" }).click();
   await expect(page.getByText("Titles with “late local”")).toBeVisible();
 
   let saved = await passes(page);
@@ -108,8 +108,8 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   await rows.filter({ hasText: "Sports" }).getByRole("button", { name: /^Edit / }).click();
   const sportsEdit = page.getByRole("form", { name: "Edit Sports" });
   await expect(sportsEdit.getByRole("status")).toContainText("Matches 1 airing in the next 2 weeks, but none will record.");
-  await expect(sportsEdit.getByRole("status")).toContainText("Skipped: another pass has the tuner");
-  await expect(sportsEdit.getByRole("status")).toContainText("This pass would stop these from recording:");
+  await expect(sportsEdit.getByRole("status")).toContainText("Skipped: another rule has the tuner");
+  await expect(sportsEdit.getByRole("status")).toContainText("This would stop these from recording:");
   await expect(sportsEdit.getByRole("status")).toContainText("Late Local News");
   await page.unroute("**/api/v1/passes/preview");
   await sportsEdit.getByRole("button", { name: "Cancel" }).click();
@@ -192,6 +192,6 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   await page.getByRole("button", { name: "Remove Sports" }).click();
   await expect(page.getByText("Remove Sports (category)?")).toBeVisible();
   await page.getByRole("button", { name: "Remove Sports (category)", exact: true }).click();
-  await expect(page.getByText(/A pass records every airing that matches/)).toBeVisible();
+  await expect(page.getByText(/A series records every airing that matches/)).toBeVisible();
   expect(await passes(page)).toEqual([]);
 });

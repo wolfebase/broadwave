@@ -4,17 +4,14 @@
 
 ### Added
 
-- Server: channels name more networks from the name they broadcast ("FOX 5", "NBC4", "PBS", "UNIVSN", "TELEMUN") and from listings, including PBS, CW, MyNetworkTV, ION, Univision, Telemundo, UniMás, and in Canada CBC, Radio-Canada, CTV, CTV 2, Global, Citytv, TVO, Télé-Québec, TVA, and Noovo, so voice and search find them anywhere.
-- Server: `/server` reports the server's time zone, whether it is a real zone, its UTC offset, and its country (from `TZ`, or `BROADWAVE_COUNTRY=US|CA`).
-- Web: an admin sees one line when the server's time zone is mistyped, missing, or hours away from the browser's, with the `TZ` to set.
-- Sports: women's college basketball, FCS football, Liga MX, and IndyCar scores; college boards ask for every Division I game, not only ranked ones.
-
 ### Changed
 
 - Setup stars Canada's main networks too, and says it couldn't tell which channels are ABC, CBS, FOX, or NBC instead of saying the lineup has none.
 - Web: Tonight and the day buttons start at 7 PM in the Central and Mountain time zones (8 PM elsewhere).
 - Recording a sports show that isn't matched to a live score keeps going 30 minutes (basketball, hockey, soccer), an hour (football, baseball), or 90 minutes (golf, racing, tennis) past the listing; talk shows end on time.
 - Free channels: Samsung TV Plus asks for Canada's channels on a server in Canada.
+- Web: the Schedule page calls passes "Recording rules", and each one says what it is: Series, One time, Timed, or Games. One-time recordings show their channel, so two of the same show tell apart.
+- Web: a recording that is running shows once in Coming up, not again as the airing it is recording.
 
 ### Fixed
 

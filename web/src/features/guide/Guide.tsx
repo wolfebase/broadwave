@@ -646,7 +646,8 @@ export function Guide() {
                 </button>
                 </div>
                 {list.length === 0 ? (
-                  <div role="gridcell" id={activeId === guideCellId(c.id) ? activeId : undefined} className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }}>
+                  // An empty stretch opens the channel's sheet, where Record a time is.
+                  <div role="gridcell" id={activeId === guideCellId(c.id) ? activeId : undefined} className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }} onClick={() => open(c)}>
                     <LiveFrame id={c.id} className="cell-frame" />
                     <span className="cell-title">{emptyGuideLabel(programs, leftT)}</span>
                   </div>
@@ -657,6 +658,7 @@ export function Guide() {
                     id={guideCellId(c.id)}
                     className="guide-cell empty focused"
                     aria-label={`${gapLabel}, ${c.displayName}`}
+                    onClick={() => open(c)}
                     style={{ left: channelW + ((Math.max(origin, focus.at) - origin) / MIN) * pxPerMin, width: Math.max(160, 24 * pxPerMin) }}
                   >
                     <span className="cell-title">{gapLabel}</span>
@@ -670,7 +672,7 @@ export function Guide() {
                       const w = Math.max(280, channelW + width - left - 4);
                       const inset = Math.min(Math.max(0, view.left + channelW - left), w - 280);
                       return (
-                        <div role="gridcell" id={trailId} className="guide-cell empty" style={{ left, width: w, paddingLeft: 14 + inset }}>
+                        <div role="gridcell" id={trailId} className="guide-cell empty" style={{ left, width: w, paddingLeft: 14 + inset }} onClick={() => open(c)}>
                           <span className="cell-title">{emptyGuideLabel(programs, end)}</span>
                         </div>
                       );

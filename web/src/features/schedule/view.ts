@@ -21,3 +21,16 @@ export function dayOf(date: Date, now: Date): Day {
   if (days === -1) return "yesterday";
   return "other";
 }
+
+/** A planned item whose recording is already running shows once, as the recording. */
+export function notRecording<T extends { passId: number; airing: { channelId: number; start: string; end: string } }>(
+  items: T[],
+  active: { passId?: number; channelId: number; startedAt: string; endsAt?: string }[],
+): T[] {
+  const covers = (rec: (typeof active)[number], item: T) =>
+    rec.passId === item.passId &&
+    rec.channelId === item.airing.channelId &&
+    Date.parse(rec.startedAt) < Date.parse(item.airing.end) &&
+    (!rec.endsAt || Date.parse(rec.endsAt) > Date.parse(item.airing.start));
+  return items.filter((item) => !active.some((rec) => covers(rec, item)));
+}

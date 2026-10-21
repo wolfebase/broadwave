@@ -1581,6 +1581,10 @@ paths:
                 title: { type: string }
                 subtitle: { type: string }
                 channelId: { type: integer, format: int64 }
+                passId:
+                  type: integer
+                  format: int64
+                  description: The planned item's passId. For a manual pass's slot it skips that slot alone, not the listing's episode; other passes ignore it.
                 start:
                   type: string
                   format: date-time
@@ -1673,15 +1677,28 @@ paths:
     post:
       tags: [dvr]
       operationId: previewPass
-      description: Plan the next 14 days as if this pass were saved. With id, the rules edit that pass (rename for a new title); without, it is a new series pass. Nothing is saved.
+      description: Plan the next 14 days as if this pass were saved. With id, the rules edit that pass (rename for a new title); without, it is a new series pass, or a new manual pass with kind manual. Nothing is saved.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              description: "Nothing is saved. When id is absent or 0, title is required and rename is ignored. When id is any other number, title is ignored and a non-blank rename is the new title, words, or category. A missing pass is not found."
+              description: "Nothing is saved. When id is absent or 0, title is required and rename is ignored. When id is any other number, title is ignored and a non-blank rename is the new title, words, or category. A missing pass is not found. A manual pass (kind manual, or the id of one) takes the fields POST /passes takes for one: channelId, timeStart, duration, and date or days."
               properties:
+                kind:
+                  type: string
+                  enum: [series, manual]
+                  description: "With id absent or 0: manual previews a new manual pass, whose title may be blank. Otherwise ignored."
+                duration:
+                  type: integer
+                  minimum: 1
+                  maximum: 480
+                  description: "Manual passes only: minutes to record from timeStart."
+                date:
+                  type: string
+                  format: date
+                  description: "Manual passes only: the server-local day (YYYY-MM-DD) a pass without days records on."
                 id:
                   type: integer
                   format: int64
@@ -1770,8 +1787,17 @@ paths:
           application/json:
             schema:
               type: object
-              description: "Changes only the fields sent. The body must be JSON. No field is required. id and title are ignored; the path id is the pass. rename changes a series pass's title. A time window is checked only when timeStart or timeEnd is sent."
+              description: "Changes only the fields sent. The body must be JSON. No field is required. id and title are ignored; the path id is the pass. rename changes a series pass's title. A time window is checked only when timeStart or timeEnd is sent. On a manual pass: rename sets the title (blank clears it), timeStart is its start, duration and date or days set when it records, the whole pass is checked again, and episodes, rerecord, timeEnd, and matchKind are ignored."
               properties:
+                duration:
+                  type: integer
+                  minimum: 1
+                  maximum: 480
+                  description: "Manual passes only: minutes to record from timeStart."
+                date:
+                  type: string
+                  format: date
+                  description: "Manual passes only: the server-local day (YYYY-MM-DD) a pass without days records on. Sending days that are not empty makes the pass repeat and drops the date."
                 id:
                   type: integer
                   format: int64
@@ -3688,7 +3714,7 @@ components:
         id: { type: integer, format: int64 }
         title: { type: string }
         channelId: { type: integer, format: int64 }
-        kind: { type: string, description: "series, team, or once" }
+        kind: { type: string, description: "series, team, once, or manual. A manual pass records channelId from timeStart for duration minutes, on date or on each of days, whether or not the guide lists anything then." }
         padBefore: { type: integer, minimum: 0, maximum: 30 }
         padAfter: { type: integer, minimum: 0, maximum: 30 }
         priority: { type: integer }
@@ -3698,20 +3724,28 @@ components:
         limitCount: { type: integer }
         rerecord: { type: boolean }
         commercials: { type: boolean }
-        timeStart: { type: string, description: "HH:MM local" }
+        timeStart: { type: string, description: "HH:MM local. A manual pass starts recording then on the server's clock." }
         timeEnd: { type: string, description: "HH:MM local" }
         matchKind: { type: string, enum: [title, contains, category, team] }
         days:
           type: array
           description: Weekdays an airing may start on, 0 Sunday to 6 Saturday; empty is every day. After midnight in a window that began the night before counts as that night.
           items: { type: integer, minimum: 0, maximum: 6 }
-        airingStart: { type: string, format: date-time, description: "Start of the one airing a once pass records" }
+        airingStart: { type: string, format: date-time, description: "Start of the one airing a once pass records, or of a one-time manual pass's recording" }
+        duration: { type: integer, minimum: 1, maximum: 480, description: "Manual passes: minutes recorded from timeStart" }
+        date: { type: string, format: date, description: "One-time manual passes: the server-local day (YYYY-MM-DD) it records on. A manual pass with days repeats instead." }
     NewPass:
       type: object
       required: [title]
       properties:
-        title: { type: string, description: "The title, the words a title contains, or the category. A blank title, including one that is only spaces, is 400." }
-        channelId: { type: integer, format: int64, description: "0 records on any channel" }
+        title: { type: string, description: "The title, the words a title contains, or the category. A blank title, including one that is only spaces, is 400. For kind manual it is optional: the recording takes the guide's title for that time, or the channel's name." }
+        kind:
+          type: string
+          enum: [series, manual]
+          description: "manual records channelId from timeStart (HH:MM on the server's clock) for duration minutes, once on date or on each of days; padBefore and padAfter default to 0, and a one-time pass ranks above every pass unless priority is sent. A manual pass reads only channelId, timeStart, duration, date, days, padBefore, padAfter, priority, keepMode, keepCount, limitCount, and commercials. A missing channel, a bad time, a duration outside 1 to 480, no date and no days, or a one-time pass that has already ended is 400. Absent is a series or once pass."
+        duration: { type: integer, minimum: 1, maximum: 480, description: "kind manual: minutes to record" }
+        date: { type: string, format: date, description: "kind manual without days: the server-local day (YYYY-MM-DD)" }
+        channelId: { type: integer, format: int64, description: "0 records on any channel. Required for kind manual." }
         padBefore: { type: integer, minimum: 0, maximum: 30 }
         padAfter: { type: integer, minimum: 0, maximum: 30 }
         airingStart: { type: string, format: date-time, description: "Record only the airing starting then on channelId (kind once). Needs channelId; the rules below are ignored." }
@@ -3792,6 +3826,7 @@ components:
         skipped: { type: boolean }
         reason: { type: string }
         suggestion: { $ref: "#/components/schemas/Suggestion" }
+        manual: { type: boolean, description: "A manual pass's slot. Its airing id is negative and made up for the slot; its times are the pass's, and its title and details are the guide's listing for most of that time when there is one." }
     Event:
       type: object
       required: [id, at, kind, message]
