@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"broadwave/internal/hdhr"
 	"broadwave/internal/store"
@@ -163,5 +164,46 @@ func TestGuideAccessSkipsATunerThatIsGone(t *testing.T) {
 	}
 	if _, err := deviceAuth(context.Background(), &hdhr.Client{}, nil); err == nil {
 		t.Fatal("no tuner gave guide access")
+	}
+}
+
+func TestParseWhenReadsEveryTimeShape(t *testing.T) {
+	want := time.Date(2026, 10, 21, 18, 30, 0, 0, time.UTC)
+	for _, raw := range []string{
+		"20261021123000 -0600",
+		"20261021123000-0600",
+		"202610211230 -0600",
+		"202610211230-06:00",
+		"20261021183000",
+		"20261021183000 +0000",
+		"202610211830",
+	} {
+		got, err := parseWhen(raw)
+		if err != nil || !got.Equal(want) {
+			t.Errorf("%q: %v %v", raw, got, err)
+		}
+	}
+	for _, raw := range []string{"", "2026", "20261021123000 -06", "20261021123000 +2500", "tomorrow"} {
+		if _, err := parseWhen(raw); err == nil {
+			t.Errorf("%q read as a time", raw)
+		}
+	}
+}
+
+func TestParseSaysWhenAFeedHasNoPrograms(t *testing.T) {
+	lineup := []store.Channel{{ID: 7, GuideNumber: "4.1"}}
+	for name, raw := range map[string]string{
+		"empty":     `<tv><channel id="4.1"><display-name>4.1</display-name></channel></tv>`,
+		"bad times": `<tv><programme start="Tuesday" stop="later" channel="4.1"><title>A</title></programme></tv>`,
+	} {
+		if _, _, err := Parse([]byte(raw), lineup); !errors.Is(err, ErrNoPrograms) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// Programs on channels this lineup does not have are still a working feed.
+	other := `<tv><programme start="20261021120000+0000" stop="20261021130000+0000" channel="9.1"><title>A</title></programme></tv>`
+	rows, _, err := Parse([]byte(other), lineup)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("%v %v", rows, err)
 	}
 }

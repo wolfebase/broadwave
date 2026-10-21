@@ -247,6 +247,14 @@ func Pull(ctx context.Context, client *hdhr.Client, bases ...string) ([]byte, er
 	return body, nil
 }
 
+// ErrNoPrograms is a guide document that read without error but listed no
+// program with a time that could be read: an empty feed, or one in a format
+// this reader does not know. The listings it would replace stay.
+var ErrNoPrograms = errors.New("the XMLTV link gave no programs")
+
+// Parse reads an XMLTV document into rows for the lineup channels it matches.
+// A document with no readable program is ErrNoPrograms, even when it
+// matches no channel, so a broken feed is not mistaken for a quiet one.
 func Parse(data []byte, channels []store.Channel) ([]store.Airing, map[int64]string, error) {
 	var doc tv
 	if err := xml.Unmarshal(data, &doc); err != nil {
@@ -264,14 +272,16 @@ func Parse(data []byte, channels []store.Channel) ([]store.Airing, map[int64]str
 		}
 	}
 	var out []store.Airing
+	readable := 0
 	for _, p := range doc.Programmes {
-		channelID := xmlToChannel[p.Channel]
-		if channelID == 0 {
-			continue
-		}
 		start, err1 := parseWhen(p.Start)
 		end, err2 := parseWhen(p.Stop)
 		if err1 != nil || err2 != nil || !end.After(start) {
+			continue
+		}
+		readable++
+		channelID := xmlToChannel[p.Channel]
+		if channelID == 0 {
 			continue
 		}
 		programID, label, season, episode := episodeDetail(p.EpNums)
@@ -284,6 +294,9 @@ func Parse(data []byte, channels []store.Channel) ([]store.Airing, map[int64]str
 			New: p.New != nil && p.Shown == nil, Live: p.Live != nil, Premiere: p.Premiere != nil, Finale: p.Finale != nil,
 			Rating: ratingValue(p.Rating), Cast: castList(p.Credits), Start: start, End: end,
 		})
+	}
+	if readable == 0 {
+		return nil, art, ErrNoPrograms
 	}
 	return out, art, nil
 }
@@ -398,10 +411,44 @@ func castList(c *struct {
 	return strings.Join(names, ", ")
 }
 
+// parseWhen reads an XMLTV time: YYYYMMDDhhmm with optional seconds, then
+// an optional offset written +hhmm or +hh:mm, with or without a space before
+// it. No offset is UTC, as the XMLTV format says.
 func parseWhen(value string) (time.Time, error) {
 	value = strings.TrimSpace(value)
-	if len(value) >= 20 && value[14] == ' ' {
-		return time.Parse("20060102150405 -0700", value)
+	digits := 0
+	for digits < len(value) && value[digits] >= '0' && value[digits] <= '9' {
+		digits++
 	}
-	return time.Parse("20060102150405", value)
+	var layout string
+	switch digits {
+	case 14:
+		layout = "20060102150405"
+	case 12:
+		layout = "200601021504"
+	default:
+		return time.Time{}, fmt.Errorf("guide time %q", value)
+	}
+	at, err := time.Parse(layout, value[:digits])
+	if err != nil {
+		return time.Time{}, err
+	}
+	zone := strings.TrimSpace(value[digits:])
+	if zone == "" || zone == "Z" || strings.EqualFold(zone, "UTC") || strings.EqualFold(zone, "GMT") {
+		return at, nil
+	}
+	zone = strings.Replace(zone, ":", "", 1)
+	if len(zone) != 5 || (zone[0] != '+' && zone[0] != '-') {
+		return time.Time{}, fmt.Errorf("guide time %q", value)
+	}
+	hours, err1 := strconv.Atoi(zone[1:3])
+	mins, err2 := strconv.Atoi(zone[3:5])
+	if err1 != nil || err2 != nil || hours > 14 || mins > 59 {
+		return time.Time{}, fmt.Errorf("guide time %q", value)
+	}
+	offset := hours*3600 + mins*60
+	if zone[0] == '-' {
+		offset = -offset
+	}
+	return time.Date(at.Year(), at.Month(), at.Day(), at.Hour(), at.Minute(), at.Second(), 0, time.FixedZone("", offset)), nil
 }
