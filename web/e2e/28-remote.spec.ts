@@ -336,6 +336,11 @@ test("a remote reaches home, the guide, the player, multiview, settings, and rec
       const row = el?.closest(".media-card");
       return Boolean(row?.querySelector(`a[href="/api/v1/recordings/${id}/file"]`));
     }, recordingId), 30);
+    // Download is behind More: open it, then go down into the extra actions.
+    await until(page, "ArrowRight", async () => page.evaluate(() => Boolean(document.activeElement?.classList.contains("more-btn"))), 6);
+    await press(page, "Enter");
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("aria-expanded"))).toBe("true");
+    await press(page, "ArrowDown");
     await until(page, "ArrowRight", async () => page.evaluate((id) => {
       const el = document.activeElement;
       return Boolean(el?.getAttribute("href")?.includes(`/recordings/${id}/file`) && el?.hasAttribute("download"));
@@ -345,6 +350,7 @@ test("a remote reaches home, the guide, the player, multiview, settings, and rec
     await press(page, "Enter");
     await (await download).cancel();
 
+    await until(page, "ArrowUp", async () => page.evaluate(() => Boolean(document.activeElement?.closest(".sheet-actions:not(.more-actions)"))), 4);
     await until(page, "ArrowRight", async () => page.evaluate((id) => {
       const el = document.activeElement;
       const row = el?.closest(".media-card");

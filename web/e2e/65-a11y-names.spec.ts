@@ -64,6 +64,7 @@ test("repeated actions name the show", async ({ page }) => {
   const row = page.locator(".media-card").filter({ hasText: "The Quiet Hour" });
   await expect(row.getByRole("button", { name: "Delete S1 E4, Desk Names, The Quiet Hour", exact: true })).toBeVisible();
   const keptRow = page.locator(".media-card").filter({ hasText: "Quiet File" });
+  await keptRow.getByRole("button", { name: "More Harbor Desk, Quiet File", exact: true }).click();
   await expect(keptRow.getByRole("button", { name: "Rename file Harbor Desk, Quiet File", exact: true })).toBeVisible();
   await row.getByRole("button", { name: "Delete S1 E4, Desk Names, The Quiet Hour", exact: true }).click();
   await expect(row.getByRole("button", { name: "Remove from the list S1 E4, Desk Names, The Quiet Hour", exact: true })).toBeFocused();

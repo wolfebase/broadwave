@@ -59,6 +59,12 @@ test("clean-up settings save and a recording is kept forever", async ({ page }) 
 
   await page.goto("/recordings");
   const card = page.locator(".media-card", { hasText: "The Keepsake" });
+  // Keep forever and Rename file are behind More; Play and Delete stay on the card.
+  const more = card.getByRole("button", { name: /^More / });
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  await expect(card.getByRole("button", { name: "Keep forever" })).toBeHidden();
+  await more.click();
+  await expect(more).toHaveAttribute("aria-expanded", "true");
   const keep = card.getByRole("button", { name: "Keep forever" });
   await expect(keep).toHaveAttribute("aria-pressed", "false");
   await keep.click();

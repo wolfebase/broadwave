@@ -9,6 +9,7 @@ import { navigate } from "../../app/router";
 import { dismissesLayer, pageCovered } from "../../lib/dialogFocus";
 import { RecordingCard, Shelf } from "../../ui/shelf";
 import { DownloadLink } from "../recordings/DownloadLink";
+import { MoreIcon } from "../../ui/icons";
 import { signalLine } from "./health";
 import { MoveFile } from "./MoveFile";
 import { RecordAgain, recordAgainOffered } from "./RecordAgain";
@@ -350,6 +351,27 @@ function LibraryRow({
   const stopRef = useRef<HTMLButtonElement>(null);
   const [stopping, setStopping] = useState(false);
   const live = rec.status === "recording";
+  const [more, setMore] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const groupRef = useRef<HTMLDivElement>(null);
+  const moreId = `rec-more-${rec.id}`;
+  // Escape (or Back on a remote) inside the extra actions folds them away, not the page.
+  useEffect(() => {
+    if (!more) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (!dismissesLayer(event.key, event.target, event.keyCode) || pageCovered()) return;
+      const target = event.target;
+      if (!(target instanceof Node) || !(groupRef.current?.contains(target) || moreRef.current?.contains(target))) return;
+      if (target instanceof HTMLElement && target.closest("form")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMore(false);
+      focusRing(moreRef.current);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [more]);
   useEffect(() => {
     if (armed === rec.id) focusRing(confirmRef.current);
   }, [armed, rec.id]);
@@ -428,23 +450,6 @@ function LibraryRow({
             <button type="button" className="btn primary" aria-label={named(t("library.play"))} onClick={() => onPlay(rec)}>
               {t("library.play")}
             </button>
-            {rec.status !== "recording" ? (
-              <button type="button" className="btn" aria-label={named(seen ? t("library.markUnwatched") : t("library.markWatched"))} onClick={() => onWatched(rec, !seen)}>
-                {seen ? t("library.markUnwatched") : t("library.markWatched")}
-              </button>
-            ) : null}
-            {rec.status !== "recording" ? (
-              <button type="button" className="btn" aria-pressed={rec.keep === true} aria-label={named(t("library.keepForever"))} onClick={() => onKeep(rec, !rec.keep)}>
-                {t("library.keepForever")}
-              </button>
-            ) : null}
-            {rec.status !== "recording" ? (
-              <button type="button" className="btn" aria-label={named(t("library.makeChannel"))} onClick={() => onVirtual(rec)}>
-                {t("library.makeChannel")}
-              </button>
-            ) : null}
-            <DownloadLink id={rec.id} status={rec.status} name={subject} />
-            {rec.file && rec.status !== "recording" ? <MoveFile rec={rec} /> : null}
             {recordAgainOffered(rec) ? <RecordAgain rec={rec} /> : null}
             {live ? (
               <span className="stop-zone">
@@ -465,6 +470,20 @@ function LibraryRow({
                 )}
               </span>
             ) : null}
+            {live ? null : (
+              <button
+                ref={moreRef}
+                type="button"
+                className="btn more-btn"
+                aria-expanded={more}
+                aria-controls={moreId}
+                aria-label={named(t("library.more"))}
+                title={t("library.more")}
+                onClick={() => setMore((on) => !on)}
+              >
+                <MoreIcon />
+              </button>
+            )}
             {rec.status === "recording" ? null : armed === rec.id ? (
               <button ref={confirmRef} type="button" className="btn primary" aria-label={named(t("library.deleteFile"))} onClick={() => onDelete(rec)}>
                 {t("library.deleteFile")}
@@ -474,6 +493,24 @@ function LibraryRow({
                 {t("library.delete")}
               </button>
             )}
+          </div>
+        )}
+        {selecting || rec.missing || live ? null : (
+          <div id={moreId} ref={groupRef} className="sheet-actions more-actions" role="group" aria-label={named(t("library.more"))} hidden={!more}>
+            <button type="button" className="btn" aria-label={named(seen ? t("library.markUnwatched") : t("library.markWatched"))} onClick={() => onWatched(rec, !seen)}>
+              {seen ? t("library.markUnwatched") : t("library.markWatched")}
+            </button>
+            <button type="button" className="btn" aria-pressed={rec.keep === true} aria-label={named(t("library.keepForever"))} onClick={() => onKeep(rec, !rec.keep)}>
+              {t("library.keepForever")}
+            </button>
+            <button type="button" className="btn" aria-label={named(t("library.makeChannel"))} aria-describedby={`${moreId}-hint`} onClick={() => onVirtual(rec)}>
+              {t("library.makeChannel")}
+            </button>
+            <DownloadLink id={rec.id} status={rec.status} name={subject} />
+            {rec.file ? <MoveFile rec={rec} /> : null}
+            <span id={`${moreId}-hint`} className="hint more-hint">
+              {t("library.makeChannelHint")}
+            </span>
           </div>
         )}
       </div>

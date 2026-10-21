@@ -49,6 +49,8 @@ test("Escape closes a delete confirm, a pass editor, and a multiview menu", asyn
   await expect(remove).toBeFocused();
   await expect(page).toHaveURL(/\/recordings/);
 
+  const more = row.getByRole("button", { name: "More Layer Keys, The Return", exact: true });
+  await more.click();
   await row.getByRole("button", { name: "Rename file Layer Keys, The Return", exact: true }).click();
   const name = row.getByLabel("File name in the recordings folder");
   await expect(name).toBeFocused();
@@ -56,6 +58,11 @@ test("Escape closes a delete confirm, a pass editor, and a multiview menu", asyn
   await expect(name).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(row.getByRole("button", { name: "Rename file Layer Keys, The Return", exact: true })).toBeFocused();
+  await expect(page).toHaveURL(/\/recordings/);
+  // Escape again folds the extra actions and goes back to More, still on the page.
+  await page.keyboard.press("Escape");
+  await expect(more).toBeFocused();
+  await expect(more).toHaveAttribute("aria-expanded", "false");
   await expect(page).toHaveURL(/\/recordings/);
 
   const runtime = JSON.parse(readFileSync(path.join(here, ".run/runtime.json"), "utf8")) as { channels: { id: number; name: string }[] };

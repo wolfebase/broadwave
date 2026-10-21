@@ -83,7 +83,10 @@ test("a finished recording can be downloaded", async ({ page }) => {
     await expect(recording.getByRole("link", { name: "Download" })).toHaveCount(0);
 
     await recording.getByRole("button", { name: "Stop recording" }).click();
+    // Stop is asked first.
+    await recording.getByRole("button", { name: /^Stop now/ }).click();
     await expect(page.getByText(`Stopped ${title}. What it recorded is kept.`)).toBeVisible();
+    await recording.getByRole("button", { name: /^More / }).click();
     const link = recording.getByRole("link", { name: "Download" });
     await expect(link).toHaveAttribute("href", `/api/v1/recordings/${id}/file`);
     await expect(link).toHaveAttribute("download", "");
@@ -149,5 +152,7 @@ test("a finished recording can be downloaded", async ({ page }) => {
     }
   } finally {
     await page.request.post(`/api/v1/recordings/${id}/stop`).catch(() => undefined);
+    // Later specs sort the library by title; leave it as it was.
+    await page.request.delete(`/api/v1/recordings/${id}`).catch(() => undefined);
   }
 });
