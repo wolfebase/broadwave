@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -172,6 +173,10 @@ func (h *Hub) watchFrames(ctx context.Context, m *mux) {
 					tries++
 					missing = left
 					next = frameRetry
+				case routineKill(err):
+					// A tune ending or a viewer taking the tuner stops the grab.
+					slog.Debug(fmt.Sprintf("frames freq %d: %v", m.freq, err))
+					last, missing, tries = now, nil, 0
 				default:
 					slog.Warn(fmt.Sprintf("frames freq %d: %v", m.freq, err))
 					last, missing, tries = now, nil, 0
@@ -180,6 +185,12 @@ func (h *Hub) watchFrames(ctx context.Context, m *mux) {
 			timer.Reset(next)
 		}
 	}
+}
+
+// routineKill is a grab stopped on purpose: its ffmpeg was killed or its
+// context ended, not a picture that failed.
+func routineKill(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "signal: killed")
 }
 
 func (h *Hub) frameJobs(m *mux) []FrameJob {

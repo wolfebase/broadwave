@@ -142,6 +142,8 @@ type Hub struct {
 	// NoAC4 is set when ffmpeg cannot decode AC-4: an ATSC 3.0 channel then
 	// plays its picture without sound instead of not at all.
 	NoAC4 bool
+	// ac4Told is the one warning that an AC-4 channel plays without sound.
+	ac4Told sync.Once
 
 	// OnChange is called, outside the hub lock, when viewers, renditions,
 	// recordings, or tuners change.
@@ -1138,9 +1140,7 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 	if want.Codec == "hevc" && !h.HEVC {
 		want.Codec = ""
 	}
-	if h.NoAC4 {
-		want = Unvoiced(f.channel.AudioCodec, want)
-	}
+	want = h.unvoiced(f.channel, want)
 	if want.ABR {
 		return h.ensureLadderLocked(f, want, frame)
 	}
@@ -3715,6 +3715,26 @@ func (h *Hub) prepareRecordings(ctx context.Context) error {
 		known, _ = h.Store.HasRecordingsIn(ctx, dir)
 	}
 	return disk.Prepare(dir, h.Dir, known)
+}
+
+// unvoiced drops the sound of an AC-4 channel when ffmpeg cannot decode it,
+// and says so in the log the first time.
+func (h *Hub) unvoiced(ch store.SourceChannel, want Rendition) Rendition {
+	if !h.NoAC4 {
+		return want
+	}
+	got := Unvoiced(ch.AudioCodec, want)
+	if got.Audio != want.Audio {
+		h.ac4Told.Do(func() {
+			slog.Warn(fmt.Sprintf("%s has AC-4 sound, and this ffmpeg has no AC-4 decoder: ATSC 3.0 channels play without sound (the Docker image's ffmpeg has one)", ch.GuideNumber))
+		})
+	}
+	return got
+}
+
+// IsAC4 reports the sound of ATSC 3.0.
+func IsAC4(codec string) bool {
+	return codecName(codec) == "ac4"
 }
 
 // diskStat reads free space. Tests stand in for a disk that reports a delete late.
