@@ -157,6 +157,10 @@ func TestResumeCarriesThePassGameAndEpisode(t *testing.T) {
 	if rec.minutes != 30 {
 		t.Fatalf("asked for %d minutes, want the time left rounded up", rec.minutes)
 	}
+	// The rounded-up minutes would run past the show: the planned end goes along.
+	if rec.meta.EndsAt == nil || !rec.meta.EndsAt.Equal(ends.Truncate(time.Second)) {
+		t.Fatalf("resume ends %v, want the first piece's end %v", rec.meta.EndsAt, ends)
+	}
 	if rec.meta.PassID != 9 || rec.meta.ProgramID != "EP1" || rec.meta.Subtitle != "Pilot" {
 		t.Fatalf("resume lost the listing: %+v", rec.meta)
 	}

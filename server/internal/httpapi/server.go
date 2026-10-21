@@ -222,6 +222,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /signals/check", s.checkSignals)
 	api("POST /recordings", s.startRecording)
 	api("POST /recordings/nfo", s.writeNFOs)
+	api("POST /recordings/import", s.importFound)
 	api("POST /recordings/{id}/stop", s.stopRecording)
 	api("GET /recordings", s.recordings)
 	api("DELETE /recordings/{id}", s.deleteRecording)

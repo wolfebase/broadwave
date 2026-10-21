@@ -87,6 +87,7 @@ func errorFor(err error) (int, string, string, map[string]any) {
 	var full *live.PictureError
 	var low *disk.LowError
 	var blocked *disk.WriteError
+	var missing *disk.MissingError
 	var streams *live.StreamLimitError
 	var exports *live.ExportLimitError
 	switch {
@@ -96,6 +97,10 @@ func errorFor(err error) (int, string, string, map[string]any) {
 		return http.StatusConflict, "pictures_full", full.Error(), map[string]any{"tiles": full.Tiles}
 	case errors.As(err, &low):
 		return http.StatusInsufficientStorage, "disk_low", err.Error(), map[string]any{"freeBytes": low.Free, "needBytes": low.Need}
+	case errors.As(err, &missing):
+		return http.StatusServiceUnavailable, "recordings_missing", missing.Error(), nil
+	case errors.As(err, &blocked) && !blocked.Full:
+		return http.StatusServiceUnavailable, "recordings_unwritable", blocked.Error(), nil
 	case errors.As(err, &blocked):
 		return http.StatusInsufficientStorage, "disk_low", blocked.Error(), nil
 	case errors.Is(err, live.ErrNoSignal):

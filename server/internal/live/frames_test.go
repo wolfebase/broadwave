@@ -2,6 +2,7 @@ package live
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -268,5 +269,14 @@ func TestAGrabTriesAgainForTheChannelsItMissed(t *testing.T) {
 	runs := strings.Split(strings.TrimSpace(string(log)), "\n")
 	if len(runs) < 2 || strings.Contains(runs[1], "/4.jpg.part") || !strings.Contains(runs[1], "/5.jpg.part") {
 		t.Fatalf("runs %q", runs)
+	}
+}
+
+func TestAGrabStoppedOnPurposeIsRoutine(t *testing.T) {
+	if !routineKill(fmt.Errorf("channels [4]: %w", errors.New("signal: killed"))) || !routineKill(context.Canceled) {
+		t.Fatal("a killed grab is routine")
+	}
+	if routineKill(errors.New("no keyframe")) {
+		t.Fatal("a grab that found no picture is not")
 	}
 }

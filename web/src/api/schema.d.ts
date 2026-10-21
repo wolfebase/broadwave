@@ -772,7 +772,7 @@ export interface paths {
         };
         get: operations["listRecordings"];
         put?: never;
-        /** @description Record a channel now. When the guide has the current airing, the recording runs to its end plus padding, for a day at most. */
+        /** @description Record a channel now. With minutes, the recording runs that long from now and stops there, with no padding, even when the guide's current airing runs longer; it still takes that airing's title and details. Without minutes, when the guide has the current airing, the recording covers it: from its start when the tuner's buffer still holds it, to its end plus padding. A day at most. */
         post: operations["startRecording"];
         delete?: never;
         options?: never;
@@ -791,6 +791,23 @@ export interface paths {
         put?: never;
         /** @description Write or refresh the .nfo beside every finished recording in the recordings folder. A library folder is left alone. */
         post: operations["writeRecordingNfo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recordings/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Add recordings in the recordings folder that the catalog does not have: each file with the .json the server wrote beside it. Recordings the catalog lost track of are followed first, so a moved one is not added twice. A restore does this by itself after it answers. 409 when the recordings folder is not there (a drive not mounted). */
+        post: operations["importFoundRecordings"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1782,7 +1799,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Put the catalog back to this copy. Recordings on disk are left in place. */
+        /** @description Put the catalog back to this copy. Settings, passes, sources, and virtual channels are replaced; channels keep the copy's favorites, names, and hidden state; recordings, paired devices, and followed teams the copy has are added to the ones here. Recordings on disk are left in place; afterwards the server follows moved ones and adds the ones in the recordings folder the copy lacked. */
         post: operations["restoreCatalogBackup"];
         delete?: never;
         options?: never;
@@ -2038,7 +2055,7 @@ export interface components {
         Error: {
             /**
              * @description Stable machine code. An unknown code is still a failure.
-             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
+             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, recordings_missing, recordings_unwritable, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
              */
             code: string;
             /** @description Short text safe to show a user. */
@@ -2160,6 +2177,13 @@ export interface components {
             notesUrl: string;
             /** @description Banner text, for example Broadwave 0.7 is available. */
             message: string;
+            /**
+             * @description How this server was installed, as far as it can tell: an Unraid template (HOST_OS=Unraid), another container (Docker, Compose, Podman, a NAS app), or the file from a release. Omitted by older servers.
+             * @enum {string}
+             */
+            install?: "unraid" | "docker" | "binary";
+            /** @description One or two sentences on updating this install, for a How to update line under the banner. Omitted by older servers. */
+            howTo?: string;
         };
         Device: {
             deviceId: string;
@@ -4562,7 +4586,7 @@ export interface operations {
                 "application/json": {
                     /** Format: int64 */
                     channelId: number;
-                    /** @description How long to record, in minutes. Blank or 0 records for an hour, or until the current listing ends when that is longer. A day at most. */
+                    /** @description How long to record from now, in minutes; the recording stops then. Blank or 0 records the current listing to its end plus padding, or an hour when the guide has none. A day at most. */
                     minutes?: number;
                     title?: string;
                 };
@@ -4581,7 +4605,7 @@ export interface operations {
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
-            /** @description `no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. `unavailable`: the player is not configured. */
+            /** @description `no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. `recordings_missing`: the recordings folder the server used is not there (a drive or share not mounted); the server does not make a new one. `recordings_unwritable`: the folder refuses a file (check PUID/PGID or the mount). `unavailable`: the player is not configured. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -4614,6 +4638,30 @@ export interface operations {
                 };
             };
             409: components["responses"]["Error"];
+        };
+    };
+    importFoundRecordings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many recordings were added */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        added: number;
+                    };
+                };
+            };
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
         };
     };
     deleteRecording: {
@@ -6350,7 +6398,15 @@ export interface operations {
                     };
                 };
             };
-            503: components["responses"]["Error"];
+            /** @description `recordings_missing` or `recordings_unwritable`: see POST /recordings. `unavailable`: the player is not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     storageShows: {

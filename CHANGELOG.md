@@ -2,8 +2,6 @@
 
 ## Unreleased
 
-### Added
-
 ### Changed
 
 - Setup stars Canada's main networks too, and says it couldn't tell which channels are ABC, CBS, FOX, or NBC instead of saying the lineup has none.

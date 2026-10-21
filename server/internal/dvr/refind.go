@@ -28,6 +28,15 @@ var (
 	lastWalk time.Time
 )
 
+// RefindNow looks for every missing recording now, even a set looked for
+// within the day: after a restore, files the catalog lost may be there.
+func RefindNow(ctx context.Context, st *store.Store, hub *live.Hub) {
+	lostMu.Lock()
+	lastLost = ""
+	lostMu.Unlock()
+	Refind(ctx, st, hub)
+}
+
 // Refind follows recordings moved by hand inside the recordings folder: a
 // finished recording whose file is gone is matched by the .json beside its
 // file (id, title, and start all agree) and pointed at the file found there.
@@ -105,9 +114,12 @@ func Refind(ctx context.Context, st *store.Store, hub *live.Hub) {
 }
 
 type sidecar struct {
-	ID        int64     `json:"id"`
-	Title     string    `json:"title"`
-	StartedAt time.Time `json:"startedAt"`
+	ID          int64      `json:"id"`
+	Title       string     `json:"title"`
+	GuideNumber string     `json:"guideNumber"`
+	Status      string     `json:"status"`
+	StartedAt   time.Time  `json:"startedAt"`
+	EndedAt     *time.Time `json:"endedAt"`
 }
 
 func readSidecar(path string) (sidecar, bool) {

@@ -153,7 +153,9 @@ func main() {
 	live.Reap(work)
 	hub := live.New(st, work, ffmpegPath, encoder)
 	hub.RecordingsDir = recordingsDir(*configDir, *recordings)
-	if hub.NoAC4 = live.MissingAC4(ffmpegPath); hub.NoAC4 {
+	// Only a lineup with ATSC 3.0 sound needs the decoder; the first such
+	// channel played says so too.
+	if hub.NoAC4 = live.MissingAC4(ffmpegPath); hub.NoAC4 && hasAC4Channel(st) {
 		slog.Warn("ffmpeg has no AC-4 decoder: ATSC 3.0 channels play without sound (the Docker image's ffmpeg has one)")
 	}
 	hub.Host = host
@@ -191,6 +193,9 @@ func main() {
 		}()
 	}
 	slog.Info("encoder: " + encoderLine(encoder, hub.DeintBroadcast, hub.DeintSmooth))
+	if err := hub.RecordingsReady(context.Background()); err != nil {
+		slog.Warn(fmt.Sprintf("recordings: %s (%s)", err, hub.Recordings()))
+	}
 	bus := realtime.NewBus()
 	bus.MediaStart = hub.EarliestMedia
 	bus.LongHold = hub.LongGroups
@@ -563,4 +568,18 @@ func warnZone(zone region.Zone) {
 	default:
 		slog.Info("time zone: " + zone.Name)
 	}
+}
+
+// hasAC4Channel reports a channel in the lineup with ATSC 3.0 sound.
+func hasAC4Channel(st *store.Store) bool {
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil {
+		return false
+	}
+	for _, ch := range channels {
+		if live.IsAC4(ch.AudioCodec) {
+			return true
+		}
+	}
+	return false
 }

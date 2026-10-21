@@ -539,7 +539,8 @@ func TestUnwritableRecordingsAreRefused(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/recordings", bytes.NewBufferString(`{"channelId":1,"minutes":5,"title":"Nope"}`))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusInsufficientStorage || !bytes.Contains(rec.Body.Bytes(), []byte("recordings folder")) {
+	// A read-only folder is a mount or owner problem, not a full disk.
+	if rec.Code != http.StatusServiceUnavailable || !bytes.Contains(rec.Body.Bytes(), []byte(`"recordings_unwritable"`)) || !bytes.Contains(rec.Body.Bytes(), []byte("PUID/PGID")) {
 		t.Fatalf("unwritable %d %s", rec.Code, rec.Body.String())
 	}
 }

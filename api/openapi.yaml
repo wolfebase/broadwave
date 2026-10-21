@@ -1192,7 +1192,12 @@ paths:
     post:
       tags: [recordings]
       operationId: startRecording
-      description: Record a channel now. When the guide has the current airing, the recording runs to its end plus padding, for a day at most.
+      description: >-
+        Record a channel now. With minutes, the recording runs that long from now and stops
+        there, with no padding, even when the guide's current airing runs longer; it still
+        takes that airing's title and details. Without minutes, when the guide has the current
+        airing, the recording covers it: from its start when the tuner's buffer still holds it,
+        to its end plus padding. A day at most.
       requestBody:
         required: true
         content:
@@ -1202,7 +1207,7 @@ paths:
               required: [channelId]
               properties:
                 channelId: { type: integer, format: int64 }
-                minutes: { type: integer, description: "How long to record, in minutes. Blank or 0 records for an hour, or until the current listing ends when that is longer. A day at most." }
+                minutes: { type: integer, description: "How long to record from now, in minutes; the recording stops then. Blank or 0 records the current listing to its end plus padding, or an hour when the guide has none. A day at most." }
                 title: { type: string }
       responses:
         "200":
@@ -1214,7 +1219,7 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "503":
-          description: "`no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. `unavailable`: the player is not configured."
+          description: "`no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. `recordings_missing`: the recordings folder the server used is not there (a drive or share not mounted); the server does not make a new one. `recordings_unwritable`: the folder refuses a file (check PUID/PGID or the mount). `unavailable`: the player is not configured."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -1235,6 +1240,27 @@ paths:
                 properties:
                   written: { type: integer }
         "409": { $ref: "#/components/responses/Error" }
+  /recordings/import:
+    post:
+      tags: [recordings]
+      operationId: importFoundRecordings
+      description: >-
+        Add recordings in the recordings folder that the catalog does not have: each file
+        with the .json the server wrote beside it. Recordings the catalog lost track of are
+        followed first, so a moved one is not added twice. A restore does this by itself
+        after it answers. 409 when the recordings folder is not there (a drive not mounted).
+      responses:
+        "200":
+          description: How many recordings were added
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [added]
+                properties:
+                  added: { type: integer }
+        "409": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
   /recordings/{id}:
     delete:
       tags: [recordings]
@@ -2665,7 +2691,11 @@ paths:
                   freeBytes: { type: integer, format: int64 }
                   totalBytes: { type: integer, format: int64 }
                   watermarkGB: { type: integer }
-        "503": { $ref: "#/components/responses/Error" }
+        "503":
+          description: "`recordings_missing` or `recordings_unwritable`: see POST /recordings. `unavailable`: the player is not configured."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /storage/shows:
     get:
       tags: [settings]
@@ -2753,7 +2783,12 @@ paths:
     post:
       tags: [settings]
       operationId: restoreCatalogBackup
-      description: Put the catalog back to this copy. Recordings on disk are left in place.
+      description: >-
+        Put the catalog back to this copy. Settings, passes, sources, and virtual channels are
+        replaced; channels keep the copy's favorites, names, and hidden state; recordings,
+        paired devices, and followed teams the copy has are added to the ones here. Recordings
+        on disk are left in place; afterwards the server follows moved ones and adds the ones
+        in the recordings folder the copy lacked.
       parameters:
         - name: name
           in: path
@@ -3099,7 +3134,7 @@ components:
           type: string
           description: |
             Stable machine code. An unknown code is still a failure.
-            Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
+            Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, recordings_missing, recordings_unwritable, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
         message: { type: string, description: Short text safe to show a user. }
         tuners:
           type: array
@@ -3208,6 +3243,13 @@ components:
         version: { type: string, description: "Release tag without a leading v." }
         notesUrl: { type: string, description: "Release notes page." }
         message: { type: string, description: "Banner text, for example Broadwave 0.7 is available." }
+        install:
+          type: string
+          enum: [unraid, docker, binary]
+          description: "How this server was installed, as far as it can tell: an Unraid template (HOST_OS=Unraid), another container (Docker, Compose, Podman, a NAS app), or the file from a release. Omitted by older servers."
+        howTo:
+          type: string
+          description: "One or two sentences on updating this install, for a How to update line under the banner. Omitted by older servers."
     Device:
       type: object
       required: [deviceId, friendlyName, baseUrl, tunerCount]

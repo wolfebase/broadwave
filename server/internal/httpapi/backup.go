@@ -3,9 +3,13 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
+	"log/slog"
 	"net/http"
 
 	"broadwave/internal/backup"
+	"broadwave/internal/dvr"
 )
 
 func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
@@ -45,5 +49,38 @@ func (s *Server) restoreSavedBackup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	s.afterRestore()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// afterRestore follows recordings that moved since the backup and adds the
+// ones on disk the backup did not have. A large folder takes a while, so it
+// runs after the answer.
+func (s *Server) afterRestore() {
+	if s.Store == nil || s.Hub == nil || s.Hub.Dir == "" {
+		return
+	}
+	go func() {
+		if _, err := dvr.ImportFound(context.Background(), s.Store, s.Hub); err != nil {
+			slog.Warn(fmt.Sprintf("restore: looking for recordings on disk: %v", err))
+		}
+	}()
+}
+
+// importFound adds recordings in the recordings folder that the catalog lacks.
+func (s *Server) importFound(w http.ResponseWriter, r *http.Request) {
+	if s.Store == nil || s.Hub == nil || s.Hub.Dir == "" {
+		httpError(w, "Recordings are not set up on this server.", http.StatusConflict)
+		return
+	}
+	added, err := dvr.ImportFound(r.Context(), s.Store, s.Hub)
+	if errors.Is(err, fs.ErrNotExist) {
+		httpError(w, "The recordings folder isn't there. Is the drive mounted?", http.StatusConflict)
+		return
+	}
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"added": added})
 }

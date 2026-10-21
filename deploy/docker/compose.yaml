@@ -25,9 +25,13 @@ services:
     volumes:
       - ./config:/config
       - ./recordings:/config/work/recordings
-    # Intel or AMD graphics for hardware transcoding. Remove if not present.
-    devices:
-      - /dev/dri:/dev/dri
+    # Intel or AMD graphics for hardware transcoding. Docker refuses to start
+    # a container whose device is missing, and most ARM NAS boxes have none,
+    # so this is off by default. When `ls /dev/dri` lists renderD128, remove
+    # the # from the next two lines. Diagnostics says so when the host has
+    # graphics the container can't use.
+    # devices:
+    #   - /dev/dri:/dev/dri
     restart: unless-stopped
     labels:
       # Read only by the optional updater below.

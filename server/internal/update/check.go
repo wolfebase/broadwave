@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -30,11 +31,17 @@ type Notice struct {
 	Version  string `json:"version"`
 	NotesURL string `json:"notesUrl"`
 	Message  string `json:"message"`
+	// Install is how this server was installed, when it can tell: unraid,
+	// docker, or binary. HowTo is one or two sentences on updating it.
+	Install string `json:"install,omitempty"`
+	HowTo   string `json:"howTo,omitempty"`
 }
 
 // Checker polls the releases feed. A nil Enabled func means the check is on.
 type Checker struct {
-	Current  string
+	Current string
+	// Install is DetectInstall's answer, for the banner's how-to.
+	Install  string
 	FeedURL  string
 	Interval time.Duration
 	Client   *http.Client
@@ -60,6 +67,7 @@ func New(current string) *Checker {
 		FeedURL:  FeedURL,
 		Interval: 24 * time.Hour,
 		Client:   fetchguard.Client(15 * time.Second),
+		Install:  DetectInstall(os.Getenv, fileExists),
 	}
 }
 
@@ -109,6 +117,7 @@ func (c *Checker) Visible(ctx context.Context) *Notice {
 	}
 	n := cloneNotice(c.last)
 	n.NotesURL = notesURL(n.NotesURL, "v"+n.Version)
+	n.Install, n.HowTo = c.Install, HowTo(c.Install)
 	return n
 }
 

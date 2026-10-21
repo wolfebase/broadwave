@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"broadwave/internal/fetchguard"
@@ -729,16 +728,6 @@ func cleanLabel(s string) string {
 		}
 	}
 	return strings.TrimSpace(b.String())
-}
-
-func enableBroadcast(udp *net.UDPConn) {
-	raw, err := udp.SyscallConn()
-	if err != nil {
-		return
-	}
-	_ = raw.Control(func(fd uintptr) {
-		_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
-	})
 }
 
 func hostOnly(addr string) string {
