@@ -19,6 +19,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	// The zone database, so TZ works on a host without zone files.
+	_ "time/tzdata"
 
 	"broadwave/internal/backup"
 	"broadwave/internal/cloudflare"
@@ -31,6 +33,7 @@ import (
 	"broadwave/internal/logbuf"
 	"broadwave/internal/psip"
 	"broadwave/internal/realtime"
+	"broadwave/internal/region"
 	"broadwave/internal/source"
 	"broadwave/internal/sports"
 	"broadwave/internal/store"
@@ -68,6 +71,7 @@ func main() {
 		os.Exit(code)
 	}
 	logbuf.Install(os.Stderr)
+	warnZone(region.Local())
 	if err := doctor.ApplyIdentity(*configDir, recordingsDir(*configDir, *recordings)); err != nil {
 		slog.Error(fmt.Sprintf("identity: %v", err))
 		os.Exit(1)
@@ -545,5 +549,18 @@ func foundOnce(st *store.Store) func(n int) bool {
 		changed := n != lastN || v.Channels != lastV
 		lastN, lastV = n, v.Channels
 		return changed
+	}
+}
+
+// warnZone says so at start when TZ is mistyped or missing: the guide, pass
+// times, and recordings would quietly run on UTC.
+func warnZone(zone region.Zone) {
+	switch {
+	case !zone.Valid:
+		slog.Warn(fmt.Sprintf("time zone: TZ=%q is not a time zone, so this server runs on UTC and records at the wrong hour. Use a name like America/New_York.", zone.Name))
+	case !zone.Set():
+		slog.Warn("time zone: TZ is not set, so this server runs on UTC. Set TZ to your time zone, like America/New_York.")
+	default:
+		slog.Info("time zone: " + zone.Name)
 	}
 }

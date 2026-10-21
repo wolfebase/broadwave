@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,11 +25,13 @@ type Facts struct {
 	Mounts         string
 	FreeBytes      int64
 	Timezone       string
-	Now            time.Time
-	UID            int
-	PUID           string
-	PGID           string
-	TunerQuiet     bool
+	// TimezoneInvalid is TZ naming a zone that does not exist.
+	TimezoneInvalid bool
+	Now             time.Time
+	UID             int
+	PUID            string
+	PGID            string
+	TunerQuiet      bool
 }
 
 // Notes returns every check that failed.
@@ -52,6 +55,8 @@ func Notes(f Facts) []Note {
 	}
 	if strings.TrimSpace(f.Timezone) == "" {
 		out = append(out, Note{ID: "tz", Message: "The time zone is not set. Set TZ so the guide uses your local time."})
+	} else if f.TimezoneInvalid {
+		out = append(out, Note{ID: "tzname", Message: "TZ is " + strconv.Quote(strings.TrimSpace(f.Timezone)) + ", which is not a time zone, so this server runs on UTC. Use a name like America/New_York."})
 	}
 	if !f.Now.IsZero() && (f.Now.Year() < 2024 || f.Now.Year() > 2036) {
 		out = append(out, Note{ID: "clock", Message: "This server's clock is off. Whole-home sync needs the right time. Turn on network time."})

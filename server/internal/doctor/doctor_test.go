@@ -20,6 +20,7 @@ func TestEachCheck(t *testing.T) {
 		{"volume", func(f *Facts) { f.RecordingsPath = "/config/work/recordings" }},
 		{"disk", func(f *Facts) { f.FreeBytes = 5e9 }},
 		{"tz", func(f *Facts) { f.Timezone = "" }},
+		{"tzname", func(f *Facts) { f.Timezone = "America/Denvr"; f.TimezoneInvalid = true }},
 		{"clock", func(f *Facts) { f.Now = time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC) }},
 		{"bonjour", func(f *Facts) { f.IPs = []string{"172.17.0.2"} }},
 		{"owner", func(f *Facts) { f.UID = 0; f.PUID = ""; f.PGID = "" }},

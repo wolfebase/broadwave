@@ -25,6 +25,7 @@ import (
 	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
 	"broadwave/internal/realtime"
+	"broadwave/internal/region"
 	"broadwave/internal/source"
 	"broadwave/internal/sports"
 	"broadwave/internal/store"
@@ -43,6 +44,8 @@ type Server struct {
 	Assets  fs.FS
 	Dev     bool
 	Version string
+	// Zone is the server's time zone. Nil reads TZ and the host clock.
+	Zone func() region.Zone
 	// DiscoveryKey is the base64 Ed25519 public key for address follow. Empty omits it.
 	DiscoveryKey string
 	// CastAppID is the Google Cast application id from BROADWAVE_CAST_APP_ID.

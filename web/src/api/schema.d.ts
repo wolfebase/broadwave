@@ -2111,6 +2111,17 @@ export interface components {
             castAppId?: string;
             /** @description The same server over HTTPS and HTTP/2 on the home network, such as https://lan.abcdefghij.direct.wolfeup.com:8443. Present once a trusted certificate is live. Apps prefer it when it answers and stay on this address when it does not (a router that blocks private answers to public names, a phone away from home). */
             secureUrl?: string;
+            /** @description The server's time zone from TZ or the host clock, such as America/Denver, or an abbreviation when the host has no zone name. Empty when nothing is set (the server runs on UTC). Omitted by older servers. */
+            timeZone?: string;
+            /** @description False when TZ names a zone that does not exist (America/Denvr): the server then runs on UTC. Omitted by older servers. */
+            timeZoneValid?: boolean;
+            /** @description The server clock's offset from UTC right now, in minutes (-360 for Mountain daylight time). Compare it with the device's offset to spot a server set to the wrong zone. Omitted by older servers. */
+            utcOffsetMinutes?: number;
+            /**
+             * @description The country the server is set up for: BROADWAVE_COUNTRY, else the country of its time zone, else US. Picks free channel regions and which networks setup looks for. Omitted by older servers.
+             * @enum {string}
+             */
+            country?: "US" | "CA";
         };
         DirectStatus: {
             enabled: boolean;

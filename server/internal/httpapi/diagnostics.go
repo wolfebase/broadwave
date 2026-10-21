@@ -165,24 +165,13 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 			stored = true
 		}
 	}
+	zone := s.zone()
 	return doctor.Notes(doctor.Facts{
 		IPs: ips, TunerStored: stored, HostHasGPU: hostGPU(), DevDri: driPresent(),
 		RecordingsPath: path, Mounts: string(mounts), FreeBytes: free,
-		Timezone: localZone(os.Getenv("TZ"), time.Local), Now: s.now(), UID: os.Getuid(),
+		Timezone: zone.Name, TimezoneInvalid: !zone.Valid, Now: s.now(), UID: os.Getuid(),
 		PUID: os.Getenv("PUID"), PGID: os.Getenv("PGID"), TunerQuiet: quiet,
 	})
-}
-
-// localZone is TZ, or the zone the host clock is set to. A host with neither
-// (a container without zone files) runs on bare UTC, so it reads as unset.
-func localZone(tz string, local *time.Location) string {
-	if tz = strings.TrimSpace(tz); tz != "" {
-		return tz
-	}
-	if name, _ := time.Now().In(local).Zone(); name != "UTC" {
-		return name
-	}
-	return ""
 }
 
 // tunerWentQuiet is a tuner that has not answered in three minutes.

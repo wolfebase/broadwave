@@ -534,6 +534,10 @@ export type ServerInfo = {
   update?: ServerUpdate;
   castAppId?: string;
   secureUrl?: string;
+  timeZone?: string;
+  timeZoneValid?: boolean;
+  utcOffsetMinutes?: number;
+  country?: string;
 };
 
 export type ServerUpdate = {
