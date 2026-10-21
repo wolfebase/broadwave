@@ -2388,7 +2388,8 @@ func clampRecordMinutes(minutes int) int {
 }
 
 // RecordMeta records the original broadcast of a channel. It shares the tuned
-// frequency with anyone watching and starts no transcode.
+// frequency with anyone watching and starts no transcode. It stops after
+// minutes, or at meta.EndsAt when that comes first.
 func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording) (store.Recording, error) {
 	h.preemptScan()
 	channelID := meta.ChannelID
@@ -2448,6 +2449,11 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		started = at
 	}
 	ends := time.Now().Add(time.Duration(minutes) * time.Minute)
+	// A planned end (the rest of a show after a restart) wins over the
+	// whole minutes, which round up.
+	if meta.EndsAt != nil && meta.EndsAt.After(time.Now()) && meta.EndsAt.Before(ends) {
+		ends = *meta.EndsAt
+	}
 	if title == "" {
 		title = f.channel.DisplayName
 	}

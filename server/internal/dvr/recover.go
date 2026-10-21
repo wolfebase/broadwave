@@ -74,7 +74,8 @@ func minutesLeft(left time.Duration) int {
 	return int((left + time.Minute - 1) / time.Minute)
 }
 
-// Resume records the rest of an interrupted show for the time left: the
+// Resume records the rest of an interrupted show for the time left, to the
+// first piece's planned end and not past it: the
 // same listing, pass, and game, and the episode the first piece had. The
 // listing at the new start can already be the next show's, so the episode
 // is copied rather than looked up again.
@@ -86,7 +87,7 @@ func Resume(ctx context.Context, st *store.Store, rec Recorder, prev store.Recor
 	got, err := rec.RecordMeta(ctx, minutes, store.Recording{
 		ChannelID: prev.ChannelID, Title: prev.Title, Subtitle: prev.Subtitle,
 		Description: prev.Description, Category: prev.Category, ProgramID: prev.ProgramID, GameID: prev.GameID,
-		PassID: prev.PassID,
+		PassID: prev.PassID, EndsAt: prev.EndsAt,
 	})
 	if err != nil {
 		return got, err

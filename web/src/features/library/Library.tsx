@@ -405,7 +405,7 @@ function LibraryRow({
             {(rec.position ?? 0) > 1 ? ` · ${t("library.resumeAt", { time: formatClockPoint(rec.position ?? 0) })}` : ""}
             {seen ? ` · ${t("library.watched")}` : ""}
             {rec.keep ? ` · ${t("library.keptForever")}` : ""}
-            {rec.error ? ` · ${rec.error}` : ""}
+            {rec.error && !cut ? ` · ${rec.error}` : ""}
           </span>
         )}
         {cut && !rec.missing ? <span className="ch-tags cut">{cut}</span> : null}
