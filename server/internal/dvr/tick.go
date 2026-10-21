@@ -17,6 +17,9 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 	if err := st.DeleteEndedOncePasses(ctx, time.Now().Add(-24*time.Hour)); err != nil {
 		slog.Debug(fmt.Sprintf("once passes: %v", err))
 	}
+	if err := st.DeleteEndedManualPasses(ctx, time.Now().Add(-24*time.Hour)); err != nil {
+		slog.Debug(fmt.Sprintf("manual passes: %v", err))
+	}
 	passes, err := st.Passes(ctx)
 	if err != nil || len(passes) == 0 || hub == nil {
 		return
@@ -95,12 +98,24 @@ func attempted(recs []store.Recording, pass store.Pass, airing store.Airing) boo
 	}
 	floor := airing.Start.Add(-lead)
 	for _, rec := range recs {
-		if rec.ChannelID == airing.ChannelID && strings.EqualFold(rec.Title, airing.Title) &&
-			rec.StartedAt.Before(airing.End) && !rec.StartedAt.Before(floor) {
+		if sameSlot(rec, airing) && rec.StartedAt.Before(airing.End) && !rec.StartedAt.Before(floor) {
 			return true
 		}
 	}
 	return false
+}
+
+// sameSlot reports a recording made for this airing's channel and show: by
+// title for a listing, by pass for a manual slot, whose title the guide can
+// change and whose listing another pass may be recording.
+func sameSlot(rec store.Recording, airing store.Airing) bool {
+	if rec.ChannelID != airing.ChannelID {
+		return false
+	}
+	if airing.ManualPass != 0 {
+		return rec.PassID == airing.ManualPass
+	}
+	return strings.EqualFold(rec.Title, airing.Title)
 }
 
 // maxRetries is how many times one airing is tried again after a failure.
@@ -120,8 +135,7 @@ func RetryDue(recs []store.Recording, pass store.Pass, airing store.Airing, now 
 	tries := 0
 	var last time.Time
 	for _, rec := range recs {
-		if rec.ChannelID != airing.ChannelID || !strings.EqualFold(rec.Title, airing.Title) ||
-			!rec.StartedAt.Before(airing.End) || rec.StartedAt.Before(floor) {
+		if !sameSlot(rec, airing) || !rec.StartedAt.Before(airing.End) || rec.StartedAt.Before(floor) {
 			continue
 		}
 		if rec.Status != "failed" && rec.Status != "interrupted" {
@@ -145,7 +159,12 @@ func RetryDue(recs []store.Recording, pass store.Pass, airing store.Airing, now 
 
 func already(recs []store.Recording, airing store.Airing) bool {
 	for _, rec := range recs {
-		if rec.Status == "recording" && rec.ChannelID == airing.ChannelID && strings.EqualFold(rec.Title, airing.Title) {
+		if rec.Status != "recording" || !sameSlot(rec, airing) {
+			continue
+		}
+		// A manual slot runs at most 8 hours, so a slot still recording that
+		// started before this one ends is this one.
+		if airing.ManualPass == 0 || rec.StartedAt.Before(airing.End) {
 			return true
 		}
 	}

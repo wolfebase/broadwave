@@ -7,12 +7,14 @@ import { scheduleMessages } from "../../i18n/messages/schedule.ts";
 import { bind, weekdayShortNames } from "../../i18n/runtime.ts";
 import { dismissesLayer, pageCovered } from "../../lib/dialogFocus";
 import { copy } from "../../strings";
-import { formatClock } from "../../time";
+import { PreviewLines, clockLabel, formatDay } from "./PreviewLines";
 import { reloadAfterOrder } from "./plan";
+import { TimedEditor } from "./TimedEditor";
+import { timedEnd } from "./manual";
 
 const t = bind(scheduleMessages);
 
-type Draft = Required<Omit<NewPass, "airingStart" | "priority">>;
+type Draft = Required<Omit<NewPass, "airingStart" | "priority" | "kind" | "duration" | "date">>;
 type Body = NewPass & { rename?: string };
 
 function draftOf(pass?: Pass): Draft {
@@ -50,13 +52,26 @@ function payload(draft: Draft, pass?: Pass): Body {
   return out;
 }
 
-export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => void }) {
+export type TimedStart = { channelId: number; start?: Date; minutes?: number };
+
+export function Passes({ passes, onPasses, request, onRequestDone }: { passes: Pass[]; onPasses: () => void; request?: TimedStart | null; onRequestDone?: () => void }) {
   const { channels } = useData();
   // A drag reorders here first; a new list from the server replaces it.
   const [local, setLocal] = useState<{ from: Pass[]; ids: number[] } | null>(null);
   const order = local && local.from === passes ? local.ids : passes.map((p) => p.id);
   const setOrder = (ids: number[]) => setLocal({ from: passes, ids });
-  const [editing, setEditing] = useState<number | "new" | null>(null);
+  // "timed" is a new timed recording; a guide link opens one for its channel.
+  const [editing, setEditing] = useState<number | "new" | "timed" | null>(() => (request ? "timed" : null));
+  const [timedFrom, setTimedFrom] = useState<TimedStart | null>(request ?? null);
+  // A new link from a channel opens the editor again, for that channel.
+  const [lastRequest, setLastRequest] = useState(request);
+  if (request !== lastRequest) {
+    setLastRequest(request);
+    if (request) {
+      setTimedFrom(request);
+      setEditing("timed");
+    }
+  }
   const [dragId, setDragId] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const dragFrom = useRef<number[]>([]);
@@ -69,7 +84,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
   const [removeBusy, setRemoveBusy] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const restoreRemove = useRef<number | null>(null);
-  const editingWas = useRef<number | "new" | null>(null);
+  const editingWas = useRef<number | "new" | "timed" | null>(null);
   // A moved row keeps focus on its button, or on the other one at an end of the list.
   useEffect(() => {
     const want = focusAfter.current;
@@ -110,8 +125,8 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
     editingWas.current = editing;
     if (editing != null || previous == null) return;
     const el =
-      previous === "new"
-        ? document.querySelector<HTMLButtonElement>("[data-pass-new]")
+      previous === "new" || previous === "timed"
+        ? document.querySelector<HTMLButtonElement>(previous === "new" ? "[data-pass-new]" : "[data-pass-timed]")
         : document.querySelector<HTMLButtonElement>(`[data-pass-edit="${previous}"]`);
     focusRing(el);
   }, [editing]);
@@ -156,6 +171,8 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
     }
   }
   const byId = new Map(passes.map((p) => [p.id, p]));
+  // Buttons name a rule by its title; an untitled timed recording by its channel.
+  const nameOf = (pass: Pass) => (pass.kind === "manual" ? passLabel(pass, channels) : pass.title);
   const rows = order.map((id) => byId.get(id)).filter((p): p is Pass => Boolean(p));
 
   // Orders are sent one at a time, so quick presses land in the order made.
@@ -212,12 +229,38 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
         <h2 id="sched-passes" className="section-title">
           {t("schedule.passes")}
         </h2>
-        {editing === "new" ? null : (
-          <button type="button" className="btn small" data-pass-new onClick={() => setEditing("new")}>
-            {t("schedule.newPass")}
-          </button>
+        {editing === "new" || editing === "timed" ? null : (
+          <span className="passes-adds">
+            <button type="button" className="btn small" data-pass-new onClick={() => setEditing("new")}>
+              {t("schedule.newPass")}
+            </button>
+            <button
+              type="button"
+              className="btn small"
+              data-pass-timed
+              onClick={() => {
+                setTimedFrom(null);
+                setEditing("timed");
+              }}
+            >
+              {t("schedule.recordTime")}
+            </button>
+          </span>
         )}
       </div>
+      {editing === "timed" ? (
+        <TimedEditor
+          key={timedFrom ? `${timedFrom.channelId}-${timedFrom.start?.getTime() ?? ""}` : "timed"}
+          channels={channels}
+          start={timedFrom ?? undefined}
+          onDone={(saved) => {
+            setEditing(null);
+            setTimedFrom(null);
+            onRequestDone?.();
+            if (saved) onPasses();
+          }}
+        />
+      ) : null}
       {editing === "new" ? (
         <PassEditor
           channels={channels}
@@ -227,7 +270,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
           }}
         />
       ) : null}
-      {rows.length === 0 && editing !== "new" ? (
+      {rows.length === 0 && editing !== "new" && editing !== "timed" ? (
         <p className="sched-empty">{t("schedule.passesEmpty")}</p>
       ) : (
         <ol className="source-list pass-list">
@@ -256,14 +299,19 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
             >
               <span className="pass-rank" aria-hidden="true">{index + 1}</span>
               <span className="pass-text">
-                <span className="pass-title">{passLabel(pass)}</span>
+                <span className="pass-title">
+                  <span className="tag pass-kind" data-kind={pass.kind || "series"}>
+                    {passKind(pass)}
+                  </span>{" "}
+                  {passLabel(pass, channels)}
+                </span>
                 <span className="codec">{passDetails(pass, channels)}</span>
               </span>
               {removing === pass.id ? (
                 <span className="pad pass-actions">
-                  <span>{t("schedule.removeAsk", { name: passLabel(pass) })}</span>
+                  <span>{t("schedule.removeAsk", { name: passLabel(pass, channels) })}</span>
                   <span className="codec">{t("schedule.recordingsStay")}</span>
-                  <button type="button" className="btn small" disabled={removeBusy} aria-label={t("schedule.removeNamed", { name: passLabel(pass) })} onClick={() => void confirmRemove(pass.id)}>
+                  <button type="button" className="btn small" disabled={removeBusy} aria-label={t("schedule.removeNamed", { name: passLabel(pass, channels) })} onClick={() => void confirmRemove(pass.id)}>
                     {t("schedule.remove")}
                   </button>
                   <button ref={cancelRef} type="button" className="btn small" disabled={removeBusy} onClick={cancelRemove}>
@@ -277,21 +325,31 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
                 </span>
               ) : (
                 <span className="pad pass-actions">
-                  <button type="button" className="btn small" data-pass={pass.id} data-move="up" aria-label={t("schedule.moveUp", { title: pass.title })} disabled={index === 0} onClick={() => move(pass.id, -1)}>
+                  <button type="button" className="btn small" data-pass={pass.id} data-move="up" aria-label={t("schedule.moveUp", { title: nameOf(pass) })} disabled={index === 0} onClick={() => move(pass.id, -1)}>
                     {t("schedule.up")}
                   </button>
-                  <button type="button" className="btn small" data-pass={pass.id} data-move="down" aria-label={t("schedule.moveDown", { title: pass.title })} disabled={index === rows.length - 1} onClick={() => move(pass.id, 1)}>
+                  <button type="button" className="btn small" data-pass={pass.id} data-move="down" aria-label={t("schedule.moveDown", { title: nameOf(pass) })} disabled={index === rows.length - 1} onClick={() => move(pass.id, 1)}>
                     {t("schedule.down")}
                   </button>
-                  <button type="button" className="btn small" data-pass-edit={pass.id} aria-label={t(editing === pass.id ? "schedule.closeNamed" : "schedule.editNamed", { title: pass.title })} aria-expanded={editing === pass.id} onClick={() => setEditing(editing === pass.id ? null : pass.id)}>
+                  <button type="button" className="btn small" data-pass-edit={pass.id} aria-label={t(editing === pass.id ? "schedule.closeNamed" : "schedule.editNamed", { title: nameOf(pass) })} aria-expanded={editing === pass.id} onClick={() => setEditing(editing === pass.id ? null : pass.id)}>
                     {editing === pass.id ? t("schedule.close") : t("schedule.edit")}
                   </button>
-                  <button type="button" className="btn small" data-pass-remove={pass.id} aria-label={t("schedule.removeNamed", { name: pass.title })} onClick={() => askRemove(pass.id)}>
+                  <button type="button" className="btn small" data-pass-remove={pass.id} aria-label={t("schedule.removeNamed", { name: nameOf(pass) })} onClick={() => askRemove(pass.id)}>
                     {t("schedule.remove")}
                   </button>
                 </span>
               )}
-              {editing === pass.id ? (
+              {editing === pass.id && pass.kind === "manual" ? (
+                <TimedEditor
+                  key={pass.id}
+                  pass={pass}
+                  channels={channels}
+                  onDone={(saved) => {
+                    setEditing(null);
+                    if (saved) onPasses();
+                  }}
+                />
+              ) : editing === pass.id ? (
                 <PassEditor
                   key={pass.id}
                   pass={pass}
@@ -574,48 +632,26 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
   );
 }
 
-function PreviewLines({ preview, note, channels }: { preview: PassPreview | null; note: string; channels: Channel[] }) {
-  if (note) return <p className="hint" role="status">{note}</p>;
-  if (!preview) return null;
-  const records = preview.items.filter((item) => !item.skipped);
-  const number = (id: number) => channels.find((ch) => ch.id === id)?.displayNumber ?? "";
-  let head = t("schedule.previewNone");
-  if (preview.items.length > 0) {
-    if (records.length === preview.items.length) head = t("schedule.previewRecords", records.length);
-    else if (records.length === 0) head = t("schedule.previewNoneRecord", preview.items.length);
-    else head = t("schedule.previewSome", preview.items.length, { done: records.length });
+/** The kind of rule in plain words: a series, one airing, a set time, or a team's games. */
+export function passKind(pass: Pass) {
+  switch (pass.kind) {
+    case "once":
+      return t("schedule.kindOnce");
+    case "manual":
+      return t("schedule.kindTimed");
+    case "team":
+      return t("schedule.kindGames");
+    default:
+      return t("schedule.kindSeries");
   }
-  return (
-    <div className="pass-preview" role="status" aria-live="polite">
-      <p>{head}</p>
-      {preview.items.length > 0 ? (
-        <ul className="marker-list">
-          {preview.items.slice(0, 5).map((item) => (
-            <li key={`${item.airing.channelId}-${item.airing.start}`} className="codec">
-              {formatDay(item.airing.start)} · {number(item.airing.channelId)} {item.airing.title}
-              {item.skipped ? ` · ${item.conflict ? t("schedule.skippedTuner") : item.reason || t("schedule.skipped")}` : ""}
-            </li>
-          ))}
-          {preview.items.length > 5 ? <li className="codec">{t("schedule.andMore", { count: preview.items.length - 5 })}</li> : null}
-        </ul>
-      ) : null}
-      {preview.bumps.length > 0 ? (
-        <>
-          <p>{t("schedule.previewBump")}</p>
-          <ul className="marker-list">
-            {preview.bumps.map((item) => (
-              <li key={`${item.passId}-${item.airing.channelId}-${item.airing.start}`} className="codec">
-                {formatDay(item.airing.start)} · {number(item.airing.channelId)} {item.airing.title}
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-    </div>
-  );
 }
 
-export function passLabel(pass: Pass) {
+export function passLabel(pass: Pass, channels: Channel[] = []): string {
+  if (pass.kind === "manual") {
+    // Untitled, it records under the guide's title or the channel's name.
+    const ch = channels.find((c) => c.id === pass.channelId);
+    return pass.title || (ch ? `${ch.displayNumber} ${ch.displayName}` : t("schedule.kindTimed"));
+  }
   switch (pass.kind === "once" || pass.kind === "team" ? pass.kind : pass.matchKind) {
     case "once":
       return pass.airingStart ? t("schedule.onceLabel", { title: pass.title, when: formatDay(pass.airingStart) }) : pass.title;
@@ -633,9 +669,19 @@ export function passLabel(pass: Pass) {
 export function passDetails(pass: Pass, channels: Channel[]) {
   const parts: string[] = [];
   const ch = pass.channelId ? channels.find((c) => c.id === pass.channelId) : undefined;
-  if (pass.kind !== "once") parts.push(ch ? `${ch.displayNumber} ${ch.displayName}` : t("schedule.anyChannel"));
-  if (pass.days?.length) parts.push(daysLabel(pass.days));
-  if (pass.timeStart && pass.timeEnd) parts.push(`${clockLabel(pass.timeStart)}–${clockLabel(pass.timeEnd)}`);
+  // Two one-time recordings of one title differ by channel and time, so both show.
+  // An untitled timed recording is already named by its channel.
+  if (ch && !(pass.kind === "manual" && !pass.title)) parts.push(`${ch.displayNumber} ${ch.displayName}`);
+  else if (pass.kind !== "once" && pass.kind !== "manual") parts.push(t("schedule.anyChannel"));
+  if (pass.kind === "manual" && pass.timeStart && pass.duration) {
+    if (pass.days?.length) parts.push(daysLabel(pass.days));
+    else if (pass.date) parts.push(dateLabel(pass.date));
+    const end = timedEnd(pass.timeStart, pass.duration).clock;
+    parts.push(t("schedule.timedSpan", { start: clockLabel(pass.timeStart), end: clockLabel(end) }));
+  } else {
+    if (pass.days?.length) parts.push(daysLabel(pass.days));
+    if (pass.timeStart && pass.timeEnd) parts.push(`${clockLabel(pass.timeStart)}–${clockLabel(pass.timeEnd)}`);
+  }
   if (pass.episodes === "new") parts.push(t("schedule.newOnly"));
   if (pass.keepMode === "unwatched") parts.push(t("schedule.keepsUnwatched"));
   if (pass.keepMode === "last") parts.push(t("schedule.keepsNewest", { count: pass.keepCount || 1 }));
@@ -648,6 +694,13 @@ export function passDetails(pass: Pass, channels: Channel[]) {
   return parts.join(" · ");
 }
 
+/** A YYYY-MM-DD day as "Tue 10/21". */
+function dateLabel(date: string) {
+  const [y, m, d] = date.split("-").map(Number);
+  const day = new Date(y, m - 1, d);
+  return `${weekdayShortNames()[day.getDay()]} ${m}/${d}`;
+}
+
 export function daysLabel(days: number[]) {
   const names = weekdayShortNames();
   const set = [...days].sort().join("");
@@ -655,18 +708,6 @@ export function daysLabel(days: number[]) {
   if (set === "06") return t("schedule.weekends");
   if (set === "0123456") return t("schedule.everyDay");
   return [...days].sort().map((d) => names[d]).join(", ");
-}
-
-function clockLabel(hhmm: string) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return formatClock(d);
-}
-
-function formatDay(iso: string) {
-  const date = new Date(iso);
-  return `${weekdayShortNames()[date.getDay()]} ${date.getMonth() + 1}/${date.getDate()}, ${formatClock(date)}`;
 }
 
 function clamp(value: string, min: number, max: number) {

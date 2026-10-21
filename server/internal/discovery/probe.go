@@ -33,6 +33,7 @@ var KnownPorts = []ProbePort{
 	{8089, "/devices/ANY/channels.m3u", "channels-dvr"},
 	{5523, "/feeds/default/m3u", "fastchannels"},
 	{7777, "/playlist.m3u", "pluto"},
+	// Any region answers: this only asks whether the generator is there.
 	{8182, "/playlist.m3u8?regions=us", "samsung"},
 	{8885, "/", "tablo"},
 	{32400, "/identity", "plex"},

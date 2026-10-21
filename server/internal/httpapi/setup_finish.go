@@ -12,6 +12,8 @@ import (
 	"broadwave/internal/disk"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
+	"broadwave/internal/network"
+	"broadwave/internal/region"
 	"broadwave/internal/source"
 	"broadwave/internal/store"
 )
@@ -334,7 +336,8 @@ func (s *Server) stepFolder(ctx context.Context) {
 }
 
 func (s *Server) stepFavorites(ctx context.Context) {
-	s.setFinish("favorites", "running", "Picking ABC, CBS, FOX, and NBC.")
+	country := region.CountryOf(s.zone().Name)
+	s.setFinish("favorites", "running", "Picking "+joinAnd(network.Main(country)[:4])+".")
 	starred, err := s.starBigFour(ctx)
 	if err != nil {
 		s.setFinish("favorites", "check", "Favorites could not be saved.")
@@ -344,7 +347,7 @@ func (s *Server) stepFavorites(ctx context.Context) {
 	if len(starred) == 0 {
 		state = "skipped"
 	}
-	s.setFinish("favorites", state, favoriteLine(starred))
+	s.setFinish("favorites", state, favoriteLine(starred, country, s.unknownMainChannels(ctx)))
 }
 
 func (s *Server) stepEncoder(ctx context.Context) {
@@ -572,7 +575,7 @@ func (s *Server) starBigFour(ctx context.Context) ([]map[string]any, error) {
 	}
 	var starred []map[string]any
 	for _, ch := range withNetworks(channels) {
-		if ch.Hidden || !bigFour(ch.Network) {
+		if ch.Hidden || !network.IsMain(ch.Network) {
 			continue
 		}
 		if !ch.Favorite {
@@ -645,7 +648,10 @@ func signalSummary(great, ok, weak, lost int) string {
 	return strings.Join(bits, ", ") + "."
 }
 
-func favoriteLine(starred []map[string]any) string {
+// favoriteLine names the networks setup starred. With none, it says the
+// lineup has none only when every main channel (x.1) has a known network:
+// otherwise the networks are just unknown, which is not the same thing.
+func favoriteLine(starred []map[string]any, country string, unknown int) string {
 	have := map[string]bool{}
 	for _, row := range starred {
 		name, _ := row["network"].(string)
@@ -653,16 +659,55 @@ func favoriteLine(starred []map[string]any) string {
 			have[name] = true
 		}
 	}
+	order := append(network.Main(country), network.Main(otherCountry(country))...)
 	var names []string
-	for _, name := range []string{"ABC", "CBS", "FOX", "NBC"} {
+	for _, name := range order {
 		if have[name] {
 			names = append(names, name)
+			have[name] = false
 		}
 	}
-	if len(names) == 0 {
-		return "No ABC, CBS, FOX, or NBC in this lineup."
+	if len(names) > 0 {
+		return joinAnd(names) + "."
 	}
-	return joinAnd(names) + "."
+	main := orList(network.Main(country)[:4])
+	if unknown > 0 {
+		return "Couldn't tell which channels are " + main + ". Star them in the guide."
+	}
+	return "No " + main + " in this lineup."
+}
+
+func otherCountry(country string) string {
+	if country == "CA" {
+		return "US"
+	}
+	return "CA"
+}
+
+func orList(items []string) string {
+	if len(items) < 2 {
+		return strings.Join(items, "")
+	}
+	if len(items) == 2 {
+		return items[0] + " or " + items[1]
+	}
+	return strings.Join(items[:len(items)-1], ", ") + ", or " + items[len(items)-1]
+}
+
+// unknownMainChannels counts shown x.1 channels whose network nothing names.
+func (s *Server) unknownMainChannels(ctx context.Context) int {
+	channels, err := s.Store.Channels(ctx, false)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, ch := range withNetworks(channels) {
+		if ch.Hidden || !ch.Present || ch.Network != "" || !strings.HasSuffix(ch.GuideNumber, ".1") {
+			continue
+		}
+		n++
+	}
+	return n
 }
 
 func joinAnd(items []string) string {

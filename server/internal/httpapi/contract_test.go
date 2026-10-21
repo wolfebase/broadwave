@@ -25,6 +25,7 @@ import (
 	"broadwave/internal/hdhr/fake"
 	"broadwave/internal/live"
 	"broadwave/internal/realtime"
+	"broadwave/internal/region"
 	"broadwave/internal/sports"
 	"broadwave/internal/store"
 )
@@ -131,6 +132,7 @@ func TestContractFixtures(t *testing.T) {
 		Sports:  contractSports{},
 		Version: "dev",
 		Clock:   func() time.Time { return contractNow },
+		Zone:    func() region.Zone { return region.Zone{Name: "America/Chicago", Valid: true, Offset: -300} },
 		// Setup must not start a broadcast dwell after it finishes.
 		Staging: true,
 		HomeScan: func(context.Context) []discovery.Found {

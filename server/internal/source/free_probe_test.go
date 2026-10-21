@@ -135,6 +135,7 @@ func TestFeedByKindNamesEachGenerator(t *testing.T) {
 	if feed.Kind != "pluto" || feed.Name != "Pluto" || feed.Addr != "http://127.0.0.1:7777" || feed.Playlist != "http://127.0.0.1:7777/playlist.m3u" || feed.Guide != "http://127.0.0.1:7777/epg.xml" {
 		t.Fatalf("%+v", feed)
 	}
+	pinFreeRegion(t, "us")
 	feed, err = FeedByKind(" Samsung ", "127.0.0.1:8182/")
 	if err != nil {
 		t.Fatal(err)
@@ -365,4 +366,19 @@ func discoverServer(t *testing.T, status int, body string) *httptest.Server {
 	}))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+func pinFreeRegion(t *testing.T, code string) {
+	t.Helper()
+	old := FreeRegion
+	FreeRegion = func() string { return code }
+	t.Cleanup(func() { FreeRegion = old })
+}
+
+func TestSamsungAsksForTheServersCountry(t *testing.T) {
+	pinFreeRegion(t, "ca")
+	feed, err := FeedByKind("samsung", "127.0.0.1:8182")
+	if err != nil || feed.Playlist != "http://127.0.0.1:8182/playlist.m3u8?regions=ca" {
+		t.Fatalf("%v %+v", err, feed)
+	}
 }

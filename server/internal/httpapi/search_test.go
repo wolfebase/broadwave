@@ -12,7 +12,7 @@ import (
 	"broadwave/internal/store"
 )
 
-func TestSearchListsNamedShowsThenWhatIsOnNowFirst(t *testing.T) {
+func TestSearchListsNamedShowsOnNowFirst(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()
 	if err := st.UpsertDevice(ctx, hdhr.Device{
@@ -53,8 +53,9 @@ func TestSearchListsNamedShowsThenWhatIsOnNowFirst(t *testing.T) {
 	for _, a := range got.Airings {
 		titles = append(titles, a.Title)
 	}
-	// Shows named "news" first, each group on now and then by start.
-	want := []string{"Morning News", "Noon News", "Evening News", "Ball Game"}
+	// Shows named "news", on now and then by start. Ball Game only mentions
+	// news in its description, so it is left out.
+	want := []string{"Morning News", "Noon News", "Evening News"}
 	if len(titles) != len(want) {
 		t.Fatalf("titles %v, want %v (a show that ended at 5:30 is not a result at 7:00)", titles, want)
 	}

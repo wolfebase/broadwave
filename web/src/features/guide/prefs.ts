@@ -1,4 +1,5 @@
 import type { Category } from "../../lib/guide";
+import { primeHour } from "../../lib/primeHour.ts";
 
 export type GuideFilter = "all" | "favorites" | Category | "recording";
 
@@ -31,13 +32,14 @@ export function saveGuideFilter(filter: GuideFilter) {
 const MIN = 60_000;
 
 /**
- * Where a day chip lands: half an hour before 8 PM that day. A guide with
+ * Where a day chip lands: half an hour before prime time that day (8 PM, or
+ * 7 PM in the Central and Mountain zones). A guide with
  * only a day or two of listings ends before then on most channels, so the
  * jump stops where most channels still have listings, without leaving the day.
  */
-export function dayJumpTarget(midnight: number, lastEnds: readonly number[], visibleMs: number): number {
+export function dayJumpTarget(midnight: number, lastEnds: readonly number[], visibleMs: number, hour: number = primeHour(midnight)): number {
   const prime = new Date(midnight);
-  prime.setHours(20, 0, 0, 0);
+  prime.setHours(hour, 0, 0, 0);
   const target = prime.getTime() - 30 * MIN;
   if (lastEnds.length === 0) return target;
   const sorted = [...lastEnds].sort((a, b) => a - b);

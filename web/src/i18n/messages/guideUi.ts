@@ -31,6 +31,8 @@ export const guideUiMessages = {
   "guideUi.searchPlaceholder": "Search shows and channels",
   "guideUi.searchLabel": "Search the guide",
   "guideUi.close": "Close",
+  "guideUi.recordTime": "Record a time",
+  "guideUi.recordTimeOn": "Record a time on {channel}",
   "guideUi.noListing": "No listing",
   "guideUi.live": "Live",
   "guideUi.premiere": "Premiere",

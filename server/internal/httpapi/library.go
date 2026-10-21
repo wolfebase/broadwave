@@ -488,7 +488,7 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := s.Hub.Recordings()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := s.Hub.RecordingsReady(r.Context()); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -700,6 +700,7 @@ func (s *Server) restore(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	s.afterRestore()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -754,6 +755,14 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	case strings.HasSuffix(name, ".vtt"):
 		w.Header().Set("Content-Type", "text/vtt")
+		if _, err := os.Stat(path); err != nil {
+			// A recording without captions, or one whose captions are still
+			// being read, has none yet: an empty track, not a 404 the
+			// browser logs on every play.
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = io.WriteString(w, "WEBVTT\n\n")
+			return
+		}
 	}
 	if strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".ts") {
 		// A new resume replaces seg00000. A cached copy would be the previous picture.

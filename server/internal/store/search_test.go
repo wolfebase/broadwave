@@ -191,10 +191,11 @@ func TestSearchNamesTheShowBeforeAMention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hits) != perShow+1 || hits[0].GuideNumber != "4.1" || hits[perShow].Title != "Wolves" {
-		t.Fatalf("the show's airings, then the mention: %+v", titles(hits))
+	// The mention is left out: a show is named by the words.
+	if len(hits) != perShow || hits[0].GuideNumber != "4.1" {
+		t.Fatalf("the show's airings and no mention: %+v", titles(hits))
 	}
-	for _, hit := range hits[:perShow] {
+	for _, hit := range hits {
 		if hit.GuideNumber == "4.2" || hit.Title != "Quiz Night" {
 			t.Fatalf("hidden channel or a mention sorted in: %+v", titles(hits))
 		}
@@ -203,15 +204,13 @@ func TestSearchNamesTheShowBeforeAMention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(early) != 2 || early[0].Title != "Quiz Night" || !early[0].Start.Before(early[1].Start) || early[0].Title == "Wolves" {
+	if len(early) != 2 || early[0].Title != "Quiz Night" || !early[0].Start.Before(early[1].Start) {
 		t.Fatalf("earliest titles %+v", titles(early))
 	}
-	capped, _, err := s.Search(ctx, "quiz night", now, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(capped) != perShow+1 {
-		t.Fatalf("one show and a mention returned %v, want %d airings of the show", titles(capped), perShow)
+	// Nothing is named "tomorrow": the mention is all there is, so it shows.
+	mention, _, err := s.Search(ctx, "tomorrow", now, 20)
+	if err != nil || len(mention) != 1 || mention[0].Title != "Wolves" {
+		t.Fatalf("mention only %+v %v", titles(mention), err)
 	}
 }
 
@@ -248,22 +247,27 @@ func TestSearchReachesTheWholeGuide(t *testing.T) {
 	if err != nil || len(hits) != 1 || !hits[0].Start.Equal(late) {
 		t.Fatal(err, titles(hits))
 	}
+	// Every Harbor News hour says weather in its description; the show named
+	// Weather Week next week is the answer.
 	hits, _, err = s.Search(ctx, "weather", now, 40)
+	if err != nil || len(hits) != 1 || hits[0].Title != "Weather Week" {
+		t.Fatalf("the show named by the word, no mentions: %v %v", titles(hits), err)
+	}
+	hits, _, err = s.Search(ctx, "harbor news", now, 40)
 	if err != nil {
 		t.Fatal(err)
 	}
-	count := map[string]int{}
 	for i, hit := range hits {
-		count[hit.Title]++
-		if i > 0 && hit.Title == hits[i-1].Title && hit.Start.Before(hits[i-1].Start) {
+		if i > 0 && hit.Start.Before(hits[i-1].Start) {
 			t.Fatalf("not soonest first: %v", titles(hits))
 		}
 	}
-	if hits[0].Title != "Weather Week" || count["Weather Week"] != 1 {
-		t.Fatalf("the show named by the word leads: %v", titles(hits))
+	if len(hits) != perShow {
+		t.Fatalf("one show capped at %d: %v", perShow, titles(hits))
 	}
-	if count["Harbor News"] != perShow || count["Big Game"] != 2 {
-		t.Fatalf("each show capped, each game its own: %v", count)
+	games, _, err := s.Search(ctx, "big game", now, 40)
+	if err != nil || len(games) != 2 {
+		t.Fatalf("each game its own show: %v %v", titles(games), err)
 	}
 }
 

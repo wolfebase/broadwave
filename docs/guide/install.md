@@ -10,7 +10,7 @@ The tag `latest` is the newest release. It moves when a version is published. A 
 
 ```bash
 docker run -d --name broadwave --network host --restart unless-stopped \
-  -e TZ=America/Chicago \
+  -e TZ=<your time zone> \
   -v ~/broadwave:/config \
   -v ~/broadwave/recordings:/config/work/recordings \
   ghcr.io/wolfebase/broadwave:latest
@@ -18,7 +18,7 @@ docker run -d --name broadwave --network host --restart unless-stopped \
 
 Then open `http://<your-server>:8477`.
 
-- `TZ` is your time zone. Without it, a container runs on UTC, and Diagnostics says "The time zone is not set. Set TZ so the guide uses your local time." The guide on a phone or in a browser uses that device's clock. Pass times and the server's own clock messages use `TZ`.
+- `TZ` is your time zone: replace `<your time zone>` with a name like `America/New_York`, `America/Chicago`, `America/Denver`, `America/Phoenix`, `America/Los_Angeles`, `America/Anchorage`, `Pacific/Honolulu`, `America/Toronto`, or `America/Vancouver`. Without it, a container runs on UTC, and Diagnostics says "The time zone is not set. Set TZ so the guide uses your local time." A mistyped name (`America/Denvr`) also runs on UTC; the log, Diagnostics, and the web app (for an admin) name it. The guide on a phone or in a browser uses that device's clock. Pass times and the server's own clock messages use `TZ`.
 - The two folders keep the database and the recordings. An update replaces the container and leaves the folders.
 - Add `--device /dev/dri` when that path exists (Intel or AMD graphics). Docker refuses to start if the path is missing. The picture still plays from the processor without it.
 - When the tuner does not appear, set `HDHR_HOST` to its address. Add `:port` only when the port is not 80.
@@ -31,7 +31,7 @@ The container's host network is a virtual machine, so discovery cannot see the t
 
 ```bash
 docker run -d --name broadwave --restart unless-stopped \
-  -e TZ=America/Chicago \
+  -e TZ=<your time zone> \
   -e HDHR_HOST=<tuner address> \
   -p 8477:8477 \
   -v ~/broadwave:/config \
@@ -50,7 +50,7 @@ curl -fsSLO https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/do
 docker compose pull && docker compose up -d
 ```
 
-Put your time zone in a `.env` file next to `compose.yaml` first (`TZ=America/Chicago`); Compose stops and says so when `TZ` is missing. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing. `PUID` and `PGID` default to 1000, the first user on most Linux hosts; set them in `.env` to another user that exists there (99 and 100 on Unraid).
+Put your time zone in a `.env` file next to `compose.yaml` first (such as `TZ=America/Denver`); Compose stops and says so when `TZ` is missing. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Graphics are off in it, so it starts on every machine: when `ls /dev/dri` lists `renderD128` (Intel or AMD graphics), remove the `#` in front of the two `devices` lines for hardware transcoding. `PUID` and `PGID` default to 1000, the first user on most Linux hosts; set them in `.env` to another user that exists there (99 and 100 on Unraid).
 
 ## Unraid
 
@@ -62,6 +62,50 @@ Add the template [`deploy/unraid/broadwave.xml`](https://github.com/wolfebase/br
 - Tuner address, public names, the encoder, and extra audio are under Show more settings. Leave the tuner address blank unless the tuner is on another subnet.
 
 The optional updater is [`deploy/unraid/broadwave-updater.xml`](https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave-updater.xml). It checks at 03:30 and updates only the Broadwave container. It skips a night while a tuner is in use, a recording is running, or a recording starts within two hours. To update by hand, pull the new image and recreate the container with the same folders.
+
+## NAS boxes
+
+Each of these runs the Compose file above. Make two folders first, one for the config and one for the recordings, on a volume that is always mounted. Find the numbers for `PUID` and `PGID` with `id <your user>` over SSH, and put them in `.env` with `TZ`. When a share that holds the recordings is not mounted, the server stops recording and says "The recordings folder isn't there. Is the drive mounted?" rather than filling the system disk.
+
+### Synology
+
+DSM 7.2: install **Container Manager**, then **Project › Create**, pick a folder such as `/volume1/docker/broadwave`, and paste the Compose file. Put your values in place of `${TZ...}`, `${PUID...}`, and `${PGID...}` in the environment lines, or add a `.env` file in the project folder. The first user made on a Synology is usually `1026`, and the `users` group is `100`: `PUID=1026`, `PGID=100`. Host networking works as written.
+
+Intel "+" models with a Celeron or Pentium (DS920+, DS720+, DS1520+) have `/dev/dri`: uncomment the `devices` lines. ARM models and the AMD Ryzen models (DS923+, DS1522+) have none; check with `ls /dev/dri` over SSH when unsure.
+
+### QNAP
+
+Install **Container Station** (3.0 or newer), then **Applications › Create**, and paste the Compose file. Use folders under `/share/Container/broadwave`. QNAP users usually start at `500`, and the `everyone` group is `100`. Intel models have `/dev/dri`; ARM models do not.
+
+### TrueNAS SCALE
+
+24.10 (Electric Eel) or newer: **Apps › Discover Apps › Custom App › Install via YAML**, and paste the Compose file with `TZ`, `PUID`, and `PGID` filled in (TrueNAS does not read `.env`). Point the two volumes at datasets, such as `/mnt/tank/broadwave/config` and `/mnt/tank/broadwave/recordings`. The `apps` user is `568:568`; give it write access to both datasets, or use your own user's numbers. Uncomment `devices` when the machine has Intel or AMD graphics.
+
+### Raspberry Pi and other ARM boards
+
+Use a 64-bit OS (Raspberry Pi OS 64-bit, or Ubuntu Server for ARM64) and Docker Engine; the image is ARM64. Leave `devices` commented: the Pi 5 has no hardware H.264 encoder, and the image does not use the Pi 4's. Recordings save the broadcast as it is, with no encode, so they cost little. Watching is the limit: ATSC 1.0 channels are MPEG-2, which no player takes as it is, so every live picture is encoded on the processor. Expect one picture at a time, at 540p or 720p, and one multiview tile; Diagnostics shows what the board measured ([hardware](../hardware.md)). Keep the recordings on a USB SSD or a NAS share, not the SD card.
+
+## Without Docker
+
+Each [release](https://github.com/wolfebase/broadwave/releases) has the server as one file for Linux (x86-64 and ARM64), macOS (Apple silicon and Intel), and Windows (x86-64), with the web app built in, and a `SHA256SUMS` file to check the downloads against (`sha256sum -c SHA256SUMS --ignore-missing`).
+
+```bash
+tar xzf broadwave-<version>-linux-amd64.tar.gz
+cd broadwave-<version>-linux-amd64
+./broadwave -config ~/broadwave
+```
+
+Then open `http://<your-server>:8477`. `-config` is the folder for the database; recordings go in `work/recordings` inside it, or set `-recordings` (or `BROADWAVE_RECORDINGS`). `-addr :8477` changes the port. The settings in the table below work as environment variables here too; `PUID`, `PGID`, and `UMASK` are for containers and are ignored on Windows.
+
+ffmpeg is not included. Install it so that `ffmpeg` and `ffprobe` are on the `PATH` before you start the server:
+
+- **Version:** ffmpeg 6.1 or newer. The Docker image uses jellyfin-ffmpeg 7, and that is the one to pick when you can (Debian and Ubuntu packages are at repo.jellyfin.org).
+- **Needed:** `libx264` (the picture when there is no graphics encoder), the built-in AAC encoder, and the MPEG-2, H.264, HEVC, AC-3, and E-AC-3 decoders. Distribution packages (`apt install ffmpeg`, Homebrew, the gyan.dev or BtbN builds on Windows) have all of these.
+- **ATSC 3.0 sound** needs the AC-4 decoder, which only jellyfin-ffmpeg has. With another ffmpeg, ATSC 3.0 channels play without sound, and the server log says so.
+- **Hardware encoding** uses what that ffmpeg has: VAAPI or QSV (Intel, AMD), NVENC (NVIDIA), or VideoToolbox (Mac). Settings › About shows the encoder in use.
+- **Commercial detection** also uses [comskip](https://github.com/erikkaashoek/Comskip) when it is on the `PATH`; without it the server's own break finder runs.
+
+To keep it running, start it from systemd, launchd, or a Windows service manager such as NSSM. To update, stop the server, replace the file, and start it again; the database is copied before a new version changes it.
 
 ## Other settings
 

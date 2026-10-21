@@ -44,6 +44,11 @@ test("chips name a league, or the sport, never a show", () => {
   assert.equal(leagueOf({ title: "High School Football", category: "Sport, Football" }), "High School Football");
   assert.equal(leagueOf({ title: "NFL: Bears at Bills" }), "NFL");
   assert.equal(leagueOf({ title: "WNBA Basketball" }), "WNBA");
+  assert.equal(leagueOf({ title: "Women's College Basketball", subtitle: "Ridge at Lakeside" }), "Women's College Basketball");
+  assert.equal(leagueOf({ title: "College Basketball" }), "College Basketball");
+  assert.equal(leagueOf({ title: "Fútbol", subtitle: "Liga MX: Norte vs. Sur" }), "Liga MX");
+  assert.equal(leagueOf({ title: "Racing" }, "indycar"), "IndyCar");
+  assert.equal(leagueOf({ title: "Football" }, "fcs"), "College Football");
   assert.equal(leagueOf({ title: "Bears at Bills" }, "nfl"), "NFL");
   assert.equal(leagueOf({ title: "Game" }, "ncaaf"), "College Football");
   assert.equal(leagueOf({ title: "Comets at Tigers", category: "Sport, Baseball" }), "Baseball");

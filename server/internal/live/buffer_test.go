@@ -540,3 +540,34 @@ func TestANewEncodeOnAnOlderTuneStartsInTheBuffer(t *testing.T) {
 	}
 	t.Fatal("no segment from both encodes")
 }
+
+// The rest of a show after a restart stops at the show's planned end, not
+// after the whole minutes it was asked for.
+func TestRecordingStopsAtThePlannedEnd(t *testing.T) {
+	h, st := bufferHub(t)
+	id := idOf(t, st, "4.1")
+	ends := time.Now().Add(4 * time.Second)
+	rec, err := h.RecordMeta(context.Background(), 1, store.Recording{ChannelID: id, Title: "Rest", EndsAt: &ends})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.EndsAt == nil || rec.EndsAt.Sub(ends).Abs() > time.Second {
+		t.Fatalf("ends %v, want %v", rec.EndsAt, ends)
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		saved, err := st.Recording(context.Background(), rec.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if saved.Status != "recording" {
+			if saved.Status != "complete" {
+				t.Fatalf("status %s %s", saved.Status, saved.Error)
+			}
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	h.StopRecord(rec.ID)
+	t.Fatal("still recording well past the planned end")
+}

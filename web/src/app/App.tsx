@@ -19,6 +19,8 @@ import "./app.css";
 
 const shell = bind(shellMessages);
 
+// Admins only, and only when the server clock looks wrong.
+const ZoneBanner = lazy(() => import("./ZoneBanner"));
 const Sports = lazy(() => import("../features/sports/Sports").then((m) => ({ default: m.Sports })));
 const RecordingsPage = lazy(() => import("../features/pages").then((m) => ({ default: m.RecordingsPage })));
 const SchedulePage = lazy(() => import("../features/pages").then((m) => ({ default: m.SchedulePage })));
@@ -83,7 +85,7 @@ export function App() {
 function Shell() {
   const { path, params } = useRoute();
   const layout = useLayout();
-  const { ready, booting, error, recordings, settings, notices, dismissNotice, update, server, freshAt, needsPair, notePaired } = useData();
+  const { ready, booting, error, recordings, settings, notices, dismissNotice, update, server, admin, freshAt, needsPair, notePaired } = useData();
   useEffect(() => {
     if (layout !== "tv") return;
     return installTvRemote();
@@ -236,6 +238,7 @@ function Shell() {
             {updateHowOpen ? <UpdateHow server={server} /> : null}
           </div>
         ) : null}
+        {!booting && admin && !immersive && !fullPlayer && path !== "/setup" && !firstRun ? <Suspense fallback={null}><ZoneBanner server={server} /></Suspense> : null}
         {!booting && notices[0] && !immersive && !fullPlayer ? (
           <HomeNotice key={`${notices.length}:${notices[0]}`} message={notices[0]} onDismiss={dismissNotice} />
         ) : null}

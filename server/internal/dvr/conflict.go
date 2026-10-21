@@ -41,6 +41,9 @@ type FixPlan struct {
 // key and are told apart by the start time, matching POST /schedule/skip.
 func SkipParts(air store.Airing) (key, starts string) {
 	starts = air.Start.UTC().Format(time.RFC3339)
+	if air.ManualPass != 0 {
+		return ManualSkipKey(air.ManualPass), starts
+	}
 	key = store.EpisodeKey(air.ProgramID, air.Title, air.Subtitle, air.ChannelID)
 	if key == "" {
 		key = store.EpisodeKey("once", air.Title, starts, air.ChannelID)

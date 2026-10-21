@@ -521,6 +521,8 @@ func (s *Server) skipAiring(w http.ResponseWriter, r *http.Request) {
 		Subtitle  string `json:"subtitle"`
 		ChannelID int64  `json:"channelId"`
 		Start     string `json:"start"`
+		// PassID names a manual pass's slot, which skips by pass, not by episode.
+		PassID int64 `json:"passId"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
@@ -537,6 +539,11 @@ func (s *Server) skipAiring(w http.ResponseWriter, r *http.Request) {
 	key := store.EpisodeKey(body.ProgramID, body.Title, body.Subtitle, body.ChannelID)
 	if key == "" {
 		key = store.EpisodeKey("once", body.Title, start, body.ChannelID)
+	}
+	if body.PassID != 0 {
+		if pass, err := s.passByID(r.Context(), body.PassID); err == nil && pass.Kind == "manual" {
+			key = dvr.ManualSkipKey(pass.ID)
+		}
 	}
 	if err := s.Store.SkipAiring(r.Context(), key, start); err != nil {
 		writeError(w, err)

@@ -33,6 +33,10 @@ func (s *Server) addPass(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	if kind, _ := body["kind"].(string); kind == "manual" {
+		s.addManualPass(w, r, body)
+		return
+	}
 	title, _ := body["title"].(string)
 	title = strings.TrimSpace(title)
 	if title == "" {
@@ -117,6 +121,9 @@ func (s *Server) updatePass(w http.ResponseWriter, r *http.Request) {
 // priority, and commercial marking: keep rules would delete other recordings
 // of the title, and the rest would move it. A team pass keeps its team.
 func applyPassRules(pass *store.Pass, body map[string]any) string {
+	if pass.Kind == "manual" {
+		return applyManualRules(pass, body)
+	}
 	orig := *pass
 	// A rename has its own field: Apple sends the title it last loaded with every change.
 	if v, ok := body["rename"].(string); ok && strings.TrimSpace(v) != "" {
@@ -176,19 +183,11 @@ func applyPassRules(pass *store.Pass, body map[string]any) string {
 		}
 	}
 	if v, ok := body["days"]; ok {
-		list, isList := v.([]any)
-		if v != nil && !isList {
-			return "Days is a list of weekdays, 0 for Sunday to 6 for Saturday."
+		days, msg := parseDays(v)
+		if msg != "" {
+			return msg
 		}
-		days := []int{}
-		for _, d := range list {
-			n, isNum := d.(float64)
-			if !isNum || n != float64(int(n)) || n < 0 || n > 6 {
-				return "Days is a list of weekdays, 0 for Sunday to 6 for Saturday."
-			}
-			days = append(days, int(n))
-		}
-		pass.Days = store.DaysOf(store.DaysMask(days))
+		pass.Days = days
 	}
 	if v, ok := body["matchKind"].(string); ok && v != "" {
 		if v != "title" && v != "contains" && v != "category" {
@@ -303,6 +302,14 @@ func (s *Server) previewPass(w http.ResponseWriter, r *http.Request) {
 			httpError(w, msg, http.StatusBadRequest)
 			return
 		}
+	} else if kind, _ := body["kind"].(string); kind == "manual" {
+		var msg string
+		if pass, msg = newManualPass(body); msg != "" {
+			httpError(w, msg, http.StatusBadRequest)
+			return
+		}
+		rankManual(&pass, body, passes)
+		pass.ID = -1
 	} else {
 		title, _ := body["title"].(string)
 		title = strings.TrimSpace(title)

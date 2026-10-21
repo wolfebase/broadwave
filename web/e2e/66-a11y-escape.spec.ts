@@ -23,12 +23,12 @@ test("Escape closes a delete confirm, a pass editor, and a multiview menu", asyn
 
   await page.goto("/schedule");
   await settle(page);
-  await page.getByRole("button", { name: "New pass" }).click();
-  const draft = page.getByRole("form", { name: "New pass" });
+  await page.getByRole("button", { name: "New series" }).click();
+  const draft = page.getByRole("form", { name: "New series" });
   await draft.getByRole("textbox", { name: "Title", exact: true }).focus();
   await page.keyboard.press("Escape");
   await expect(draft).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "New pass" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "New series" })).toBeFocused();
   await expect(page).toHaveURL(/\/schedule/);
 
   const started = new Date(Date.now() - 86_400_000).toISOString().replace(/\.\d+Z$/, "Z");

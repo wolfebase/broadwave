@@ -81,7 +81,8 @@ func (p *TheSportsDB) Scoreboard(ctx context.Context, leagueID string, day time.
 	}
 	sport, ok := theSportsDBSport[league.ID]
 	if !ok {
-		return nil, fmt.Errorf("unknown league %s", leagueID)
+		// A league this feed doesn't carry is an empty board, not a failure to back off from.
+		return []Game{}, nil
 	}
 	base := p.Base
 	if base == "" {
@@ -228,14 +229,14 @@ var theSportsDBSport = map[string]string{
 	"nfl": "American Football", "ncaaf": "American Football",
 	"nba": "Basketball", "wnba": "Basketball", "ncaab": "Basketball",
 	"mlb": "Baseball", "nhl": "Ice Hockey",
-	"mls": "Soccer", "nwsl": "Soccer", "epl": "Soccer",
-	"f1": "Motorsport", "nascar": "Motorsport",
+	"mls": "Soccer", "nwsl": "Soccer", "epl": "Soccer", "ligamx": "Soccer",
+	"f1": "Motorsport", "nascar": "Motorsport", "indycar": "Motorsport",
 }
 
 var theSportsDBLeague = map[string]string{
 	"nfl": "NFL", "ncaaf": "NCAA",
 	"nba": "NBA", "wnba": "WNBA", "ncaab": "NCAA",
 	"mlb": "MLB", "nhl": "NHL",
-	"mls": "MLS", "nwsl": "NWSL", "epl": "Premier League",
-	"f1": "Formula", "nascar": "NASCAR",
+	"mls": "MLS", "nwsl": "NWSL", "epl": "Premier League", "ligamx": "Liga MX",
+	"f1": "Formula", "nascar": "NASCAR", "indycar": "IndyCar",
 }

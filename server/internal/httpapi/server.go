@@ -21,10 +21,11 @@ import (
 	"broadwave/internal/cloudflare"
 	"broadwave/internal/discovery"
 	"broadwave/internal/dvr"
-	"broadwave/internal/guide"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
+	"broadwave/internal/network"
 	"broadwave/internal/realtime"
+	"broadwave/internal/region"
 	"broadwave/internal/source"
 	"broadwave/internal/sports"
 	"broadwave/internal/store"
@@ -43,6 +44,8 @@ type Server struct {
 	Assets  fs.FS
 	Dev     bool
 	Version string
+	// Zone is the server's time zone. Nil reads TZ and the host clock.
+	Zone func() region.Zone
 	// DiscoveryKey is the base64 Ed25519 public key for address follow. Empty omits it.
 	DiscoveryKey string
 	// CastAppID is the Google Cast application id from BROADWAVE_CAST_APP_ID.
@@ -219,6 +222,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /signals/check", s.checkSignals)
 	api("POST /recordings", s.startRecording)
 	api("POST /recordings/nfo", s.writeNFOs)
+	api("POST /recordings/import", s.importFound)
 	api("POST /recordings/{id}/stop", s.stopRecording)
 	api("GET /recordings", s.recordings)
 	api("DELETE /recordings/{id}", s.deleteRecording)
@@ -543,7 +547,7 @@ func (s *Server) channels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) affiliations(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"calls": guide.Calls()})
+	writeJSON(w, http.StatusOK, map[string]any{"calls": network.Calls()})
 }
 
 func (s *Server) starNetworks(w http.ResponseWriter, r *http.Request) {
@@ -566,18 +570,9 @@ func withNetworks(channels []store.Channel) []store.Channel {
 		if channels[i].DisplayName != "" && channels[i].DisplayName != channels[i].GuideName {
 			names = append(names, channels[i].DisplayName)
 		}
-		channels[i].Network = guide.Affiliation(names)
+		channels[i].Network = network.Of(names)
 	}
 	return channels
-}
-
-func bigFour(network string) bool {
-	switch network {
-	case "ABC", "CBS", "FOX", "NBC":
-		return true
-	default:
-		return false
-	}
 }
 
 func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {

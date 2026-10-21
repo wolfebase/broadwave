@@ -439,3 +439,32 @@ html[data-layout="tv"] .pass-rank {
   width: 40px;
   height: 40px;
 }
+
+/* New series and Record a time sit together; on a phone they wrap under the heading. */
+.passes-adds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The kind of rule in plain words, ahead of its name. */
+.tag.pass-kind {
+  margin-right: var(--space-1);
+  font-size: var(--type-caption-size, 0.75rem);
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
+.tag.pass-kind[data-kind="manual"] {
+  background: color-mix(in srgb, var(--color-tally) 16%, transparent);
+  color: var(--color-text);
+}
+
+.timed-editor .timed-title {
+  width: min(100%, 28rem);
+}
+
+.timed-editor input[type="date"],
+.timed-editor input[type="time"] {
+  min-width: 9rem;
+}

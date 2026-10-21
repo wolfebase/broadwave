@@ -31,7 +31,8 @@ func ApplyLibrary(items []Planned, passes []store.Pass, recs []store.Recording, 
 			// Asked for by name: record it even if this episode was recorded before.
 			continue
 		}
-		if key != "" && haveEpisode(pass, recs, seen, key) {
+		// A manual pass records the time it was given, whatever the guide calls it.
+		if pass.Kind != "manual" && key != "" && haveEpisode(pass, recs, seen, key) {
 			items[i].Skipped = true
 			items[i].Reason = "Already recorded"
 			continue
@@ -101,7 +102,7 @@ func sameShow(pass store.Pass, rec store.Recording) bool {
 	if rec.PassID != 0 {
 		return rec.PassID == pass.ID
 	}
-	if pass.Kind == "team" || pass.Kind == "once" {
+	if pass.Kind == "team" || pass.Kind == "once" || pass.Kind == "manual" {
 		return false
 	}
 	if kind := strings.ToLower(strings.TrimSpace(pass.MatchKind)); kind != "" && kind != "title" {

@@ -142,6 +142,8 @@ type Hub struct {
 	// NoAC4 is set when ffmpeg cannot decode AC-4: an ATSC 3.0 channel then
 	// plays its picture without sound instead of not at all.
 	NoAC4 bool
+	// ac4Told is the one warning that an AC-4 channel plays without sound.
+	ac4Told sync.Once
 
 	// OnChange is called, outside the hub lock, when viewers, renditions,
 	// recordings, or tuners change.
@@ -1138,9 +1140,7 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 	if want.Codec == "hevc" && !h.HEVC {
 		want.Codec = ""
 	}
-	if h.NoAC4 {
-		want = Unvoiced(f.channel.AudioCodec, want)
-	}
+	want = h.unvoiced(f.channel, want)
 	if want.ABR {
 		return h.ensureLadderLocked(f, want, frame)
 	}
@@ -2388,7 +2388,8 @@ func clampRecordMinutes(minutes int) int {
 }
 
 // RecordMeta records the original broadcast of a channel. It shares the tuned
-// frequency with anyone watching and starts no transcode.
+// frequency with anyone watching and starts no transcode. It stops after
+// minutes, or at meta.EndsAt when that comes first.
 func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording) (store.Recording, error) {
 	h.preemptScan()
 	channelID := meta.ChannelID
@@ -2448,6 +2449,11 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		started = at
 	}
 	ends := time.Now().Add(time.Duration(minutes) * time.Minute)
+	// A planned end (the rest of a show after a restart) wins over the
+	// whole minutes, which round up.
+	if meta.EndsAt != nil && meta.EndsAt.After(time.Now()) && meta.EndsAt.Before(ends) {
+		ends = *meta.EndsAt
+	}
 	if title == "" {
 		title = f.channel.DisplayName
 	}
@@ -3630,7 +3636,7 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	h.storeLengthLocked(rec)
 	_ = h.Store.FinishRecording(context.Background(), rec.id, status, errText)
 	if saved, err := h.Store.Recording(context.Background(), rec.id); err == nil {
-		writeSidecar(saved)
+		WriteSidecar(saved)
 		message := fmt.Sprintf("Saved %s on %s", saved.Title, saved.GuideNumber)
 		if status == "interrupted" {
 			message = fmt.Sprintf("Paused %s on %s for a restart", saved.Title, saved.GuideNumber)
@@ -3689,6 +3695,48 @@ func (h *Hub) rememberDuration(rec store.Recording) {
 	_ = h.Store.SetDuration(context.Background(), rec.ID, seconds)
 }
 
+// RecordingsReady checks the recordings folder before a recording: a folder
+// used before must still be there (a share not mounted is not replaced by a
+// new folder on the boot disk), and it must take a file.
+func (h *Hub) RecordingsReady(ctx context.Context) error {
+	if h.Dir == "" {
+		return nil
+	}
+	if err := h.prepareRecordings(ctx); err != nil {
+		return err
+	}
+	return disk.Writable(h.Recordings())
+}
+
+func (h *Hub) prepareRecordings(ctx context.Context) error {
+	dir := h.Recordings()
+	known := false
+	if h.Store != nil {
+		known, _ = h.Store.HasRecordingsIn(ctx, dir)
+	}
+	return disk.Prepare(dir, h.Dir, known)
+}
+
+// unvoiced drops the sound of an AC-4 channel when ffmpeg cannot decode it,
+// and says so in the log the first time.
+func (h *Hub) unvoiced(ch store.SourceChannel, want Rendition) Rendition {
+	if !h.NoAC4 {
+		return want
+	}
+	got := Unvoiced(ch.AudioCodec, want)
+	if got.Audio != want.Audio {
+		h.ac4Told.Do(func() {
+			slog.Warn(fmt.Sprintf("%s has AC-4 sound, and this ffmpeg has no AC-4 decoder: ATSC 3.0 channels play without sound (the Docker image's ffmpeg has one)", ch.GuideNumber))
+		})
+	}
+	return got
+}
+
+// IsAC4 reports the sound of ATSC 3.0.
+func IsAC4(codec string) bool {
+	return codecName(codec) == "ac4"
+}
+
 // diskStat reads free space. Tests stand in for a disk that reports a delete late.
 var diskStat = disk.Stat
 
@@ -3701,7 +3749,7 @@ func (h *Hub) ensureSpace(ctx context.Context) error {
 		return err
 	}
 	dir := h.Recordings()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := h.prepareRecordings(ctx); err != nil {
 		return err
 	}
 	if err := h.keepReserve(ctx, dir, disk.WatermarkBytes(values["watermarkGB"])); err != nil {

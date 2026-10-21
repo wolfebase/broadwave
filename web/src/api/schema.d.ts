@@ -410,7 +410,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Favorite ABC, CBS, FOX, and NBC. The server picks the network from the guide, then from its call-sign table. */
+        /** @description Favorite the main networks (ABC, CBS, FOX, and NBC; in Canada CBC, CTV, Global, Citytv, Radio-Canada, TVA, and Noovo). The server picks the network from the guide, the station's name on the air, then its call-sign rules and table. */
         post: operations["starNetworkFavorites"];
         delete?: never;
         options?: never;
@@ -425,7 +425,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Call sign to network. The value is ABC, CBS, FOX, or NBC. */
+        /** @description Call sign to network, the fallback table for ABC, CBS, FOX, and NBC stations. Most networks are read from the guide and the station's name on the air instead, so a station missing here can still have a network. */
         get: operations["listAffiliations"];
         put?: never;
         post?: never;
@@ -552,9 +552,15 @@ export interface paths {
         };
         /**
          * @description Listings that have not ended, from every day the guide has, on the channels the guide shows
-         *     (one row per channel when two tuners carry it): shows whose title has the words first, then
-         *     the rest, each on now first and then by start time, with at most six airings of one show (a
-         *     game is its own show) and 60 in all; and matching recordings.
+         *     (one row per channel when two tuners carry it), best match first: a channel number ("4.1",
+         *     "4-1", "41") is that channel and its ATSC 3.0 twin, exact before prefix (4.1, then 4.10; never
+         *     41.1); then the words in the title (the whole title, whole words, word starts), the episode
+         *     title, the channel's name or call sign, the cast, and the category. A listing that only
+         *     mentions the words in its description is left out when anything matches better. Paid
+         *     programming and shopping rank last unless the title is the words. Within a rank, on now
+         *     first and then by start time, with at most six airings of one show (a game is its own show)
+         *     and 60 in all. Recordings are newest first; one that only mentions the words is left out
+         *     when another is named by them.
          */
         get: operations["search"];
         put?: never;
@@ -766,7 +772,7 @@ export interface paths {
         };
         get: operations["listRecordings"];
         put?: never;
-        /** @description Record a channel now. When the guide has the current airing, the recording runs to its end plus padding, for a day at most. */
+        /** @description Record a channel now. With minutes, the recording runs that long from now and stops there, with no padding, even when the guide's current airing runs longer; it still takes that airing's title and details. Without minutes, when the guide has the current airing, the recording covers it: from its start when the tuner's buffer still holds it, to its end plus padding. A day at most. */
         post: operations["startRecording"];
         delete?: never;
         options?: never;
@@ -785,6 +791,23 @@ export interface paths {
         put?: never;
         /** @description Write or refresh the .nfo beside every finished recording in the recordings folder. A library folder is left alone. */
         post: operations["writeRecordingNfo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/recordings/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Add recordings in the recordings folder that the catalog does not have: each file with the .json the server wrote beside it. Recordings the catalog lost track of are followed first, so a moved one is not added twice. A restore does this by itself after it answers. 409 when the recordings folder is not there (a drive not mounted). */
+        post: operations["importFoundRecordings"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1102,7 +1125,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Plan the next 14 days as if this pass were saved. With id, the rules edit that pass (rename for a new title); without, it is a new series pass. Nothing is saved. */
+        /** @description Plan the next 14 days as if this pass were saved. With id, the rules edit that pass (rename for a new title); without, it is a new series pass, or a new manual pass with kind manual. Nothing is saved. */
         post: operations["previewPass"];
         delete?: never;
         options?: never;
@@ -1651,7 +1674,7 @@ export interface paths {
         /**
          * @description After a tuner is in the lineup, finish setup on the server.
          *     Scan when the lineup is empty, load listings, check the recordings folder,
-         *     star ABC, CBS, FOX, and NBC, time the encoder, and summarize the antenna.
+         *     star the main networks, time the encoder, and summarize the antenna.
          *     Poll GET until running is false. The ready line is the summary.
          */
         post: operations["startSetupFinish"];
@@ -1776,7 +1799,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Put the catalog back to this copy. Recordings on disk are left in place. */
+        /** @description Put the catalog back to this copy. Settings, passes, sources, and virtual channels are replaced; channels keep the copy's favorites, names, and hidden state; recordings, paired devices, and followed teams the copy has are added to the ones here. Recordings on disk are left in place; afterwards the server follows moved ones and adds the ones in the recordings folder the copy lacked. */
         post: operations["restoreCatalogBackup"];
         delete?: never;
         options?: never;
@@ -2032,7 +2055,7 @@ export interface components {
         Error: {
             /**
              * @description Stable machine code. An unknown code is still a failure.
-             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
+             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, recordings_missing, recordings_unwritable, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
              */
             code: string;
             /** @description Short text safe to show a user. */
@@ -2111,6 +2134,17 @@ export interface components {
             castAppId?: string;
             /** @description The same server over HTTPS and HTTP/2 on the home network, such as https://lan.abcdefghij.direct.wolfeup.com:8443. Present once a trusted certificate is live. Apps prefer it when it answers and stay on this address when it does not (a router that blocks private answers to public names, a phone away from home). */
             secureUrl?: string;
+            /** @description The server's time zone from TZ or the host clock, such as America/Denver, or an abbreviation when the host has no zone name. Empty when nothing is set (the server runs on UTC). Omitted by older servers. */
+            timeZone?: string;
+            /** @description False when TZ names a zone that does not exist (America/Denvr): the server then runs on UTC. Omitted by older servers. */
+            timeZoneValid?: boolean;
+            /** @description The server clock's offset from UTC right now, in minutes (-360 for Mountain daylight time). Compare it with the device's offset to spot a server set to the wrong zone. Omitted by older servers. */
+            utcOffsetMinutes?: number;
+            /**
+             * @description The country the server is set up for: BROADWAVE_COUNTRY, else the country of its time zone, else US. Picks free channel regions and which networks setup looks for. Omitted by older servers.
+             * @enum {string}
+             */
+            country?: "US" | "CA";
         };
         DirectStatus: {
             enabled: boolean;
@@ -2143,6 +2177,13 @@ export interface components {
             notesUrl: string;
             /** @description Banner text, for example Broadwave 0.7 is available. */
             message: string;
+            /**
+             * @description How this server was installed, as far as it can tell: an Unraid template (HOST_OS=Unraid), another container (Docker, Compose, Podman, a NAS app), or the file from a release. Omitted by older servers.
+             * @enum {string}
+             */
+            install?: "unraid" | "docker" | "binary";
+            /** @description One or two sentences on updating this install, for a How to update line under the banner. Omitted by older servers. */
+            howTo?: string;
         };
         Device: {
             deviceId: string;
@@ -2247,7 +2288,7 @@ export interface components {
             artWidth?: number;
             /** @description Native logo height in pixels. Omitted until the picture has been measured. */
             artHeight?: number;
-            /** @description ABC, CBS, FOX, or NBC when the server can tell. Empty otherwise. */
+            /** @description The broadcast network when the server can tell, for voice and search: ABC, CBS, FOX, NBC, PBS, CW, MyNetworkTV, ION, Univision, Telemundo, UniMás, CBC, Radio-Canada, CTV, CTV 2, Global, Citytv, TVO, Télé-Québec, TVA, or Noovo. Read from the guide, then the name on the air (FOX 5, NBC4, UNIVSN), then the call sign. Empty otherwise. */
             network?: string;
             /** @description The tuner marks this channel DRM or copy protected (for example ATSC 3.0 DRM). It stays hidden; one with a clear 1.0 twin plays as that channel (playsAs). */
             protected?: boolean;
@@ -2676,7 +2717,7 @@ export interface components {
             title: string;
             /** Format: int64 */
             channelId?: number;
-            /** @description series, team, or once */
+            /** @description series, team, once, or manual. A manual pass records channelId from timeStart for duration minutes, on date or on each of days, whether or not the guide lists anything then. */
             kind?: string;
             padBefore?: number;
             padAfter?: number;
@@ -2689,7 +2730,7 @@ export interface components {
             limitCount?: number;
             rerecord?: boolean;
             commercials?: boolean;
-            /** @description HH:MM local */
+            /** @description HH:MM local. A manual pass starts recording then on the server's clock. */
             timeStart?: string;
             /** @description HH:MM local */
             timeEnd?: string;
@@ -2699,16 +2740,35 @@ export interface components {
             days?: number[];
             /**
              * Format: date-time
-             * @description Start of the one airing a once pass records
+             * @description Start of the one airing a once pass records, or of a one-time manual pass's recording
              */
             airingStart?: string;
+            /** @description Manual passes: minutes recorded from timeStart */
+            duration?: number;
+            /**
+             * Format: date
+             * @description One-time manual passes: the server-local day (YYYY-MM-DD) it records on. A manual pass with days repeats instead.
+             */
+            date?: string;
         };
         NewPass: {
-            /** @description The title, the words a title contains, or the category. A blank title, including one that is only spaces, is 400. */
+            /** @description The title, the words a title contains, or the category. A blank title, including one that is only spaces, is 400. For kind manual it is optional: the recording takes the guide's title for that time, or the channel's name. */
             title: string;
             /**
+             * @description manual records channelId from timeStart (HH:MM on the server's clock) for duration minutes, once on date or on each of days; padBefore and padAfter default to 0, and a one-time pass ranks above every pass unless priority is sent. A manual pass reads only channelId, timeStart, duration, date, days, padBefore, padAfter, priority, keepMode, keepCount, limitCount, and commercials. A missing channel, a bad time, a duration outside 1 to 480, no date and no days, or a one-time pass that has already ended is 400. Absent is a series or once pass.
+             * @enum {string}
+             */
+            kind?: "series" | "manual";
+            /** @description kind manual: minutes to record */
+            duration?: number;
+            /**
+             * Format: date
+             * @description kind manual without days: the server-local day (YYYY-MM-DD)
+             */
+            date?: string;
+            /**
              * Format: int64
-             * @description 0 records on any channel
+             * @description 0 records on any channel. Required for kind manual.
              */
             channelId?: number;
             padBefore?: number;
@@ -2787,6 +2847,8 @@ export interface components {
             skipped: boolean;
             reason?: string;
             suggestion?: components["schemas"]["Suggestion"];
+            /** @description A manual pass's slot. Its airing id is negative and made up for the slot; its times are the pass's, and its title and details are the guide's listing for most of that time when there is one. */
+            manual?: boolean;
         };
         Event: {
             /** Format: int64 */
@@ -4114,7 +4176,7 @@ export interface operations {
     search: {
         parameters: {
             query?: {
-                /** @description Words to match in titles, descriptions, cast, and recordings. */
+                /** @description Words to match in titles, episode titles, channels, cast, categories, descriptions, and recordings, or a channel number. */
                 q?: string;
             };
             header?: never;
@@ -4142,8 +4204,8 @@ export interface operations {
     scoreboard: {
         parameters: {
             query?: {
-                /** @description One of nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, or nascar. Blank asks for every league. Anything else, including NFL, is 400. */
-                league?: "" | "nfl" | "ncaaf" | "nba" | "wnba" | "ncaab" | "mlb" | "nhl" | "mls" | "nwsl" | "epl" | "f1" | "nascar";
+                /** @description One of nfl, ncaaf, fcs, nba, wnba, ncaab, ncaaw, mlb, nhl, mls, nwsl, epl, ligamx, f1, nascar, or indycar. Blank asks for every league. Anything else, including NFL, is 400. */
+                league?: "" | "nfl" | "ncaaf" | "fcs" | "nba" | "wnba" | "ncaab" | "ncaaw" | "mlb" | "nhl" | "mls" | "nwsl" | "epl" | "ligamx" | "f1" | "nascar" | "indycar";
                 /** @description Calendar day. Blank is today on the server. */
                 date?: string;
             };
@@ -4524,7 +4586,7 @@ export interface operations {
                 "application/json": {
                     /** Format: int64 */
                     channelId: number;
-                    /** @description How long to record, in minutes. Blank or 0 records for an hour, or until the current listing ends when that is longer. A day at most. */
+                    /** @description How long to record from now, in minutes; the recording stops then. Blank or 0 records the current listing to its end plus padding, or an hour when the guide has none. A day at most. */
                     minutes?: number;
                     title?: string;
                 };
@@ -4543,7 +4605,7 @@ export interface operations {
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
-            /** @description `no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. `unavailable`: the player is not configured. */
+            /** @description `no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. `recordings_missing`: the recordings folder the server used is not there (a drive or share not mounted); the server does not make a new one. `recordings_unwritable`: the folder refuses a file (check PUID/PGID or the mount). `unavailable`: the player is not configured. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -4576,6 +4638,30 @@ export interface operations {
                 };
             };
             409: components["responses"]["Error"];
+        };
+    };
+    importFoundRecordings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many recordings were added */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        added: number;
+                    };
+                };
+            };
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
         };
     };
     deleteRecording: {
@@ -5003,6 +5089,11 @@ export interface operations {
                     /** Format: int64 */
                     channelId?: number;
                     /**
+                     * Format: int64
+                     * @description The planned item's passId. For a manual pass's slot it skips that slot alone, not the listing's episode; other passes ignore it.
+                     */
+                    passId?: number;
+                    /**
                      * Format: date-time
                      * @description An offset is accepted and stored as UTC, which is how the skip is matched. A missing or unreadable time is 400.
                      */
@@ -5145,6 +5236,18 @@ export interface operations {
             content: {
                 "application/json": {
                     /**
+                     * @description With id absent or 0: manual previews a new manual pass, whose title may be blank. Otherwise ignored.
+                     * @enum {string}
+                     */
+                    kind?: "series" | "manual";
+                    /** @description Manual passes only: minutes to record from timeStart. */
+                    duration?: number;
+                    /**
+                     * Format: date
+                     * @description Manual passes only: the server-local day (YYYY-MM-DD) a pass without days records on.
+                     */
+                    date?: string;
+                    /**
                      * Format: int64
                      * @description Absent or 0 previews a new series pass. Any other id previews an edit of that pass.
                      */
@@ -5247,6 +5350,13 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Manual passes only: minutes to record from timeStart. */
+                    duration?: number;
+                    /**
+                     * Format: date
+                     * @description Manual passes only: the server-local day (YYYY-MM-DD) a pass without days records on. Sending days that are not empty makes the pass repeat and drops the date.
+                     */
+                    date?: string;
                     /**
                      * Format: int64
                      * @description Ignored. The path id is the pass.
@@ -6288,7 +6398,15 @@ export interface operations {
                     };
                 };
             };
-            503: components["responses"]["Error"];
+            /** @description `recordings_missing` or `recordings_unwritable`: see POST /recordings. `unavailable`: the player is not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     storageShows: {

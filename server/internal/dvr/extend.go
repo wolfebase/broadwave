@@ -14,6 +14,8 @@ const (
 	postTail      = 8 * time.Minute
 	overtimeAfter = 3*time.Hour + 15*time.Minute
 	sportsPad     = 60 * time.Minute
+	shortPad      = 30 * time.Minute
+	longPad       = 90 * time.Minute
 )
 
 // Extend is a new stop time for a recording that is following a game.
@@ -64,20 +66,46 @@ func NextExtension(id int64, ends time.Time, game sports.Game, found bool, now t
 	return Extend{ID: id, Until: horizon, Note: note}, true
 }
 
-// SportsTail is an hour after the listing when a sports show is not a matched game.
+// SportsTail is the time after the listing a sports show keeps recording when
+// it is not a matched game the scoreboard can follow. It fits the sport: a
+// basketball, hockey, or soccer game rarely runs 30 minutes over, football
+// and baseball an hour, and a golf round, race, or tennis match (rain,
+// playoffs, a fifth set) an hour and a half. Talk and highlight shows end on time.
 func SportsTail(airing store.Airing) time.Duration {
-	if airing.GameID != "" || !sportsCategory(airing.Category) {
+	if airing.GameID != "" || airing.ManualPass != 0 {
 		return 0
 	}
-	return sportsPad
+	text := airing.Category
+	// The title names the sport only under a sports category: a film called
+	// "Football" is not a game.
+	if strings.Contains(strings.ToLower(text), "sport") {
+		text += " " + airing.Title
+	}
+	return sportsTail(text)
 }
 
-func sportsCategory(category string) bool {
-	cat := strings.ToLower(category)
-	for _, word := range []string{"sport", "football", "basketball", "baseball", "hockey", "soccer"} {
-		if strings.Contains(cat, word) {
-			return true
+func sportsTail(text string) time.Duration {
+	text = strings.ToLower(text)
+	has := func(words ...string) bool {
+		for _, word := range words {
+			if strings.Contains(text, word) {
+				return true
+			}
 		}
+		return false
 	}
-	return false
+	switch {
+	case has("sports talk", "sports non-event", "sports news", "pregame", "pre-game", "postgame", "post-game", "highlights", "magazine"):
+		return 0
+	case has("golf", "tennis", "racing", "motorsport", "nascar", "indycar", "formula 1", "formula one", "cricket"):
+		return longPad
+	case has("football", "baseball", "softball"):
+		return sportsPad
+	case has("basketball", "hockey", "soccer", "fútbol", "futbol", "volleyball", "lacrosse", "rugby"):
+		return shortPad
+	case has("sport"):
+		return sportsPad
+	default:
+		return 0
+	}
 }

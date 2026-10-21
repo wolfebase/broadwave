@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,11 +25,16 @@ type Facts struct {
 	Mounts         string
 	FreeBytes      int64
 	Timezone       string
-	Now            time.Time
-	UID            int
-	PUID           string
-	PGID           string
-	TunerQuiet     bool
+	// TimezoneInvalid is TZ naming a zone that does not exist.
+	TimezoneInvalid bool
+	Now             time.Time
+	UID             int
+	PUID            string
+	PGID            string
+	TunerQuiet      bool
+	// RecordingsProblem is why a recording could not start in the recordings
+	// folder right now (not mounted, can't write), in the server's words.
+	RecordingsProblem string
 }
 
 // Notes returns every check that failed.
@@ -44,6 +50,9 @@ func Notes(f Facts) []Note {
 	if f.HostHasGPU && !f.DevDri {
 		out = append(out, Note{ID: "dri", Message: "This server has graphics, but the container can't use them. Pass /dev/dri through."})
 	}
+	if f.RecordingsProblem != "" {
+		out = append(out, Note{ID: "recordings", Message: f.RecordingsProblem})
+	}
 	if unmounted(f) {
 		out = append(out, Note{ID: "volume", Message: "Recordings are on the container disk. Map a folder for them so they survive a rebuild."})
 	}
@@ -52,6 +61,8 @@ func Notes(f Facts) []Note {
 	}
 	if strings.TrimSpace(f.Timezone) == "" {
 		out = append(out, Note{ID: "tz", Message: "The time zone is not set. Set TZ so the guide uses your local time."})
+	} else if f.TimezoneInvalid {
+		out = append(out, Note{ID: "tzname", Message: "TZ is " + strconv.Quote(strings.TrimSpace(f.Timezone)) + ", which is not a time zone, so this server runs on UTC. Use a name like America/New_York."})
 	}
 	if !f.Now.IsZero() && (f.Now.Year() < 2024 || f.Now.Year() > 2036) {
 		out = append(out, Note{ID: "clock", Message: "This server's clock is off. Whole-home sync needs the right time. Turn on network time."})

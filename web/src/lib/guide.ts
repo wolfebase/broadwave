@@ -1,6 +1,7 @@
 import { guideMessages } from "../i18n/messages/guide.ts";
 import { bind, formatDateTime, formatTime } from "../i18n/runtime.ts";
 import type { Airing, Channel, PlannedAiring, Recording } from "../types";
+import { primeHour } from "./primeHour.ts";
 
 const t = bind(guideMessages);
 
@@ -128,10 +129,13 @@ export function sortChannels(channels: Channel[], lineup: readonly Channel[] = c
   });
 }
 
-/** 8:00 PM on the viewer's clock, rolling to the next day once that hour has passed. */
-export function primeTime(now: number): number {
+/**
+ * When prime time starts on the viewer's clock (8 PM, or 7 PM in the Central
+ * and Mountain zones), rolling to the next day once that hour has passed.
+ */
+export function primeTime(now: number, hour: number = primeHour(now)): number {
   const at = new Date(now);
-  at.setHours(20, 0, 0, 0);
+  at.setHours(hour, 0, 0, 0);
   if (at.getTime() < now) at.setDate(at.getDate() + 1);
   return at.getTime();
 }

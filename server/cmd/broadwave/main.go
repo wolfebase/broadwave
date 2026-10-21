@@ -19,6 +19,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	// The zone database, so TZ works on a host without zone files.
+	_ "time/tzdata"
 
 	"broadwave/internal/backup"
 	"broadwave/internal/cloudflare"
@@ -31,6 +33,7 @@ import (
 	"broadwave/internal/logbuf"
 	"broadwave/internal/psip"
 	"broadwave/internal/realtime"
+	"broadwave/internal/region"
 	"broadwave/internal/source"
 	"broadwave/internal/sports"
 	"broadwave/internal/store"
@@ -68,6 +71,7 @@ func main() {
 		os.Exit(code)
 	}
 	logbuf.Install(os.Stderr)
+	warnZone(region.Local())
 	if err := doctor.ApplyIdentity(*configDir, recordingsDir(*configDir, *recordings)); err != nil {
 		slog.Error(fmt.Sprintf("identity: %v", err))
 		os.Exit(1)
@@ -149,7 +153,9 @@ func main() {
 	live.Reap(work)
 	hub := live.New(st, work, ffmpegPath, encoder)
 	hub.RecordingsDir = recordingsDir(*configDir, *recordings)
-	if hub.NoAC4 = live.MissingAC4(ffmpegPath); hub.NoAC4 {
+	// Only a lineup with ATSC 3.0 sound needs the decoder; the first such
+	// channel played says so too.
+	if hub.NoAC4 = live.MissingAC4(ffmpegPath); hub.NoAC4 && hasAC4Channel(st) {
 		slog.Warn("ffmpeg has no AC-4 decoder: ATSC 3.0 channels play without sound (the Docker image's ffmpeg has one)")
 	}
 	hub.Host = host
@@ -187,6 +193,9 @@ func main() {
 		}()
 	}
 	slog.Info("encoder: " + encoderLine(encoder, hub.DeintBroadcast, hub.DeintSmooth))
+	if err := hub.RecordingsReady(context.Background()); err != nil {
+		slog.Warn(fmt.Sprintf("recordings: %s (%s)", err, hub.Recordings()))
+	}
 	bus := realtime.NewBus()
 	bus.MediaStart = hub.EarliestMedia
 	bus.LongHold = hub.LongGroups
@@ -546,4 +555,31 @@ func foundOnce(st *store.Store) func(n int) bool {
 		lastN, lastV = n, v.Channels
 		return changed
 	}
+}
+
+// warnZone says so at start when TZ is mistyped or missing: the guide, pass
+// times, and recordings would quietly run on UTC.
+func warnZone(zone region.Zone) {
+	switch {
+	case !zone.Valid:
+		slog.Warn(fmt.Sprintf("time zone: TZ=%q is not a time zone, so this server runs on UTC and records at the wrong hour. Use a name like America/New_York.", zone.Name))
+	case !zone.Set():
+		slog.Warn("time zone: TZ is not set, so this server runs on UTC. Set TZ to your time zone, like America/New_York.")
+	default:
+		slog.Info("time zone: " + zone.Name)
+	}
+}
+
+// hasAC4Channel reports a channel in the lineup with ATSC 3.0 sound.
+func hasAC4Channel(st *store.Store) bool {
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil {
+		return false
+	}
+	for _, ch := range channels {
+		if live.IsAC4(ch.AudioCodec) {
+			return true
+		}
+	}
+	return false
 }

@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"strings"
 
-	"broadwave/internal/fetchguard"
 	"sync"
 	"time"
+
+	"broadwave/internal/fetchguard"
+	"broadwave/internal/region"
 )
 
 // FreeGroup is the guide group for channels that come from the internet.
@@ -55,7 +57,23 @@ type freePort struct {
 var freePorts = []freePort{
 	{5523, "fastchannels", "FastChannels", "/feeds/default/m3u", "/feeds/default/epg.xml"},
 	{7777, "pluto", "Pluto", "/playlist.m3u", "/epg.xml"},
-	{8182, "samsung", "Samsung TV Plus", "/playlist.m3u8?regions=us", "/epg.xml"},
+	{8182, "samsung", "Samsung TV Plus", "/playlist.m3u8?regions=" + regionToken, "/epg.xml"},
+}
+
+// regionToken stands in for the server's country in a playlist path.
+const regionToken = "{region}"
+
+// FreeRegion is the Samsung TV Plus region asked for: ca for a server in
+// Canada, else us. Tests set it.
+var FreeRegion = func() string {
+	if region.Country() == "CA" {
+		return "ca"
+	}
+	return "us"
+}
+
+func freePath(path string) string {
+	return strings.ReplaceAll(path, regionToken, FreeRegion())
 }
 
 // FindFree probes hosts for FastChannels, Pluto, and Samsung generators.
@@ -123,7 +141,7 @@ func FindFree(ctx context.Context, hosts []string) []Feed {
 
 func probeFree(ctx context.Context, client *http.Client, host string, port freePort) (Feed, bool) {
 	base := "http://" + net.JoinHostPort(host, fmt.Sprintf("%d", port.port))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+port.playlist, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+freePath(port.playlist), nil)
 	if err != nil {
 		return Feed{}, false
 	}
@@ -137,14 +155,14 @@ func probeFree(ctx context.Context, client *http.Client, host string, port freeP
 		if port.kind == "fastchannels" && fastChannelsAPI(ctx, client, base) {
 			return Feed{
 				Kind: port.kind, Name: port.name, Addr: base,
-				Playlist: base + port.playlist, Guide: base + port.guide,
+				Playlist: base + freePath(port.playlist), Guide: base + port.guide,
 			}, true
 		}
 		return Feed{}, false
 	}
 	return Feed{
 		Kind: port.kind, Name: port.name, Addr: base,
-		Playlist: base + port.playlist, Guide: base + port.guide,
+		Playlist: base + freePath(port.playlist), Guide: base + port.guide,
 	}, true
 }
 
@@ -161,7 +179,7 @@ func FeedByKind(kind, addr string) (Feed, error) {
 		}
 		return Feed{
 			Kind: port.kind, Name: port.name, Addr: addr,
-			Playlist: addr + port.playlist, Guide: addr + port.guide,
+			Playlist: addr + freePath(port.playlist), Guide: addr + port.guide,
 		}, nil
 	}
 	return Feed{}, fmt.Errorf("that is not a free-channel server")

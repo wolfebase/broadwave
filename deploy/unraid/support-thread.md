@@ -22,7 +22,7 @@ Install notes: https://github.com/wolfebase/broadwave/blob/main/docs/guide/insta
 - Config is the database and the guide. Put it on a fast pool. The default is `/mnt/user/appdata/broadwave`.
 - Recordings are a second folder, mounted inside the container at `/config/work/recordings`. They are the original broadcast files. Leave that mount where it is. A different recordings path would miss the folder you mapped.
 - PUID 99 and PGID 100 are Unraid's nobody user and users group. The server starts as root, gives those folders to that user, and then drops root. Set both, or neither.
-- TZ is your time zone, such as `America/Chicago`. The default in the template is UTC.
+- TZ is your time zone, such as `America/New_York` or `America/Denver`. The template leaves it empty and requires it: without it, or with a mistyped name, the server runs on UTC and records at the wrong hour. Diagnostics says so.
 - Extra Parameters includes `--device=/dev/dri` for Intel or AMD graphics. If this server has no such device, delete that flag before you start the container. Docker will not start while the path is missing. The picture still plays from the processor.
 
 Tuner address, public names, the encoder choice, and extra audio are under Show more settings. Leave the tuner address blank unless the tuner is on another subnet.

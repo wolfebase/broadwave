@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
 import type { Channel } from "./src/api/generated.ts";
+import { primeHour, primeHourFor } from "./src/lib/primeHour.ts";
 import { channelOrderNumber, channelWatchName, guideCellId, guideCellName, guideOrigin, guideRowScroll, guideShowsGrid, guideSpan, guideViewBox, keptGuideWindow, keptRow, liveChannel, primeTime, recordingCountLabel, reorderChannels, searchRows, sortChannels } from "./src/lib/guide.ts";
 
 test("tonight is 8 PM, and the next day after that", () => {
   const afternoon = new Date(2026, 8, 26, 15, 0, 0).getTime();
-  const eight = new Date(primeTime(afternoon));
+  const eight = new Date(primeTime(afternoon, 20));
   assert.equal(eight.getFullYear(), 2026);
   assert.equal(eight.getMonth(), 8);
   assert.equal(eight.getDate(), 26);
@@ -14,12 +15,28 @@ test("tonight is 8 PM, and the next day after that", () => {
   assert.equal(eight.getMinutes(), 0);
 
   const exactly = new Date(2026, 8, 26, 20, 0, 0).getTime();
-  assert.equal(new Date(primeTime(exactly)).getDate(), 26);
+  assert.equal(new Date(primeTime(exactly, 20)).getDate(), 26);
 
   const later = new Date(2026, 8, 26, 23, 30, 0).getTime();
-  const next = new Date(primeTime(later));
+  const next = new Date(primeTime(later, 20));
   assert.equal(next.getDate(), 27);
   assert.equal(next.getHours(), 20);
+
+  // Central and Mountain prime time starts at 7.
+  assert.equal(new Date(primeTime(afternoon, 19)).getHours(), 19);
+  assert.equal(new Date(primeTime(new Date(2026, 8, 26, 19, 30).getTime(), 19)).getDate(), 27);
+});
+
+test("prime time starts at 7 in the Central and Mountain zones, 8 elsewhere", () => {
+  assert.equal(primeHourFor(300), 20); // Eastern
+  assert.equal(primeHourFor(360), 19); // Central
+  assert.equal(primeHourFor(420), 19); // Mountain, Arizona
+  assert.equal(primeHourFor(480), 20); // Pacific
+  assert.equal(primeHourFor(540), 20); // Alaska
+  assert.equal(primeHourFor(600), 20); // Hawaii
+  assert.equal(primeHourFor(240), 20); // Atlantic
+  assert.equal(primeHourFor(210), 20); // Newfoundland
+  assert.ok([19, 20].includes(primeHour()));
 });
 
 test("the guide cell the keyboard is on has an id the grid can name", () => {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"broadwave/internal/realtime"
+	"broadwave/internal/region"
 )
 
 const apiVersion = 1
@@ -54,6 +55,11 @@ func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {
 		"features":      s.features(),
 		"minAppVersion": minAppVersion,
 	}
+	zone := s.zone()
+	body["timeZone"] = zone.Name
+	body["timeZoneValid"] = zone.Valid
+	body["utcOffsetMinutes"] = zone.Offset
+	body["country"] = region.CountryOf(zone.Name)
 	if s.DiscoveryKey != "" {
 		body["discoveryKey"] = s.DiscoveryKey
 	}
@@ -131,4 +137,12 @@ func (s *Server) socket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Bus.ServeHTTP(w, r)
+}
+
+// zone is the server's time zone; tests pin it with Zone.
+func (s *Server) zone() region.Zone {
+	if s.Zone != nil {
+		return s.Zone()
+	}
+	return region.Local()
 }

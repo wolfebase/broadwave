@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -10,6 +12,7 @@ import (
 
 	"broadwave/internal/disk"
 	"broadwave/internal/doctor"
+	"broadwave/internal/dvr"
 	"broadwave/internal/live"
 	"broadwave/internal/logbuf"
 	"broadwave/internal/store"
@@ -78,7 +81,18 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			source[row.ChannelID] = row.Source
 		}
 	}
-	guideInfo := map[string]any{"channels": len(channels), "channelsWithListings": len(guideRows), "airings": total}
+	// Only the channels on the guide count, so the listed count never tops the channel count.
+	shown := map[int64]bool{}
+	for _, ch := range channels {
+		shown[ch.ID] = true
+	}
+	listed := 0
+	for _, row := range guideRows {
+		if shown[row.ChannelID] {
+			listed++
+		}
+	}
+	guideInfo := map[string]any{"channels": len(channels), "channelsWithListings": listed, "airings": total}
 	if !last.IsZero() {
 		guideInfo["listingsUntil"] = last
 	}
@@ -156,6 +170,14 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 			free = int64(space.Free)
 		}
 	}
+	problem := ""
+	if s.Hub != nil {
+		var missing *disk.MissingError
+		var blocked *disk.WriteError
+		if err := s.Hub.RecordingsReady(context.Background()); errors.As(err, &missing) || errors.As(err, &blocked) {
+			problem = err.Error()
+		}
+	}
 	mounts, _ := os.ReadFile("/proc/mounts")
 	busy := s.Hub != nil && !s.Hub.Idle()
 	quiet := tunerWentQuiet(devices, busy, time.Now())
@@ -165,36 +187,27 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 			stored = true
 		}
 	}
+	zone := s.zone()
 	return doctor.Notes(doctor.Facts{
 		IPs: ips, TunerStored: stored, HostHasGPU: hostGPU(), DevDri: driPresent(),
 		RecordingsPath: path, Mounts: string(mounts), FreeBytes: free,
-		Timezone: localZone(os.Getenv("TZ"), time.Local), Now: s.now(), UID: os.Getuid(),
+		Timezone: zone.Name, TimezoneInvalid: !zone.Valid, Now: s.now(), UID: os.Getuid(),
 		PUID: os.Getenv("PUID"), PGID: os.Getenv("PGID"), TunerQuiet: quiet,
+		RecordingsProblem: problem,
 	})
 }
 
-// localZone is TZ, or the zone the host clock is set to. A host with neither
-// (a container without zone files) runs on bare UTC, so it reads as unset.
-func localZone(tz string, local *time.Location) string {
-	if tz = strings.TrimSpace(tz); tz != "" {
-		return tz
-	}
-	if name, _ := time.Now().In(local).Zone(); name != "UTC" {
-		return name
-	}
-	return ""
-}
-
-// tunerWentQuiet is a tuner that has not answered in three minutes.
+// tunerWentQuiet is a tuner that has missed three rounds of the five-minute
+// discovery refresh (dvr.TunerQuietAfter). Three minutes flagged every idle
+// tuner between two refreshes on a fresh install.
 // A tune in progress means it is answering, even if discovery has not refreshed LastSeen.
 func tunerWentQuiet(devices []store.Device, busy bool, now time.Time) bool {
 	if busy {
 		return false
 	}
 	for _, d := range devices {
-		seen, err := time.Parse(time.RFC3339, d.LastSeen)
 		// A tuner the owner retired is away on purpose.
-		if d.TunerCount > 0 && !d.Retired && err == nil && now.Sub(seen) > 3*time.Minute {
+		if !d.Retired && dvr.DeviceOffline(d, now) {
 			return true
 		}
 	}

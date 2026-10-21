@@ -19,20 +19,25 @@ test("a saved guide filter comes back, anything unknown is All", () => {
 test("a day with listings into the night lands half an hour before 8 PM", () => {
   const midnight = at(21, 0);
   const ends = [at(23, 6), at(23, 6), at(22, 23)];
-  assert.equal(dayJumpTarget(midnight, ends, 3 * HOUR), at(21, 19, 30));
+  assert.equal(dayJumpTarget(midnight, ends, 3 * HOUR, 20), at(21, 19, 30));
 });
 
 test("a short guide stops where most channels still have listings", () => {
   const midnight = at(21, 0);
   // Most channels end at 6:30 PM; one runs late.
   const ends = [at(21, 18, 30), at(21, 18, 30), at(21, 18, 45), at(22, 2)];
-  assert.equal(dayJumpTarget(midnight, ends, 3 * HOUR), at(21, 15, 30));
+  assert.equal(dayJumpTarget(midnight, ends, 3 * HOUR, 20), at(21, 15, 30));
 });
 
 test("the jump never leaves the day", () => {
   const midnight = at(21, 0);
-  assert.equal(dayJumpTarget(midnight, [at(21, 1), at(21, 1)], 3 * HOUR), midnight);
+  assert.equal(dayJumpTarget(midnight, [at(21, 1), at(21, 1)], 3 * HOUR, 20), midnight);
   // Nothing listed that day at all: the empty evening is the truthful answer.
-  assert.equal(dayJumpTarget(midnight, [at(20, 22)], 3 * HOUR), at(21, 19, 30));
-  assert.equal(dayJumpTarget(midnight, [], 3 * HOUR), at(21, 19, 30));
+  assert.equal(dayJumpTarget(midnight, [at(20, 22)], 3 * HOUR, 20), at(21, 19, 30));
+  assert.equal(dayJumpTarget(midnight, [], 3 * HOUR, 20), at(21, 19, 30));
+});
+
+test("a Central or Mountain day lands half an hour before 7 PM", () => {
+  const midnight = at(21, 0);
+  assert.equal(dayJumpTarget(midnight, [], 3 * HOUR, 19), at(21, 18, 30));
 });

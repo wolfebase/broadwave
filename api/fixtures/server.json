@@ -1,5 +1,6 @@
 {
   "apiVersion": 1,
+  "country": "US",
   "encoder": "libx264",
   "features": [
     "live",
@@ -17,6 +18,9 @@
   "id": "contract-server",
   "minAppVersion": "1.0",
   "name": "Home",
+  "timeZone": "America/Chicago",
+  "timeZoneValid": true,
   "tunerCount": 2,
+  "utcOffsetMinutes": -300,
   "version": "dev"
 }

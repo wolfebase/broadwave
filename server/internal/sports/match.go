@@ -43,7 +43,7 @@ func matchOne(listing Listing, games []Game) (Game, bool) {
 		if listing.Start.Sub(game.Start).Abs() > matchWindow {
 			continue
 		}
-		if hint != "" && hint != game.League {
+		if hint != "" && !hintAllows(hint, game.League) {
 			continue
 		}
 		score := scoreGame(text, game)
@@ -53,7 +53,7 @@ func matchOne(listing Listing, games []Game) (Game, bool) {
 		if broadcastIn(text+" "+extra, game) {
 			score += 15
 		}
-		if hint == game.League {
+		if hintAllows(hint, game.League) {
 			score += 25
 		}
 		score += closeness(listing.Start, game.Start)
@@ -130,16 +130,22 @@ func leagueHint(text string) string {
 		return "nfl"
 	case phrase(text, "nhl"), phrase(text, "hockey"):
 		return "nhl"
+	case phrase(text, "ncaaw"), phrase(text, "women s college basketball"), phrase(text, "womens college basketball"):
+		return "ncaaw"
 	case phrase(text, "ncaab"), phrase(text, "college basketball"):
 		return "ncaab"
 	case phrase(text, "mlb"), phrase(text, "baseball"):
 		return "mlb"
 	case phrase(text, "nascar"):
 		return "nascar"
+	case phrase(text, "indycar"), phrase(text, "ntt indycar series"):
+		return "indycar"
 	case phrase(text, "formula 1"), phrase(text, "formula one"), phrase(text, "f1"):
 		return "f1"
 	case phrase(text, "premier league"), phrase(text, "epl"):
 		return "epl"
+	case phrase(text, "liga mx"), phrase(text, "futbol mexicano"), phrase(text, "fútbol mexicano"):
+		return "ligamx"
 	case phrase(text, "nwsl"):
 		return "nwsl"
 	case phrase(text, "mls"), phrase(text, "major league soccer"):
@@ -147,6 +153,15 @@ func leagueHint(text string) string {
 	default:
 		return ""
 	}
+}
+
+// hintAllows is a league the listing's own words allow: "College Football"
+// covers both divisions.
+func hintAllows(hint, league string) bool {
+	if hint == "" {
+		return false
+	}
+	return hint == league || (hint == "ncaaf" && league == "fcs")
 }
 
 func fold(s string) string {

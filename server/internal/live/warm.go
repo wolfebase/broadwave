@@ -81,9 +81,7 @@ func (h *Hub) Warm(ctx context.Context, channelID int64, want Rendition, alterna
 	if want.Codec == "hevc" && !h.HEVC {
 		want.Codec = ""
 	}
-	if h.NoAC4 {
-		want = Unvoiced(f.channel.AudioCodec, want)
-	}
+	want = h.unvoiced(f.channel, want)
 	key := want.Key()
 	// A shorter rung is not its own picture. Keeping its key would let the
 	// guess sweep stop the primary, and its idle timer would stop the ladder.

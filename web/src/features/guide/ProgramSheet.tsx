@@ -13,6 +13,7 @@ import { CloseIcon, PlayIcon, RecordIcon, StarIcon } from "../../ui/icons";
 import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, LiveDot, Progress } from "../../ui/primitives";
 import { useAiringDetails } from "./useAiringDetails";
+import { timedLink } from "../schedule/manual";
 
 const t = bind(guideUiMessages);
 
@@ -194,6 +195,18 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
                 {seriesLabel}
               </button>
             ) : null}
+            {/* A set time on this channel, for channels the guide lists little or nothing for. */}
+            <button
+              type="button"
+              className="btn"
+              aria-label={t("guideUi.recordTimeOn", { channel: `${channel.displayNumber} ${channel.displayName}` })}
+              onClick={() => {
+                onClose();
+                navigate(timedLink(channel.id, airing && upcoming ? airing : undefined));
+              }}
+            >
+              <RecordIcon className="tally" /> {t("guideUi.recordTime")}
+            </button>
             {/* The star is the channel's, not the show's, so it says so. */}
             <button type="button" className="btn ghost" onClick={() => void favorite(shown)} aria-pressed={shown.favorite} aria-label={t("guideUi.favoriteChannel", { channel: shown.displayName })}>
               <StarIcon filled={shown.favorite} /> {t("guideUi.favoriteChannel", { channel: shown.displayName })}

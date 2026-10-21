@@ -338,7 +338,7 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 	meta := store.Recording{ChannelID: body.ChannelID, Title: strings.TrimSpace(body.Title)}
 	minutes := body.Minutes
 	if s.Hub.Dir != "" {
-		if err := disk.Writable(s.Hub.Recordings()); err != nil {
+		if err := s.Hub.RecordingsReady(r.Context()); err != nil {
 			writeError(w, err)
 			return
 		}
@@ -350,14 +350,7 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 		meta.Category = air.Category
 		meta.ProgramID = air.ProgramID
 		meta.GameID = air.GameID
-		// The recording starts from the show's beginning when the tuner was
-		// already on it and the buffer still holds it.
-		meta.StartedAt = air.Start
-		pad := 2 + int(dvr.SportsTail(air)/time.Minute)
-		left := int(time.Until(air.End.Add(time.Duration(pad)*time.Minute)).Minutes()) + 1
-		if left > minutes {
-			minutes = left
-		}
+		minutes, meta.StartedAt = recordSpan(body.Minutes, air, time.Now())
 	}
 	rec, err := s.Hub.RecordMeta(r.Context(), minutes, meta)
 	if err != nil {
@@ -365,6 +358,21 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, rec)
+}
+
+// recordSpan is how long a recording started now on a channel showing air
+// runs, and the start it asks the buffer for. Minutes asked for are kept:
+// the recording runs that long from now, with no padding and nothing from
+// before. Without them it covers the show, from its beginning when the tuner
+// was already on it and the buffer still holds it, to its end plus padding;
+// 0 (an hour) when the listing is already over.
+func recordSpan(asked int, air store.Airing, now time.Time) (int, time.Time) {
+	if asked > 0 {
+		return asked, time.Time{}
+	}
+	pad := 2 + int(dvr.SportsTail(air)/time.Minute)
+	left := int(air.End.Add(time.Duration(pad)*time.Minute).Sub(now).Minutes()) + 1
+	return max(left, 0), air.Start
 }
 
 func (s *Server) stopRecording(w http.ResponseWriter, r *http.Request) {
@@ -662,6 +670,7 @@ func (s *Server) planWith(ctx context.Context, passes []store.Pass) (scheduleSna
 	skips, _ := s.Store.Skips(ctx)
 	items := dvr.PlanLibrary(passes, airings, count, now, end, recs, seen, skips)
 	items = dvr.AttachSuggestions(items, passes, airings, count, now, end, s.guideNumbers(ctx))
+	s.nameManual(ctx, items)
 	if items == nil {
 		items = []dvr.Planned{}
 	}

@@ -1,17 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PlannedAiring, Pass, Recording } from "../../types";
 import { fixSchedule, getEvents, getSchedule, stopRecording } from "../../api";
 import { useData } from "../../app/data";
 import { focusRing } from "../../app/remote";
-import { navigate } from "../../app/router";
+import { navigate, useRoute } from "../../app/router";
 import { scheduleMessages } from "../../i18n/messages/schedule.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { actionName } from "../../lib/actionName";
 import { dismissesLayer, pageCovered } from "../../lib/dialogFocus";
 import { formatClock } from "../../time";
 import { Passes } from "./Passes";
+import { timedRequest } from "./manual";
 import { takeScheduleRead, takeScheduleWrite } from "./plan";
-import { activityRows, dayOf } from "./view";
+import { activityRows, dayOf, notRecording } from "./view";
 import "../manage.css";
 import "./schedule.css";
 
@@ -34,6 +35,10 @@ export function Schedule({
   onPasses: () => void;
 }) {
   const { channels } = useData();
+  // /schedule?record=<channel> comes from the guide: open Record a time for that channel.
+  const { params } = useRoute();
+  const ask = params.get("record") ? params.toString() : "";
+  const request = useMemo(() => (ask ? timedRequest(new URLSearchParams(ask)) : null), [ask]);
   const active = recordings.filter((rec) => rec.status === "recording");
   const [items, setItems] = useState<PlannedAiring[]>([]);
   const [tunerCount, setTunerCount] = useState(2);
@@ -105,6 +110,7 @@ export function Schedule({
     }
   }
   const number = (item: PlannedAiring) => item.airing.guideNumber || channels.find((ch) => ch.id === item.airing.channelId)?.displayNumber || "";
+  const upcoming = notRecording(items, active);
   const { rows: activity, hidden } = activityRows(events, everything);
   const listed = more ? activity : activity.slice(0, firstActivity);
   const now = new Date();
@@ -114,7 +120,7 @@ export function Schedule({
         <h2 id="sched-coming" className="section-title">
           {t("schedule.comingUp")}
         </h2>
-        {items.length === 0 && active.length === 0 ? (
+        {upcoming.length === 0 && active.length === 0 ? (
           <div className="sched-empty">
             <p>{passes.length === 0 ? t("schedule.nothingSet") : t("schedule.noMatch")}</p>
             <button type="button" className="btn small" onClick={() => navigate("/guide")}>
@@ -126,7 +132,7 @@ export function Schedule({
             {active.map((rec) => (
               <LiveRow key={`rec-${rec.id}`} rec={rec} onStop={onStop} />
             ))}
-            {items.map((item) => {
+            {upcoming.map((item) => {
               const start = new Date(item.airing.start);
               const window = recordWindow(item);
               const ch = number(item);
@@ -137,7 +143,11 @@ export function Schedule({
                     <span className="sched-clock">{formatClock(start)}</span>
                   </span>
                   <span className="sched-main">
-                    <span className="sched-title">{item.airing.title}</span>
+                    <span className="sched-title">
+                      {item.manual ? <span className="tag pass-kind" data-kind="manual">{t("schedule.timedTag")}</span> : null}
+                      {item.manual ? " " : null}
+                      {item.airing.title}
+                    </span>
                     <span className="sched-sub">
                       {item.skipped ? (
                         <>
@@ -180,7 +190,7 @@ export function Schedule({
         ) : null}
         {items.some((item) => item.conflict) ? <p className="hint">{t("schedule.conflictHint")}</p> : null}
       </section>
-      <Passes passes={passes} onPasses={onPasses} />
+      <Passes passes={passes} onPasses={onPasses} request={request} onRequestDone={() => (ask ? navigate("/schedule", true) : undefined)} />
       <section className="sched-section" aria-labelledby="sched-activity">
         <div className="sched-head">
           <h2 id="sched-activity" className="section-title">

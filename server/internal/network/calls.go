@@ -1,4 +1,4 @@
-package guide
+package network
 
 import "strings"
 
