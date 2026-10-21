@@ -52,3 +52,12 @@ func TestEncoderLineNamesEveryValue(t *testing.T) {
 		}
 	}
 }
+
+// A tuner that cannot be reached at boot still leaves the guide loop running.
+func TestBootGuideRunsTheLoopAfterAFailedLook(t *testing.T) {
+	looped := false
+	bootGuide(func() {}, func() { looped = true })
+	if !looped {
+		t.Fatal("the guide loop did not start")
+	}
+}
