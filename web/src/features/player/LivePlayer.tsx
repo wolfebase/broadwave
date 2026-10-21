@@ -668,7 +668,7 @@ export function LivePlayer({
     [channel, airing, now],
   );
 
-  const syncLabel = syncPillText(together, sync.members);
+  const syncLabel = syncPillText(sync.state, together, sync.members);
   // Set before the text is chosen, so a later off still says sync was on.
   const syncWasOn = useRef(false);
   if (sync.state !== "off") syncWasOn.current = true;

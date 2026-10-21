@@ -136,7 +136,7 @@ test("two browsers watch together: who is in, pause, rewind, play, leave", async
 
     await other.getByRole("dialog", { name: "Watching together" }).getByRole("button", { name: "Leave" }).click();
     await expect(screens(page)).toHaveCount(1, { timeout: 15_000 });
-    await expect(otherPill).toContainText(/Synced|screens/);
+    await expect(otherPill).toContainText(/Sync|screens/);
   } finally {
     await second.close();
   }
