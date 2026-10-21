@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Channel, Pass } from "./src/api/generated.ts";
-import { daysLabel, passDetails, passLabel } from "./src/features/schedule/Passes.tsx";
+import { daysLabel, passDetails, passKind, passLabel } from "./src/features/schedule/Passes.tsx";
 import { formatClock } from "./src/time.ts";
 
 function pass(extra: Partial<Pass> = {}): Pass {
@@ -54,7 +54,9 @@ test("days collapse to weekdays, weekends, or the whole week", () => {
 
 test("the detail line keeps the rules a viewer would check", () => {
   const channels = [channel(4, "4.1", "Den TV")];
-  expect(passDetails(pass({ kind: "once", channelId: 4, padBefore: 1, padAfter: 2 }), channels)).toBe("Starts 1 min early, ends 2 min late");
+  // Two one-time recordings of one title tell apart by channel and time.
+  expect(passDetails(pass({ kind: "once", channelId: 4, padBefore: 1, padAfter: 2 }), channels)).toBe("4.1 Den TV · Starts 1 min early, ends 2 min late");
+  expect(passDetails(pass({ kind: "once", channelId: 9 }), channels)).toBe("");
   expect(passDetails(pass({ channelId: 9 }), channels)).toBe("Any channel");
   expect(passDetails(pass(), [])).toBe("Any channel");
   const full = pass({
@@ -73,4 +75,23 @@ test("the detail line keeps the rules a viewer would check", () => {
     `4.1 Den TV · Weekdays · ${clock("19:00")}–${clock("22:30")} · New only · Keeps the newest 1 · Pauses at 3 unwatched · Starts 5 min early, ends 10 min late`,
   );
   expect(passDetails(pass({ keepMode: "unwatched", timeStart: "19:00" }), [])).toBe("Any channel · Keeps unwatched");
+});
+
+test("each rule says its kind in plain words", () => {
+  expect(passKind(pass())).toBe("Series");
+  expect(passKind(pass({ kind: "series" }))).toBe("Series");
+  expect(passKind(pass({ kind: "once" }))).toBe("One time");
+  expect(passKind(pass({ kind: "manual" }))).toBe("Timed");
+  expect(passKind(pass({ kind: "team" }))).toBe("Games");
+});
+
+test("a timed recording is named by its title or channel, and says when", () => {
+  const channels = [channel(4, "4.1", "Den TV")];
+  expect(passLabel(pass({ kind: "manual", title: "", channelId: 4 }), channels)).toBe("4.1 Den TV");
+  expect(passLabel(pass({ kind: "manual", title: "Late news", channelId: 4 }), channels)).toBe("Late news");
+  expect(passLabel(pass({ kind: "manual", title: "", channelId: 9 }), channels)).toBe("Timed");
+  const once = pass({ kind: "manual", title: "", channelId: 4, date: "2026-10-21", timeStart: "22:00", duration: 90 });
+  expect(passDetails(once, channels)).toBe(`4.1 Den TV · Wed 10/21 · ${clock("22:00")}–${clock("23:30")}`);
+  const nightly = pass({ kind: "manual", title: "", channelId: 4, days: [1, 2, 3, 4, 5], timeStart: "23:30", duration: 60, keepMode: "last", keepCount: 3 });
+  expect(passDetails(nightly, channels)).toBe(`4.1 Den TV · Weekdays · ${clock("23:30")}–${clock("00:30")} · Keeps the newest 3`);
 });

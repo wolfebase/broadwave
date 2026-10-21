@@ -646,7 +646,8 @@ export function Guide() {
                 </button>
                 </div>
                 {list.length === 0 ? (
-                  <div role="gridcell" id={activeId === guideCellId(c.id) ? activeId : undefined} className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }}>
+                  // A channel with no listings opens its sheet, where Record a time is.
+                  <div role="gridcell" id={activeId === guideCellId(c.id) ? activeId : undefined} className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }} onClick={() => open(c)}>
                     <LiveFrame id={c.id} className="cell-frame" />
                     <span className="cell-title">{emptyGuideLabel(programs, leftT)}</span>
                   </div>

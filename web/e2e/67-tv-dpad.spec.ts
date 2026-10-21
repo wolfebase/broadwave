@@ -165,13 +165,13 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   await page.locator(".topbar").getByRole("link", { name: "Schedule", exact: true }).click();
   await expect(page).toHaveURL(/\/schedule$/);
   await settle(page);
-  const made = page.getByRole("button", { name: "New pass" });
+  const made = page.getByRole("button", { name: "New series" });
   await made.focus();
   await page.keyboard.press("Enter");
-  const editor = page.getByRole("form", { name: "New pass" });
+  const editor = page.getByRole("form", { name: "New series" });
   await expect(editor).toBeVisible();
   await editor.getByRole("textbox", { name: "Title" }).fill("Evening News");
-  await editor.getByRole("button", { name: "Add pass" }).click();
+  await editor.getByRole("button", { name: "Add series" }).click();
   await expect(editor).toHaveCount(0);
   await page.getByRole("button", { name: "Edit Evening News" }).click();
   const editing = page.getByRole("form", { name: "Edit Evening News" });
@@ -185,7 +185,7 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   expect(await page.evaluate(() => document.activeElement?.closest("form")?.getAttribute("aria-label"))).toBe("Edit Evening News");
   await page.keyboard.press("Escape");
   await expect(editing).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "New pass" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New series" })).toBeVisible();
   await expect(page).toHaveURL(/\/schedule$/);
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/sports$/);
