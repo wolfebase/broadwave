@@ -8,7 +8,6 @@ import { settingsHubMessages } from "../../i18n/messages/settingsHub.ts";
 import { bind, formatDateTime } from "../../i18n/runtime.ts";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
-import { appVersion } from "../../lib/compat";
 import { blenderCreditText } from "../../legal";
 import { readLiveDelay, saveLiveDelay, type LiveDelay } from "../../lib/events";
 import { settingTextCommit, settingTextDraft, shownSettingText } from "./field";
@@ -410,9 +409,6 @@ export function AboutSection({ server, settings, onChange }: { server: ServerInf
         </Row>
         <Row label={h("about.encoder")}>
           <span className="set-row-value">{encoder || h("about.encoderSoftware")}</span>
-        </Row>
-        <Row label={h("about.app")}>
-          <span className="set-row-value">{appVersion}</span>
         </Row>
         <SecureNameRow />
         <SwitchRow label={copy.settings.updates} hint={copy.settings.updatesHint} checked={settings.checkUpdates !== "0"} onChange={(on) => onChange({ checkUpdates: on ? "1" : "0" })} />

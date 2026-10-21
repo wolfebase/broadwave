@@ -228,7 +228,6 @@ export const settingsHubMessages = {
   "about.version": "Version",
   "about.encoder": "Picture encoder",
   "about.encoderSoftware": "Software",
-  "about.app": "Web app",
   "about.updates": "Updates",
   "about.help": "Help",
   "about.diagnosticsHint": "Tuners, the guide feed, and the server log.",
