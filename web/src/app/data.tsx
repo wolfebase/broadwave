@@ -102,6 +102,8 @@ type Data = {
   update?: ServerInfo["update"];
   /** Latest GET /api/v1/server, once it has answered. */
   server: ServerInfo | null;
+  /** This device may read the admin settings. */
+  admin: boolean;
   /** When the lists on screen last came from the server or the saved copy (Unix ms). */
   freshAt: number;
 };
@@ -144,6 +146,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [virtuals, setVirtuals] = useState<VirtualChannel[]>([]);
   const [settings, setSettings] = useState<Settings>(defaults);
   const [needsPair, setNeedsPair] = useState(false);
+  const [admin, setAdmin] = useState(false);
   useEffect(
     () =>
       onUnauthorized(() => {
@@ -210,8 +213,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           .then((next) => {
             if (still("settings")) setSettings(next);
             setNeedsPair(false);
+            setAdmin(true);
           })
           .catch(async (err) => {
+            if (isUnauthorized(err) || isForbidden(err)) setAdmin(false);
             if (isUnauthorized(err)) setNeedsPair(true);
             else if (isForbidden(err)) setSettings(await watcherSettings());
             else throw err;
@@ -256,7 +261,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
           nextSettings = await getSettings();
           setNeedsPair(false);
+          setAdmin(true);
         } catch (err) {
+          setAdmin(false);
           if (isUnauthorized(err)) {
             setNeedsPair(true);
             setError("");
@@ -566,6 +573,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       dismissNotice,
       update,
       server,
+      admin,
       freshAt,
       rediscover: async (ip) => {
         reads.current.start(["devices"]);
@@ -590,7 +598,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels", "passes"]);
       },
     }),
-    [ready, channelsReady, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, needsPair, storage, refresh, notices, dismissNotice, update, server, freshAt],
+    [ready, channelsReady, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, needsPair, storage, refresh, notices, dismissNotice, update, server, admin, freshAt],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
