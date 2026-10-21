@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Restoring a backup brings back channel favorites, names, and hidden channels, recordings, paired devices, and followed teams, not only settings and passes. Recordings that moved are followed, and recordings in the folder that the backup didn't have are added.
+- Recordings found in the recordings folder (with the .json the server writes beside each) can be added back to the catalog: `POST /api/v1/recordings/import`.
+
 ## 0.15.1 — 2026-10-21
 
 ### Added

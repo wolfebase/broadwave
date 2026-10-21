@@ -791,6 +791,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recordings/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Add recordings in the recordings folder that the catalog does not have: each file with the .json the server wrote beside it. Recordings the catalog lost track of are followed first, so a moved one is not added twice. A restore does this by itself after it answers. 409 when the recordings folder is not there (a drive not mounted). */
+        post: operations["importFoundRecordings"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recordings/{id}": {
         parameters: {
             query?: never;
@@ -1776,7 +1793,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Put the catalog back to this copy. Recordings on disk are left in place. */
+        /** @description Put the catalog back to this copy. Settings, passes, sources, and virtual channels are replaced; channels keep the copy's favorites, names, and hidden state; recordings, paired devices, and followed teams the copy has are added to the ones here. Recordings on disk are left in place; afterwards the server follows moved ones and adds the ones in the recordings folder the copy lacked. */
         post: operations["restoreCatalogBackup"];
         delete?: never;
         options?: never;
@@ -4576,6 +4593,30 @@ export interface operations {
                 };
             };
             409: components["responses"]["Error"];
+        };
+    };
+    importFoundRecordings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many recordings were added */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        added: number;
+                    };
+                };
+            };
+            409: components["responses"]["Error"];
+            500: components["responses"]["Error"];
         };
     };
     deleteRecording: {

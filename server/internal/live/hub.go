@@ -3630,7 +3630,7 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	h.storeLengthLocked(rec)
 	_ = h.Store.FinishRecording(context.Background(), rec.id, status, errText)
 	if saved, err := h.Store.Recording(context.Background(), rec.id); err == nil {
-		writeSidecar(saved)
+		WriteSidecar(saved)
 		message := fmt.Sprintf("Saved %s on %s", saved.Title, saved.GuideNumber)
 		if status == "interrupted" {
 			message = fmt.Sprintf("Paused %s on %s for a restart", saved.Title, saved.GuideNumber)

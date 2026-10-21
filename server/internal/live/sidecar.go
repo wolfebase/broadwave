@@ -11,7 +11,8 @@ import (
 	"broadwave/internal/store"
 )
 
-func writeSidecar(rec store.Recording) {
+// WriteSidecar writes the .json beside a recording that lets a catalog find it again.
+func WriteSidecar(rec store.Recording) {
 	if rec.Path == "" {
 		return
 	}

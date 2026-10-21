@@ -700,6 +700,7 @@ func (s *Server) restore(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	s.afterRestore()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

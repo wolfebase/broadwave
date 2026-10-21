@@ -1229,6 +1229,27 @@ paths:
                 properties:
                   written: { type: integer }
         "409": { $ref: "#/components/responses/Error" }
+  /recordings/import:
+    post:
+      tags: [recordings]
+      operationId: importFoundRecordings
+      description: >-
+        Add recordings in the recordings folder that the catalog does not have: each file
+        with the .json the server wrote beside it. Recordings the catalog lost track of are
+        followed first, so a moved one is not added twice. A restore does this by itself
+        after it answers. 409 when the recordings folder is not there (a drive not mounted).
+      responses:
+        "200":
+          description: How many recordings were added
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [added]
+                properties:
+                  added: { type: integer }
+        "409": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
   /recordings/{id}:
     delete:
       tags: [recordings]
@@ -2721,7 +2742,12 @@ paths:
     post:
       tags: [settings]
       operationId: restoreCatalogBackup
-      description: Put the catalog back to this copy. Recordings on disk are left in place.
+      description: >-
+        Put the catalog back to this copy. Settings, passes, sources, and virtual channels are
+        replaced; channels keep the copy's favorites, names, and hidden state; recordings,
+        paired devices, and followed teams the copy has are added to the ones here. Recordings
+        on disk are left in place; afterwards the server follows moved ones and adds the ones
+        in the recordings folder the copy lacked.
       parameters:
         - name: name
           in: path
