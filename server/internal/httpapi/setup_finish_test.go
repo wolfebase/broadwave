@@ -206,11 +206,20 @@ func TestSignalSummaryAndReadyLine(t *testing.T) {
 			t.Fatalf("signalState(%d,%d,%d,%d) = %q, want %q", tc.great, tc.ok, tc.weak, tc.lost, got, tc.want)
 		}
 	}
-	if got := favoriteLine([]map[string]any{{"network": "FOX"}, {"network": "ABC"}, {"network": "CBS"}}); got != "ABC, CBS, and FOX." {
+	if got := favoriteLine([]map[string]any{{"network": "FOX"}, {"network": "ABC"}, {"network": "CBS"}}, "US", 0); got != "ABC, CBS, and FOX." {
 		t.Fatalf("favorites %q", got)
 	}
-	if got := favoriteLine(nil); got != "No ABC, CBS, FOX, or NBC in this lineup." {
+	if got := favoriteLine(nil, "US", 0); got != "No ABC, CBS, FOX, or NBC in this lineup." {
 		t.Fatalf("no favorites %q", got)
+	}
+	if got := favoriteLine(nil, "US", 2); got != "Couldn't tell which channels are ABC, CBS, FOX, or NBC. Star them in the guide." {
+		t.Fatalf("unknown networks %q", got)
+	}
+	if got := favoriteLine(nil, "CA", 0); got != "No CBC, CTV, Global, or Citytv in this lineup." {
+		t.Fatalf("Canada %q", got)
+	}
+	if got := favoriteLine([]map[string]any{{"network": "Global"}, {"network": "CBC"}, {"network": "NBC"}}, "CA", 0); got != "CBC, Global, and NBC." {
+		t.Fatalf("Canada with a US station %q", got)
 	}
 }
 

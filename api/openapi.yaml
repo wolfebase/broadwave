@@ -649,7 +649,7 @@ paths:
     post:
       tags: [channels]
       operationId: starNetworkFavorites
-      description: Favorite ABC, CBS, FOX, and NBC. The server picks the network from the guide, then from its call-sign table.
+      description: Favorite the main networks (ABC, CBS, FOX, and NBC; in Canada CBC, CTV, Global, Citytv, Radio-Canada, TVA, and Noovo). The server picks the network from the guide, the station's name on the air, then its call-sign rules and table.
       responses:
         "200":
           description: Channels it marked favorite
@@ -673,7 +673,7 @@ paths:
     get:
       tags: [channels]
       operationId: listAffiliations
-      description: Call sign to network. The value is ABC, CBS, FOX, or NBC.
+      description: Call sign to network, the fallback table for ABC, CBS, FOX, and NBC stations. Most networks are read from the guide and the station's name on the air instead, so a station missing here can still have a network.
       responses:
         "200":
           description: The call-sign table
@@ -2598,7 +2598,7 @@ paths:
       description: |
         After a tuner is in the lineup, finish setup on the server.
         Scan when the lineup is empty, load listings, check the recordings folder,
-        star ABC, CBS, FOX, and NBC, time the encoder, and summarize the antenna.
+        star the main networks, time the encoder, and summarize the antenna.
         Poll GET until running is false. The ready line is the summary.
       responses:
         "200":
@@ -3291,7 +3291,7 @@ components:
         artUrl: { type: string, description: "Channel logo from the guide. Empty when the source has none." }
         artWidth: { type: integer, description: "Native logo width in pixels. Omitted until the picture has been measured." }
         artHeight: { type: integer, description: "Native logo height in pixels. Omitted until the picture has been measured." }
-        network: { type: string, description: "ABC, CBS, FOX, or NBC when the server can tell. Empty otherwise." }
+        network: { type: string, description: "The broadcast network when the server can tell, for voice and search: ABC, CBS, FOX, NBC, PBS, CW, MyNetworkTV, ION, Univision, Telemundo, UniMás, CBC, Radio-Canada, CTV, CTV 2, Global, Citytv, TVO, Télé-Québec, TVA, or Noovo. Read from the guide, then the name on the air (FOX 5, NBC4, UNIVSN), then the call sign. Empty otherwise." }
         protected: { type: boolean, description: "The tuner marks this channel DRM or copy protected (for example ATSC 3.0 DRM). It stays hidden; one with a clear 1.0 twin plays as that channel (playsAs)." }
         standard: { type: string, enum: [atsc3], description: "atsc3 for an ATSC 3.0 broadcast. Omitted for everything else." }
         twinId: { type: integer, format: int64, description: "The other channel of an ATSC 1.0 and 3.0 pair of the same station. Its listings are shared." }

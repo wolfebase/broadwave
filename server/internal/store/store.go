@@ -60,7 +60,7 @@ type Channel struct {
 	ArtURL        string `json:"artUrl,omitempty"`
 	ArtWidth      int    `json:"artWidth,omitempty"`
 	ArtHeight     int    `json:"artHeight,omitempty"`
-	// Network is ABC, CBS, FOX, or NBC when a guide said so. Empty means the caller fills it from the call sign.
+	// Network is the broadcast network (NBC, PBS, CBC, ...) when a guide said so. Empty means the caller fills it from the call sign.
 	Network string `json:"network,omitempty"`
 	// Protected is a channel the tuner marks DRM or copy protected. It stays hidden.
 	Protected bool `json:"protected,omitempty"`

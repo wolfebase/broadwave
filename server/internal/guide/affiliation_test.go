@@ -76,3 +76,58 @@ func TestNetworksFromGuide(t *testing.T) {
 		t.Fatalf("guide ABC should beat the call sign, got %v", got)
 	}
 }
+
+func TestAffiliationReadsPSIPShortNames(t *testing.T) {
+	cases := map[string]string{
+		"FOX 5": "FOX", "NBC4": "NBC", "ABC7": "ABC", "CBS 12": "CBS", "abc 7 hd": "ABC",
+		"PBS": "PBS", "PBS 8": "PBS", "CW": "CW", "CW50": "CW", "THE CW": "CW",
+		"MY20": "MyNetworkTV", "MY 9": "MyNetworkTV", "MNTV": "MyNetworkTV",
+		"ION": "ION", "ION TV": "ION", "UNIVSN": "Univision", "TELEMUN": "Telemundo",
+		"UNIMAS": "UniMás", "TELEMUNDO 40": "Telemundo",
+		"CBC": "CBC", "CTV": "CTV", "CTV2": "CTV 2", "CTV 2": "CTV 2", "GLOBAL": "Global",
+		"CITYTV": "Citytv", "TVO": "TVO", "TÉLÉ-QUÉBEC": "Télé-Québec", "Télé-Québec HD": "Télé-Québec",
+		"ICI TELE": "Radio-Canada", "TVA": "TVA", "NOOVO": "Noovo",
+		"KBWV-NBC": "NBC", "WBWV CW": "CW", "KBWV-DT (PBS)": "PBS", "CBWV CTV": "CTV",
+	}
+	for name, want := range cases {
+		if got := Affiliation([]string{name}, "KQQQ"); got != want {
+			t.Errorf("%q: %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestAffiliationLeavesDiginetsAndLookalikesAlone(t *testing.T) {
+	for _, name := range []string{
+		"PBS KIDS", "PBSKIDS", "CBS NEWS", "ION PLUS", "IONMYST", "CBC NN", "CTV NEWS",
+		"GLOBALNEWS", "KCITY", "CITY NEWS", "MYSTERY", "MYTVLIVE", "NBCLX", "TVA SPORTS", "NOTPBS",
+	} {
+		if got := Affiliation([]string{name}); got != "" {
+			t.Errorf("%s guessed %q", name, got)
+		}
+	}
+}
+
+func TestAffiliationCanadianCallSignRules(t *testing.T) {
+	cases := map[string]string{
+		"CBQT": "CBC", "CBQT-DT": "CBC", "CBQFT": "Radio-Canada", "CBQFT-DT": "Radio-Canada",
+		"CBFT": "Radio-Canada", "CBVT": "Radio-Canada",
+		"CBQX": "", "CBQQFT": "", "CKQT": "",
+	}
+	for call, want := range cases {
+		if got := Affiliation(nil, call); got != want {
+			t.Errorf("%s: %q, want %q", call, got, want)
+		}
+	}
+}
+
+func TestMainNetworksByCountry(t *testing.T) {
+	if got := MainNetworks("US"); len(got) != 4 || got[0] != "ABC" {
+		t.Fatalf("US: %v", got)
+	}
+	if got := MainNetworks("CA"); got[0] != "CBC" || got[1] != "CTV" {
+		t.Fatalf("CA: %v", got)
+	}
+	if !IsMainNetwork("Global") || !IsMainNetwork("NBC") || IsMainNetwork("PBS") || IsMainNetwork("") {
+		t.Fatal("IsMainNetwork")
+	}
+}

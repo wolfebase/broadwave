@@ -410,7 +410,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Favorite ABC, CBS, FOX, and NBC. The server picks the network from the guide, then from its call-sign table. */
+        /** @description Favorite the main networks (ABC, CBS, FOX, and NBC; in Canada CBC, CTV, Global, Citytv, Radio-Canada, TVA, and Noovo). The server picks the network from the guide, the station's name on the air, then its call-sign rules and table. */
         post: operations["starNetworkFavorites"];
         delete?: never;
         options?: never;
@@ -425,7 +425,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Call sign to network. The value is ABC, CBS, FOX, or NBC. */
+        /** @description Call sign to network, the fallback table for ABC, CBS, FOX, and NBC stations. Most networks are read from the guide and the station's name on the air instead, so a station missing here can still have a network. */
         get: operations["listAffiliations"];
         put?: never;
         post?: never;
@@ -1651,7 +1651,7 @@ export interface paths {
         /**
          * @description After a tuner is in the lineup, finish setup on the server.
          *     Scan when the lineup is empty, load listings, check the recordings folder,
-         *     star ABC, CBS, FOX, and NBC, time the encoder, and summarize the antenna.
+         *     star the main networks, time the encoder, and summarize the antenna.
          *     Poll GET until running is false. The ready line is the summary.
          */
         post: operations["startSetupFinish"];
@@ -2258,7 +2258,7 @@ export interface components {
             artWidth?: number;
             /** @description Native logo height in pixels. Omitted until the picture has been measured. */
             artHeight?: number;
-            /** @description ABC, CBS, FOX, or NBC when the server can tell. Empty otherwise. */
+            /** @description The broadcast network when the server can tell, for voice and search: ABC, CBS, FOX, NBC, PBS, CW, MyNetworkTV, ION, Univision, Telemundo, UniMás, CBC, Radio-Canada, CTV, CTV 2, Global, Citytv, TVO, Télé-Québec, TVA, or Noovo. Read from the guide, then the name on the air (FOX 5, NBC4, UNIVSN), then the call sign. Empty otherwise. */
             network?: string;
             /** @description The tuner marks this channel DRM or copy protected (for example ATSC 3.0 DRM). It stays hidden; one with a clear 1.0 twin plays as that channel (playsAs). */
             protected?: boolean;

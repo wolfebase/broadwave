@@ -574,15 +574,6 @@ func withNetworks(channels []store.Channel) []store.Channel {
 	return channels
 }
 
-func bigFour(network string) bool {
-	switch network {
-	case "ABC", "CBS", "FOX", "NBC":
-		return true
-	default:
-		return false
-	}
-}
-
 func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
