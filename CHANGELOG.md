@@ -13,6 +13,7 @@
 ### Changed
 
 - Web: the Schedule page calls passes "Recording rules", and each one says what it is: Series, One time, Timed, or Games. One-time recordings show their channel, so two of the same show tell apart.
+- Web: a recording that is running shows once in Coming up, not again as the airing it is recording.
 
 ## 0.15.1 — 2026-10-21
 
