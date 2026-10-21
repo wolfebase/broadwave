@@ -151,7 +151,7 @@ curl -fsSLO https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/do
 docker compose pull && docker compose up -d
 ```
 
-Set `TZ` in a `.env` file next to `compose.yaml` first (`TZ=America/Chicago`); Compose stops and says so when it is missing. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing — Docker will not start while they point at a path that is not there. `PUID` and `PGID` default to 1000; on Unraid set them to 99 and 100.
+Set `TZ` in a `.env` file next to `compose.yaml` first (`TZ=America/Chicago`); Compose stops and says so when it is missing. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Graphics are off in it so it starts anywhere; uncomment the `devices` lines when `/dev/dri` exists. `PUID` and `PGID` default to 1000; on Unraid set them to 99 and 100. Synology, QNAP, TrueNAS SCALE, Raspberry Pi, and running without Docker: [Install](docs/guide/install.md#nas-boxes).
 
 </details>
 
