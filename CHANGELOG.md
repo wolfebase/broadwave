@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Search (web, iPhone, iPad, Apple TV): results rank by where the words are: the show's title, then the episode title, the channel's name or call sign, people, and category. Whole words beat word starts. Shows that only mention the words in their description are left out when anything matches better, and infomercials and shopping sink unless their title is what you typed. A channel number ("4.1" or "4-1") finds that channel and its ATSC 3.0 twin, not 41.1.
+
 ## 0.15.1 — 2026-10-21
 
 ### Added
