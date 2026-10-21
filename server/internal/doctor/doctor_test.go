@@ -69,3 +69,13 @@ func TestTheRootMountIsNotARecordingsDisk(t *testing.T) {
 		t.Fatalf("recordings on /data: %+v", notes)
 	}
 }
+
+func TestRecordingsProblemIsANote(t *testing.T) {
+	notes := Notes(Facts{Timezone: "America/New_York", RecordingsProblem: "The recordings folder isn't there. Is the drive mounted?"})
+	for _, n := range notes {
+		if n.ID == "recordings" && n.Message == "The recordings folder isn't there. Is the drive mounted?" {
+			return
+		}
+	}
+	t.Fatalf("no recordings note in %+v", notes)
+}

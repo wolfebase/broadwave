@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -168,6 +170,14 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 			free = int64(space.Free)
 		}
 	}
+	problem := ""
+	if s.Hub != nil {
+		var missing *disk.MissingError
+		var blocked *disk.WriteError
+		if err := s.Hub.RecordingsReady(context.Background()); errors.As(err, &missing) || errors.As(err, &blocked) {
+			problem = err.Error()
+		}
+	}
 	mounts, _ := os.ReadFile("/proc/mounts")
 	busy := s.Hub != nil && !s.Hub.Idle()
 	quiet := tunerWentQuiet(devices, busy, time.Now())
@@ -183,6 +193,7 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 		RecordingsPath: path, Mounts: string(mounts), FreeBytes: free,
 		Timezone: zone.Name, TimezoneInvalid: !zone.Valid, Now: s.now(), UID: os.Getuid(),
 		PUID: os.Getenv("PUID"), PGID: os.Getenv("PGID"), TunerQuiet: quiet,
+		RecordingsProblem: problem,
 	})
 }
 

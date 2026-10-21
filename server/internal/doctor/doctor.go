@@ -32,6 +32,9 @@ type Facts struct {
 	PUID            string
 	PGID            string
 	TunerQuiet      bool
+	// RecordingsProblem is why a recording could not start in the recordings
+	// folder right now (not mounted, can't write), in the server's words.
+	RecordingsProblem string
 }
 
 // Notes returns every check that failed.
@@ -46,6 +49,9 @@ func Notes(f Facts) []Note {
 	}
 	if f.HostHasGPU && !f.DevDri {
 		out = append(out, Note{ID: "dri", Message: "This server has graphics, but the container can't use them. Pass /dev/dri through."})
+	}
+	if f.RecordingsProblem != "" {
+		out = append(out, Note{ID: "recordings", Message: f.RecordingsProblem})
 	}
 	if unmounted(f) {
 		out = append(out, Note{ID: "volume", Message: "Recordings are on the container disk. Map a folder for them so they survive a rebuild."})
