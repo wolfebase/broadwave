@@ -46,3 +46,22 @@ export function shareRows(pageURL: string, sharing: boolean, hdhr = true): Share
   }
   return rows;
 }
+
+/** localhost and loopback addresses: no other device can open them. */
+export function isLoopback(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return host === "localhost" || host === "::1" || /^127\./.test(host);
+}
+
+/**
+ * The page address other apps should use. Opened at localhost, it is the same
+ * page at the server's home network address (from the server's tuner address).
+ */
+export function sharePageURL(pageURL: string, serverTunerAddress: string): string {
+  const page = new URL(pageURL);
+  if (!isLoopback(page.hostname)) return pageURL;
+  const host = serverTunerAddress.replace(/:\d+$/, "");
+  if (!host || isLoopback(host)) return pageURL;
+  page.hostname = host;
+  return page.href;
+}

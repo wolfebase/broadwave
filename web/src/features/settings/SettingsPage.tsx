@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
-import { getServer } from "../../api";
+import { getHome, getServer } from "../../api";
 import { pagesMessages } from "../../i18n/messages/pagesCopy.ts";
 import { settingsHubMessages } from "../../i18n/messages/settingsHub.ts";
 import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
@@ -19,7 +19,7 @@ import { Appearance, accentName } from "./Appearance";
 import { DevicesSection } from "./Devices";
 import { AboutSection, BackupsSection, GuideSection, PlaybackSection, RecordingSection } from "./Settings";
 import { ShareLinks } from "./ShareLinks";
-import { tunerAddress } from "./tunerShare";
+import { isLoopback, sharePageURL, tunerAddress } from "./tunerShare";
 import { Sources } from "./Sources";
 import { Group, SwitchRow } from "./rows";
 import { sectionFromPath, sectionIds, sectionPath, type SectionId } from "./sections";
@@ -283,7 +283,22 @@ function SectionBody({ id, server }: { id: SectionId; server: ServerInfo | null 
 function Integrations({ server, channels, allChannels }: { server: ServerInfo | null; channels: { id: number }[]; allChannels: { id: number; displayName: string }[] }) {
   const { settings, saveSettings } = useData();
   const hdhrNote = gateFeature(server, "hdhrEmulation");
-  const address = tunerAddress(window.location.href);
+  // Opened at localhost, the addresses come from the server's home network address.
+  const [lanTuner, setLanTuner] = useState("");
+  useEffect(() => {
+    if (!isLoopback(window.location.hostname)) return;
+    let stop = false;
+    void getHome()
+      .then((res) => {
+        if (!stop) setLanTuner(res.tunerAddress);
+      })
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, []);
+  const pageURL = sharePageURL(window.location.href, lanTuner);
+  const address = tunerAddress(pageURL);
   const mosaics = (settings.exportMosaics ?? "").split(",");
   const mosaicName = (key: string) =>
     key
@@ -312,7 +327,7 @@ function Integrations({ server, channels, allChannels }: { server: ServerInfo | 
           />
         )}
         <div className="set-row stack">
-          <ShareLinks pageURL={window.location.href} sharing={settings.hdhrEmulate === "1"} hdhr={!hdhrNote} />
+          <ShareLinks pageURL={pageURL} sharing={settings.hdhrEmulate === "1"} hdhr={!hdhrNote} />
         </div>
       </Group>
       <Group title={t("pages.mosaics")}>

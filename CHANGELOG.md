@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Web and server: Settings › Integrations opened at localhost shows the server's home network address for other apps, not localhost.
 - Web: Settings › About shows one version, the server's; the web app is part of it.
 - Web: the update notice has How to update, with the steps for Unraid, Docker, the updater, and the binary (only the server's own way when it says how it was installed).
 - Web: an iPad (or any touch screen) gets the regular layout, not the TV one; the TV layout is for TV browsers, or `?layout=tv`, which this browser then remembers (`?layout=auto` forgets it).

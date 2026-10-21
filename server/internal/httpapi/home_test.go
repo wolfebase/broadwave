@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -121,6 +122,26 @@ func TestHomeTunerAddressBracketsIPv6(t *testing.T) {
 	}
 	if got := tunerShareHost("2001:db8::2"); got != "[2001:db8::2]:8478" {
 		t.Fatalf("bare %s", got)
+	}
+}
+
+func TestTunerShareHostSwapsLocalhostForTheHomeAddress(t *testing.T) {
+	old := lanAddrs
+	t.Cleanup(func() { lanAddrs = old })
+	lanAddrs = func() []netip.Addr {
+		return []netip.Addr{netip.MustParseAddr("fd00::5"), netip.MustParseAddr("192.168.4.20")}
+	}
+	for _, host := range []string{"localhost:8477", "127.0.0.1:8477", "[::1]:8477", "LOCALHOST"} {
+		if got := tunerShareHost(host); got != "192.168.4.20:8478" {
+			t.Fatalf("%s gave %s", host, got)
+		}
+	}
+	if got := tunerShareHost("10.0.0.9:8477"); got != "10.0.0.9:8478" {
+		t.Fatalf("lan %s", got)
+	}
+	lanAddrs = func() []netip.Addr { return nil }
+	if got := tunerShareHost("localhost:8477"); got != "localhost:8478" {
+		t.Fatalf("no lan %s", got)
 	}
 }
 

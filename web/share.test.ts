@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bracketHost, shareRows, tunerAddress } from "./src/features/settings/tunerShare.ts";
+import { bracketHost, isLoopback, sharePageURL, shareRows, tunerAddress } from "./src/features/settings/tunerShare.ts";
 
 test("each app gets the playlist, the guide, and the HDHomeRun address", () => {
   const rows = shareRows("http://tuner.example:8477/settings", true);
@@ -46,4 +46,18 @@ test("the playlist and guide stay when the HDHomeRun switch is not offered", () 
   );
   assert.equal(rows.filter((row) => row.app === "Channels").length, 2);
   assert.equal(rows[0].value, "http://tuner.example:8477/export/lineup.m3u");
+});
+
+test("opened at localhost, the share addresses use the server's home network address", () => {
+  assert.equal(isLoopback("localhost"), true);
+  assert.equal(isLoopback("127.0.0.1"), true);
+  assert.equal(isLoopback("[::1]"), true);
+  assert.equal(isLoopback("192.168.1.2"), false);
+  const page = sharePageURL("http://localhost:8477/settings/integrations", "192.168.4.20:8478");
+  assert.equal(page, "http://192.168.4.20:8477/settings/integrations");
+  assert.equal(tunerAddress(page), "192.168.4.20:8478");
+  // No home address known yet, or a page already on the network, stays as it is.
+  assert.equal(sharePageURL("http://localhost:8477/x", ""), "http://localhost:8477/x");
+  assert.equal(sharePageURL("http://localhost:8477/x", "localhost:8478"), "http://localhost:8477/x");
+  assert.equal(sharePageURL("http://10.0.0.5:8477/x", "192.168.4.20:8478"), "http://10.0.0.5:8477/x");
 });

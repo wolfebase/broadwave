@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"broadwave/internal/direct"
 	"broadwave/internal/discovery"
 )
 
@@ -33,12 +34,25 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// lanAddrs is this machine's home network address. Tests replace it.
+var lanAddrs = direct.LocalAddrs
+
 // tunerShareHost is the address other apps type. An IPv6 host stays in
-// brackets, so the port is not read as part of the address.
+// brackets, so the port is not read as part of the address. A page opened at
+// localhost gets the home network address instead: no other device can reach
+// localhost.
 func tunerShareHost(hostport string) string {
 	host := hostport
 	if name, _, err := net.SplitHostPort(hostport); err == nil {
 		host = name
+	}
+	if loopbackHost(host) {
+		for _, a := range lanAddrs() {
+			if a.Is4() {
+				host = a.String()
+				break
+			}
+		}
 	}
 	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
 		host = "[" + host + "]"
@@ -123,4 +137,13 @@ func hostOf(raw string) string {
 		return ""
 	}
 	return u.Hostname()
+}
+
+func loopbackHost(host string) bool {
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
