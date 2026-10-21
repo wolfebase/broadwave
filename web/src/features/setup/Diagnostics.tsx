@@ -4,6 +4,7 @@ import type { DeviceHealth } from "../../types";
 import { setupMessages } from "../../i18n/messages/setup.ts";
 import { bind, formatDateTime } from "../../i18n/runtime.ts";
 import { copy } from "../../strings";
+import { tunerHolder } from "./diagLines";
 import { useDiagnostics, type ChannelStart } from "./useDiagnostics";
 import "./setup.css";
 
@@ -55,9 +56,7 @@ export function DiagnosticsPage() {
               <span className="dim">
                 {tuner.target ? (
                   <>
-                    {tuner.ours ? t("diag.thisServer") : t("diag.otherDevice")}
-                    {" · "}
-                    {tunedLabel(tuner.guide, tuner.name)}
+                    {tunerHolder(tuner.ours ? t("diag.thisServer") : t("diag.otherDevice"), tuner.guide, tuner.name)}
                     {t("diag.signalQuality", { strength: `${tuner.strength}`, quality: `${tuner.quality}` })}
                   </>
                 ) : (
@@ -269,12 +268,6 @@ function shortTime(iso: string) {
 }
 
 /** A tuner can report its channel name as the number; say it once. */
-function tunedLabel(guide?: string, name?: string) {
-  const g = (guide ?? "").trim();
-  const n = (name ?? "").trim();
-  return n && n !== g ? `${g} ${n}`.trim() : g;
-}
-
 function bufferLine(b?: { minutes: number; bytes: number; state: "on" | "off" | "full" }) {
   if (!b) return "";
   if (b.state === "off") return t("diag.bufferOff");

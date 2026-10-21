@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"broadwave/internal/disk"
+	"broadwave/internal/dvr"
 	"broadwave/internal/doctor"
 	"broadwave/internal/live"
 	"broadwave/internal/logbuf"
@@ -78,7 +79,18 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			source[row.ChannelID] = row.Source
 		}
 	}
-	guideInfo := map[string]any{"channels": len(channels), "channelsWithListings": len(guideRows), "airings": total}
+	// Only the channels on the guide count, so the listed count never tops the channel count.
+	shown := map[int64]bool{}
+	for _, ch := range channels {
+		shown[ch.ID] = true
+	}
+	listed := 0
+	for _, row := range guideRows {
+		if shown[row.ChannelID] {
+			listed++
+		}
+	}
+	guideInfo := map[string]any{"channels": len(channels), "channelsWithListings": listed, "airings": total}
 	if !last.IsZero() {
 		guideInfo["listingsUntil"] = last
 	}
@@ -174,16 +186,17 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 	})
 }
 
-// tunerWentQuiet is a tuner that has not answered in three minutes.
+// tunerWentQuiet is a tuner that has missed three rounds of the five-minute
+// discovery refresh (dvr.TunerQuietAfter). Three minutes flagged every idle
+// tuner between two refreshes on a fresh install.
 // A tune in progress means it is answering, even if discovery has not refreshed LastSeen.
 func tunerWentQuiet(devices []store.Device, busy bool, now time.Time) bool {
 	if busy {
 		return false
 	}
 	for _, d := range devices {
-		seen, err := time.Parse(time.RFC3339, d.LastSeen)
 		// A tuner the owner retired is away on purpose.
-		if d.TunerCount > 0 && !d.Retired && err == nil && now.Sub(seen) > 3*time.Minute {
+		if !d.Retired && dvr.DeviceOffline(d, now) {
 			return true
 		}
 	}
