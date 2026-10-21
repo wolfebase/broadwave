@@ -37,6 +37,10 @@ func (e *ESPN) Scoreboard(ctx context.Context, leagueID string, day time.Time) (
 		client = fetchguard.Client(15 * time.Second)
 	}
 	url := fmt.Sprintf("%s/%s/%s/scoreboard?dates=%s", strings.TrimRight(base, "/"), league.Sport, league.Slug, day.Format("20060102"))
+	if league.Groups != "" {
+		// A Saturday has well over a hundred division games.
+		url += "&groups=" + league.Groups + "&limit=400"
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err

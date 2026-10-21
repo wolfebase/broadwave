@@ -4153,8 +4153,8 @@ export interface operations {
     scoreboard: {
         parameters: {
             query?: {
-                /** @description One of nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, or nascar. Blank asks for every league. Anything else, including NFL, is 400. */
-                league?: "" | "nfl" | "ncaaf" | "nba" | "wnba" | "ncaab" | "mlb" | "nhl" | "mls" | "nwsl" | "epl" | "f1" | "nascar";
+                /** @description One of nfl, ncaaf, fcs, nba, wnba, ncaab, ncaaw, mlb, nhl, mls, nwsl, epl, ligamx, f1, nascar, or indycar. Blank asks for every league. Anything else, including NFL, is 400. */
+                league?: "" | "nfl" | "ncaaf" | "fcs" | "nba" | "wnba" | "ncaab" | "ncaaw" | "mlb" | "nhl" | "mls" | "nwsl" | "epl" | "ligamx" | "f1" | "nascar" | "indycar";
                 /** @description Calendar day. Blank is today on the server. */
                 date?: string;
             };

@@ -13,23 +13,33 @@ type League struct {
 	Sport        string
 	Slug         string
 	ScheduleOnly bool
+	// Groups asks ESPN for a whole division: without it the college boards
+	// list only ranked and featured games, not the regional ones on local TV.
+	Groups string
 }
 
-// Leagues is the set the scoreboard asks for. F1 and NASCAR are schedules:
-// the feed lists the event, not a play-by-play.
+// Leagues is the set the scoreboard asks for, the leagues US and Canadian
+// broadcast stations carry. F1, NASCAR, and IndyCar are schedules: the feed
+// lists the event, not a play-by-play. Golf and the CFL are left out: the
+// scoreboard lists a golf tournament as one four-day event, and its CFL board
+// is not kept current.
 var Leagues = []League{
 	{ID: "nfl", Name: "NFL", Sport: "football", Slug: "nfl"},
-	{ID: "ncaaf", Name: "College Football", Sport: "football", Slug: "college-football"},
+	{ID: "ncaaf", Name: "College Football", Sport: "football", Slug: "college-football", Groups: "80"},
+	{ID: "fcs", Name: "FCS Football", Sport: "football", Slug: "college-football", Groups: "81"},
 	{ID: "nba", Name: "NBA", Sport: "basketball", Slug: "nba"},
 	{ID: "wnba", Name: "WNBA", Sport: "basketball", Slug: "wnba"},
-	{ID: "ncaab", Name: "College Basketball", Sport: "basketball", Slug: "mens-college-basketball"},
+	{ID: "ncaab", Name: "College Basketball", Sport: "basketball", Slug: "mens-college-basketball", Groups: "50"},
+	{ID: "ncaaw", Name: "Women's College Basketball", Sport: "basketball", Slug: "womens-college-basketball", Groups: "50"},
 	{ID: "mlb", Name: "MLB", Sport: "baseball", Slug: "mlb"},
 	{ID: "nhl", Name: "NHL", Sport: "hockey", Slug: "nhl"},
 	{ID: "mls", Name: "MLS", Sport: "soccer", Slug: "usa.1"},
 	{ID: "nwsl", Name: "NWSL", Sport: "soccer", Slug: "usa.nwsl"},
 	{ID: "epl", Name: "Premier League", Sport: "soccer", Slug: "eng.1"},
+	{ID: "ligamx", Name: "Liga MX", Sport: "soccer", Slug: "mex.1"},
 	{ID: "f1", Name: "F1", Sport: "racing", Slug: "f1", ScheduleOnly: true},
 	{ID: "nascar", Name: "NASCAR", Sport: "racing", Slug: "nascar-premier", ScheduleOnly: true},
+	{ID: "indycar", Name: "IndyCar", Sport: "racing", Slug: "irl", ScheduleOnly: true},
 }
 
 func FindLeague(id string) (League, bool) {

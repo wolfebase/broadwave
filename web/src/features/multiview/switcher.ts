@@ -38,14 +38,17 @@ const HOLD_MS = 2 * 60 * 1000;
 const SPORT: Record<string, string> = {
   nfl: "football",
   ncaaf: "football",
+  fcs: "football",
   nba: "basketball",
   wnba: "basketball",
   ncaab: "basketball",
+  ncaaw: "basketball",
   mlb: "baseball",
   nhl: "hockey",
   mls: "soccer",
   nwsl: "soccer",
   epl: "soccer",
+  ligamx: "soccer",
 };
 
 const lastQuarter = /\b(?:4th|fourth|ot|overtime)\b/i;

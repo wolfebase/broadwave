@@ -886,8 +886,8 @@ paths:
           name: league
           schema:
             type: string
-            enum: ["", nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, nascar]
-          description: One of nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, or nascar. Blank asks for every league. Anything else, including NFL, is 400.
+            enum: ["", nfl, ncaaf, fcs, nba, wnba, ncaab, ncaaw, mlb, nhl, mls, nwsl, epl, ligamx, f1, nascar, indycar]
+          description: One of nfl, ncaaf, fcs, nba, wnba, ncaab, ncaaw, mlb, nhl, mls, nwsl, epl, ligamx, f1, nascar, or indycar. Blank asks for every league. Anything else, including NFL, is 400.
         - in: query
           name: date
           schema: { type: string, format: date }

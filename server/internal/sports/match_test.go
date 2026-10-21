@@ -72,3 +72,24 @@ func TestLinkReadsAbbreviationsAndRaceNames(t *testing.T) {
 		t.Fatalf("%v", race)
 	}
 }
+
+func TestLinkReadsTheNewLeagueNames(t *testing.T) {
+	start := time.Date(2026, 11, 21, 19, 0, 0, 0, time.UTC)
+	game := func(id, league string) Game {
+		return Game{ID: id, League: league, Start: start, Teams: []Team{
+			{Name: "Lakeside Owls", Abbr: "LKS", Home: true}, {Name: "Ridge Foxes", Abbr: "RDG"},
+		}}
+	}
+	games := []Game{game("men", "ncaab"), game("women", "ncaaw"), game("fcs", "fcs")}
+	cases := map[string]string{
+		"Women's College Basketball": "women",
+		"College Basketball":         "men",
+		"College Football":           "fcs",
+	}
+	for title, want := range cases {
+		links := Link([]Listing{{ID: 1, Title: title, Subtitle: "Ridge Foxes at Lakeside Owls", Start: start}}, games)
+		if links[1] != want {
+			t.Errorf("%s linked %q, want %q", title, links[1], want)
+		}
+	}
+}

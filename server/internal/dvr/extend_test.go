@@ -64,3 +64,29 @@ func TestUnmatchedSportsGetsAnExtraHour(t *testing.T) {
 		t.Fatalf("matched game %v %d", ok, minutes)
 	}
 }
+
+func TestUnmatchedSportsTailFitsTheSport(t *testing.T) {
+	cases := []struct {
+		category, title string
+		want            time.Duration
+	}{
+		{"Sports event, Basketball", "Lakeside at Ridge", 30 * time.Minute},
+		{"Sports, Soccer", "Liga MX", 30 * time.Minute},
+		{"Sports event", "College Football", time.Hour},
+		{"Sports event", "PGA Tour Golf", 90 * time.Minute},
+		{"Auto racing", "IndyCar Series", 90 * time.Minute},
+		{"Sports event", "Lakeside at Ridge", time.Hour},
+		{"Sports talk", "Football Night", 0},
+		{"Sports non-event", "Inside the Huddle", 0},
+		{"Movie", "Football Dreams", 0},
+		{"News", "Evening News", 0},
+	}
+	for _, tc := range cases {
+		if got := SportsTail(store.Airing{Category: tc.category, Title: tc.title}); got != tc.want {
+			t.Errorf("%s / %s: %v, want %v", tc.category, tc.title, got, tc.want)
+		}
+	}
+	if got := SportsTail(store.Airing{Category: "Sports event, Golf", GameID: "9"}); got != 0 {
+		t.Fatalf("a matched game follows the scoreboard, got %v", got)
+	}
+}

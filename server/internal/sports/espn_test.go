@@ -101,3 +101,29 @@ func TestPowerPlayObjectAndDownDistance(t *testing.T) {
 		t.Fatal(err, games)
 	}
 }
+
+func TestESPNAsksForTheWholeCollegeDivision(t *testing.T) {
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queries = append(queries, r.URL.Path+"?"+r.URL.RawQuery)
+		_, _ = w.Write([]byte(`{"events":[]}`))
+	}))
+	defer srv.Close()
+	client := &ESPN{Base: srv.URL, HTTP: srv.Client()}
+	day := time.Date(2026, 11, 21, 15, 0, 0, 0, time.UTC)
+	for _, league := range []string{"ncaab", "ncaaw", "fcs", "ligamx", "nfl"} {
+		if _, err := client.Scoreboard(t.Context(), league, day); err != nil {
+			t.Fatal(league, err)
+		}
+	}
+	want := []string{
+		"/basketball/mens-college-basketball/scoreboard?dates=20261121&groups=50&limit=400",
+		"/basketball/womens-college-basketball/scoreboard?dates=20261121&groups=50&limit=400",
+		"/football/college-football/scoreboard?dates=20261121&groups=81&limit=400",
+		"/soccer/mex.1/scoreboard?dates=20261121",
+		"/football/nfl/scoreboard?dates=20261121",
+	}
+	if strings.Join(queries, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("asked\n%s", strings.Join(queries, "\n"))
+	}
+}
