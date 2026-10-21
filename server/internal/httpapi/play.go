@@ -601,6 +601,9 @@ func (s *Server) refreshGuide(w http.ResponseWriter, r *http.Request) {
 	} else {
 		n, err = s.pullGuide(r.Context(), force)
 	}
+	if err != nil && manualGuideFailed(w, err) {
+		return
+	}
 	if err != nil {
 		writeError(w, err)
 		return

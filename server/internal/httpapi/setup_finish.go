@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -28,6 +29,9 @@ type finishStatus struct {
 	Ready     string       `json:"ready,omitempty"`
 	ChannelID int64        `json:"channelId,omitempty"`
 	Steps     []finishStep `json:"steps"`
+	// NeedsGuide is a setup that ended with no listings; the Ready step
+	// offers Schedules Direct or an XMLTV link.
+	NeedsGuide bool `json:"needsGuide,omitempty"`
 }
 
 func (st finishStatus) clone() finishStatus {
@@ -269,35 +273,49 @@ func (s *Server) stepGuide(ctx context.Context) {
 		s.setFinish("guide", "skipped", "A test server does not pull the guide.")
 		return
 	}
-	// Only an antenna tuner hears listings in the broadcast. A playlist needs a guide source.
-	more := " Add a guide in Settings › Guide: Schedules Direct or an XMLTV link."
-	if s.hasAntennaTuner(ctx) {
+	// Only an antenna tuner hears listings in the broadcast. Either way the
+	// Ready step offers Schedules Direct or an XMLTV link when nothing loaded.
+	antenna := s.hasAntennaTuner(ctx)
+	more := ""
+	if antenna {
 		more = " More listings arrive from the broadcast."
 	}
 	if listed == 0 {
+		// A guide that does not load never stops setup: the channels still play.
 		pullCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		n, err := s.RefreshGuide(pullCtx)
+		_, err := s.RefreshGuide(pullCtx)
 		cancel()
-		if err != nil {
-			slog.Error(fmt.Sprintf("setup: guide: %v", err))
-			s.setFinish("guide", "check", "Listings did not load."+more)
-			return
+		if err != nil && !errors.Is(err, ErrNoTuner) {
+			slog.Warn(fmt.Sprintf("setup: guide: %v", err))
 		}
 		listed = s.listedChannels(ctx)
 		if listed == 0 {
-			if n == 0 {
-				s.setFinish("guide", "check", "No listings yet."+more)
-				return
+			s.setFinish("guide", "check", "No listings yet. "+s.guideReason(ctx, antenna)+" Add a guide below, or later in Settings › Guide.")
+			s.finishMu.Lock()
+			if s.finishRun != nil {
+				s.finishRun.NeedsGuide = true
 			}
-			s.setFinish("guide", "check", fmt.Sprintf("Loaded %d listings.", n)+more)
+			s.finishMu.Unlock()
 			return
 		}
 	}
-	detail := fmt.Sprintf("Listings for %s.", countLine(listed, "channel", "channels"))
-	if s.hasAntennaTuner(ctx) {
-		detail += more
+	s.setFinish("guide", "done", fmt.Sprintf("Listings for %s.", countLine(listed, "channel", "channels"))+more)
+}
+
+// guideReason says why the guide is empty, from the sources' last pulls.
+func (s *Server) guideReason(ctx context.Context, antenna bool) string {
+	if !antenna {
+		return "Streamed channels need a guide: Schedules Direct or an XMLTV link."
 	}
-	s.setFinish("guide", "done", detail)
+	states, err := s.Store.GuideSources(ctx)
+	if err == nil {
+		for _, source := range guideSourceOrder {
+			if st := states[source]; st.Error != "" {
+				return plainSourceError(errors.New(st.Error))
+			}
+		}
+	}
+	return "The guide sources sent nothing for these channels."
 }
 
 // hasAntennaTuner reports a device with tuners: a playlist or Xtream source has none.

@@ -440,6 +440,9 @@ func (s *Server) pullSource(ctx context.Context, conf guideSourceConfig, devices
 		}
 		raw, err := guide.Pull(ctx, s.HDHR, bases...)
 		if err != nil {
+			if strings.Contains(err.Error(), "403") {
+				return nil, errors.New("SiliconDust has no free listings for this tuner (403)")
+			}
 			return nil, err
 		}
 		rows, art, err := guide.Parse(raw, antenna)

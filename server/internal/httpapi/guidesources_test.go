@@ -26,7 +26,16 @@ func fakeSD(t *testing.T, pulls *atomic.Int32) *httptest.Server {
 		switch r.URL.Path {
 		case "/token":
 			_, _ = w.Write([]byte(`{"code":0,"token":"tok"}`))
+		case "/headends":
+			_, _ = w.Write([]byte(`[{"headend":"80000","transport":"Antenna","location":"80000","lineups":[{"name":"Antenna","lineup":"USA-OTA80000"}]},
+				{"headend":"CO1","transport":"Cable","location":"Plainsview","lineups":[{"name":"Valley Cable","lineup":"USA-CO1-X"}]}]`))
+		case "/status":
+			_, _ = w.Write([]byte(`{"account":{"maxLineups":4},"lineups":[]}`))
 		case "/lineups/USA-OTA80000":
+			if r.Method == http.MethodPut {
+				_, _ = w.Write([]byte(`{"code":0}`))
+				return
+			}
 			_, _ = w.Write([]byte(`{"map":[{"stationID":"90001","atscMajor":4,"atscMinor":1},{"stationID":"90003","atscMajor":5,"atscMinor":1}],
 				"stations":[{"stationID":"90001","callsign":"KBWV","affiliate":"NBC Affiliate","logo":{"URL":"https://logos.example/kbwv.png"}},{"stationID":"90003","callsign":"WTST"}]}`))
 		case "/schedules":
@@ -206,5 +215,79 @@ func TestManualRefreshLimitIsSiliconDustOnly(t *testing.T) {
 	}
 	if rec := postJSON(t, h, "/api/v1/guide/refresh", "{}"); rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("again: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// Setting up Schedules Direct from a postal code: list lineups, pick one,
+// and the guide fills right away.
+func TestSchedulesDirectFromAPostalCode(t *testing.T) {
+	st, client := fakeTunerStore(t)
+	var pulls atomic.Int32
+	sd := fakeSD(t, &pulls)
+	api := &Server{Store: st, HDHR: client, SD: func(user, pass string) *guide.SD {
+		return guide.NewSDWith(sd.Client(), sd.URL, user, pass)
+	}}
+	h := api.Handler()
+	if rec := postJSON(t, h, "/api/v1/guide/sd/lineups", `{"username":"viewer","password":"secret","postalCode":"8000"}`); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "ZIP") {
+		t.Fatalf("bad postal code: %d %s", rec.Code, rec.Body)
+	}
+	if rec := postJSON(t, h, "/api/v1/guide/sd/lineups", `{"postalCode":"80000"}`); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "password") {
+		t.Fatalf("no account: %d %s", rec.Code, rec.Body)
+	}
+	rec := postJSON(t, h, "/api/v1/guide/sd/lineups", `{"username":"viewer","password":"secret","postalCode":"80000"}`)
+	var found struct {
+		Country string           `json:"country"`
+		Lineups []guide.SDLineup `json:"lineups"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &found); err != nil || rec.Code != http.StatusOK || found.Country != "USA" || len(found.Lineups) != 2 || found.Lineups[0].ID != "USA-OTA80000" {
+		t.Fatalf("lineups: %d %s", rec.Code, rec.Body)
+	}
+	rec = postJSON(t, h, "/api/v1/guide/sd", `{"username":"viewer","password":"secret","lineup":"USA-OTA80000"}`)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"channels":2`) {
+		t.Fatalf("use lineup: %d %s", rec.Code, rec.Body)
+	}
+	saved, _ := st.Settings(context.Background())
+	if saved["sdUser"] != "viewer" || saved["sdLineup"] != "USA-OTA80000" || saved["sdPassword"] != "secret" {
+		t.Fatalf("settings %v", saved)
+	}
+}
+
+// An XMLTV link that lists nothing is not kept, and the answer says why.
+func TestXMLTVLinkWithNoProgramsIsNotKept(t *testing.T) {
+	st, client := fakeTunerStore(t)
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<tv><channel id="a"><display-name>4.1</display-name></channel></tv>`))
+	}))
+	t.Cleanup(feed.Close)
+	h := (&Server{Store: st, HDHR: client}).Handler()
+	rec := postJSON(t, h, "/api/v1/guide/xmltv", `{"url":"`+feed.URL+`/guide.xml"}`)
+	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "gave no programs") {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	saved, _ := st.Settings(context.Background())
+	if saved["guideUrl"] != "" {
+		t.Fatalf("kept %q", saved["guideUrl"])
+	}
+	if rec := postJSON(t, h, "/api/v1/guide/xmltv", `{"url":"ftp://x"}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("ftp: %d", rec.Code)
+	}
+}
+
+// Setup never stops on the guide: with no listings it says why and flags
+// the Ready step to offer a guide.
+func TestSetupWithNoListingsOffersAGuide(t *testing.T) {
+	st, client := fakeTunerStore(t)
+	api := &Server{Store: st, HDHR: client}
+	run := newFinishStatus()
+	api.finishRun = &run
+	api.stepGuide(context.Background())
+	var step finishStep
+	for _, s := range api.finishRun.Steps {
+		if s.ID == "guide" {
+			step = s
+		}
+	}
+	if step.State != "check" || !api.finishRun.NeedsGuide || !strings.Contains(step.Detail, "Settings › Guide") {
+		t.Fatalf("%+v needsGuide %v", step, api.finishRun.NeedsGuide)
 	}
 }

@@ -841,11 +841,125 @@ paths:
                 properties:
                   airings: { type: integer }
         "429":
-          description: Manual refresh is limited to once an hour
+          description: |
+            Nothing would be pulled: SiliconDust is pulled at most once an hour, and Schedules Direct and an
+            XMLTV link once an hour unless their settings changed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: Every source that was pulled failed and the guide is empty (code guide_failed, with the reason in plain words)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "500": { $ref: "#/components/responses/Error" }
+  /guide/sources:
+    get:
+      tags: [guide]
+      operationId: guideSources
+      description: |
+        Each listing source (silicondust, schedules-direct, xmltv), whether it is set up, its last good pull,
+        its next one, and the last failure since then. Each source keeps its own schedule: SiliconDust every
+        20 to 28 hours, the others daily, and after a failure 30 minutes, doubling up to 6 hours.
+      responses:
+        "200":
+          description: Listing sources
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sources]
+                properties:
+                  sources:
+                    type: array
+                    items: { $ref: "#/components/schemas/GuideSource" }
+  /guide/sd/lineups:
+    post:
+      tags: [guide]
+      operationId: findSDLineups
+      description: |
+        Signs in to Schedules Direct and lists the lineups for a US ZIP or Canadian postal code, antenna
+        first, with the lineups already on the account and its limit. A username and password left out
+        are the saved ones.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [postalCode]
+              properties:
+                username: { type: string }
+                password: { type: string }
+                postalCode: { type: string }
+      responses:
+        "200":
+          description: Lineups for that place
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [country, postalCode, lineups, account]
+                properties:
+                  country: { type: string, enum: [USA, CAN] }
+                  postalCode: { type: string }
+                  lineups:
+                    type: array
+                    items: { $ref: "#/components/schemas/SDLineup" }
+                  account: { $ref: "#/components/schemas/SDAccount" }
+        "400": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+  /guide/sd:
+    post:
+      tags: [guide]
+      operationId: useSDLineup
+      description: |
+        Puts the lineup on the Schedules Direct account (unless it is there; an account at its lineup limit
+        is refused), saves the account and lineup as the guide source, and pulls its listings now. A lineup
+        that brings no listings is not kept and the answer says why (502, guide_source_failed).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lineup]
+              properties:
+                username: { type: string }
+                password: { type: string }
+                lineup: { type: string }
+      responses:
+        "200":
+          description: The source is saved and its listings loaded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GuideSourcePull" }
+        "400": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+  /guide/xmltv:
+    post:
+      tags: [guide]
+      operationId: useXMLTV
+      description: |
+        Saves an XMLTV link as the guide source and pulls it now. A link that brings no listings is not kept
+        and the answer says why (502, guide_source_failed).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string }
+      responses:
+        "200":
+          description: The source is saved and its listings loaded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GuideSourcePull" }
+        "400": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
   /search:
     get:
       tags: [guide]
@@ -3067,7 +3181,7 @@ components:
           type: string
           description: |
             Stable machine code. An unknown code is still a failure.
-            Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
+            Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_failed, guide_rate_limited, guide_source_failed, guide_url, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, postal_code, rate_limited, recording_soon, remove_failed, sd_account, sd_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
         message: { type: string, description: Short text safe to show a user. }
         tuners:
           type: array
@@ -3801,6 +3915,43 @@ components:
         title: { type: string }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
+    GuideSource:
+      type: object
+      required: [source, on]
+      properties:
+        source: { type: string, enum: [silicondust, schedules-direct, xmltv] }
+        on: { type: boolean, description: "Set up. SiliconDust is always on; it needs an HDHomeRun tuner." }
+        lastOk: { type: string, format: date-time }
+        next: { type: string, format: date-time }
+        error: { type: string, description: "The last failure since the last good pull." }
+        fails: { type: integer, description: "Failures in a row." }
+        listings: { type: integer, description: "Listings the last good pull brought." }
+    GuideSourcePull:
+      type: object
+      required: [airings, channels, sources]
+      properties:
+        airings: { type: integer, description: "Listings in the guide after the pull." }
+        channels: { type: integer, description: "Channels with listings." }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/GuideSource" }
+    SDLineup:
+      type: object
+      required: [id, name, transport]
+      properties:
+        id: { type: string, description: "Such as USA-OTA80000." }
+        name: { type: string }
+        transport: { type: string, description: "Antenna, Cable, Satellite, or a streaming provider's kind." }
+        location: { type: string }
+    SDAccount:
+      type: object
+      required: [lineups, maxLineups]
+      properties:
+        lineups:
+          type: array
+          items: { type: string }
+        maxLineups: { type: integer }
+        expires: { type: string }
     SetupStep:
       type: object
       required: [id, title, state]
@@ -3819,6 +3970,7 @@ components:
         steps:
           type: array
           items: { $ref: "#/components/schemas/SetupStep" }
+        needsGuide: { type: boolean, description: "Setup ended with no listings. Offer Schedules Direct or an XMLTV link." }
     StoragePlan:
       type: object
       required: [deleteWatchedDays, makeRoom, protectFavorites, watermarkGB, freeBytes, reserveBytes, shortBytes, covers, remove, held, again]
