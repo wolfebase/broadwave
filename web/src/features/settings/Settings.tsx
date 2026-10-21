@@ -99,15 +99,16 @@ export function GuideSection({ settings, onChange }: { settings: Settings; onCha
           }}
         />
       </Group>
-      <Group title={g("gs.title")}>
-        <div className="set-row stack">
-          <GetListings
-            key={`${settings.sdUser ?? ""}|${settings.sdLineup ?? ""}`}
-            saved={{ user: settings.sdUser, passwordSaved: settings.sdPasswordSet === "1", lineup: settings.sdLineup, url: settings.guideUrl }}
-            onLoaded={reload}
-          />
-        </div>
-      </Group>
+      <section className="set-group" aria-label={g("gs.title")}>
+        <header className="set-group-head">
+          <h3>{g("gs.title")}</h3>
+        </header>
+        <GetListings
+          key={`${settings.sdUser ?? ""}|${settings.sdLineup ?? ""}`}
+          saved={{ user: settings.sdUser, passwordSaved: settings.sdPasswordSet === "1", lineup: settings.sdLineup, url: settings.guideUrl }}
+          onLoaded={reload}
+        />
+      </section>
       <Group title={h("guide.art")}>
         <SecretRow label={h("guide.tmdb")} hint={copy.settings.movieArtHint} saved={settings.tmdbKeySet === "1"} onSave={(tmdbKey) => onChange({ tmdbKey })} />
       </Group>

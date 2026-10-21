@@ -109,12 +109,14 @@ export function GetListings({ saved, onLoaded, lede = false }: { saved: Saved; o
               <label key={l.id} className="gs-lineup" data-on={pick === l.id ? "1" : undefined}>
                 <input type="radio" name={`${ids}-lineup`} value={l.id} checked={pick === l.id} onChange={() => setPick(l.id)} />
                 <span className="gs-lineup-text">
-                  <strong>{l.name || l.id}</strong>
+                  <span className="gs-lineup-name">
+                    <strong>{l.name || l.id}</strong>
+                    {l.id === saved.lineup ? <span className="gs-badge">{t("gs.current")}</span> : account?.lineups.includes(l.id) ? <span className="gs-badge">{t("gs.onAccount")}</span> : null}
+                  </span>
                   <span className="gs-hint">
                     {[l.transport, l.location && l.location !== found.postalCode ? l.location : "", l.id].filter(Boolean).join(" · ")}
                   </span>
                 </span>
-                {l.id === saved.lineup ? <span className="gs-badge">{t("gs.current")}</span> : account?.lineups.includes(l.id) ? <span className="gs-badge">{t("gs.onAccount")}</span> : null}
               </label>
             ))}
             {account && account.maxLineups > 0 ? <p className="gs-hint">{t("gs.room", account.lineups.length, { max: account.maxLineups })}</p> : null}
@@ -197,8 +199,8 @@ function when(iso: string): string {
 export function sourceLine(s: GuideSourceState): string {
   if (!s.on) return t("gs.off");
   const parts: string[] = [];
-  if (s.lastOk) parts.push(t("gs.ok", s.listings ?? 0, { when: when(s.lastOk) }));
-  if (s.error) parts.push(t("gs.failed", { why: s.error }));
+  if (s.lastOk) parts.push(t("gs.ok", s.listings ?? 0, { n: (s.listings ?? 0).toLocaleString(), when: when(s.lastOk) }));
+  if (s.error) parts.push(t("gs.failed", { why: /[.!?]$/.test(s.error) ? s.error : `${s.error}.` }));
   if (!s.lastOk && !s.error) parts.push(t("gs.waiting"));
   if (s.next && (s.error || !s.lastOk)) parts.push(t("gs.next", { when: when(s.next) }));
   return parts.join(" ");

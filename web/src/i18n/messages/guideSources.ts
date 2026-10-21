@@ -31,7 +31,7 @@ export const guideSourcesMessages = {
   "gs.source.xmltv": "XMLTV link",
   "gs.off": "Not set up",
   "gs.turnOff": "Turn off",
-  "gs.ok": { one: "1 listing, updated {when}.", other: "{count} listings, updated {when}." },
+  "gs.ok": { one: "1 listing, updated {when}.", other: "{n} listings, updated {when}." },
   "gs.waiting": "Not pulled yet.",
   "gs.failed": "Last try failed: {why}",
   "gs.next": "Next try {when}.",

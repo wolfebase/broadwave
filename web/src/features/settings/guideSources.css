@@ -25,6 +25,13 @@
   min-width: 0;
 }
 
+.gs-card h4,
+.gs-card p,
+.gs-lede,
+.gs-note {
+  margin: 0;
+}
+
 .gs-card h4 {
   font-size: var(--type-headline-size);
   font-weight: 700;
@@ -126,6 +133,13 @@
 
 .gs-lineup-text .gs-hint {
   overflow-wrap: anywhere;
+}
+
+.gs-lineup-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--space-2);
 }
 
 .gs-badge {
