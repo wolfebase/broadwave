@@ -94,7 +94,7 @@
           <li><strong>Tuner address.</strong> When the tuner does not appear, enter its address on the setup page, or set <code>HDHR_HOST</code> to that address. Add <code>:port</code> only when it is not 80.</li>
         </ul>
 
-        <h3>Mac</h3>
+        <h3>Docker Desktop (Mac or Windows)</h3>
         <p>On Docker Desktop for Mac and Windows, the container's host network is a virtual machine. Publish the port and set <code>HDHR_HOST</code> to the tuner's address:</p>
         <pre><code>docker run -d --name broadwave --restart unless-stopped \
   -e TZ=America/Chicago \

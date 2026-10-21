@@ -4,19 +4,24 @@ Open `http://<your-server>:8477`. The first page is titled "Let's set up your TV
 
 ## Sources
 
-Setup looks for an HDHomeRun on the network and moves on by itself once one answers. The line under the heading says so: "Setup adds an HDHomeRun on this network and moves on by itself. Start adding something else and it waits for you."
+Setup looks for an HDHomeRun on the network. While it looks, the heading says "Looking for your tuner…" and the box under it says "Searching…". When a tuner answers, the box shows its name, how many tuners it has, how many channels it listed, and the word Found. The line under the heading says "Found it. Setup moves on in a few seconds. Tap anything here to stay." Tap or type anything on the page and it waits: "Take your time. Continue when you're ready."
 
-The first look says "No tuner answered yet." On the web, while no tuner is listed yet, that line says "Searching…" while Add by address, Look harder, Add free channels, or adding a playlist is running. On iPhone, iPad, and Apple TV, Add by address, Look harder, and Add free channels say "Looking…", and adding a playlist says "Adding…". "Searching…" there is the first automatic look. A tuner that answered shows its name, how many tuners it has, how many channels it listed, and the word Found.
+If nothing answers, the heading says "No tuner found", and the page lists why a tuner might not show up: a different network, a Docker container without host networking, or a tuner that is off.
 
-If nothing answers, type the tuner's address and choose Add by address. The hint under the field is "A tuner, or a server that speaks HDHomeRun. Add the port if it is not 80." On Docker Desktop, discovery cannot see the tuner. Set `HDHR_HOST` when you start the container, or type the tuner's address here. [Install](install.md) has that command.
+- **Not seeing your tuner?** Type its address and choose Add by address. The hint is "A tuner, or a server that speaks HDHomeRun. Add the port if it is not 80." On Docker Desktop, discovery cannot see the tuner. Set `HDHR_HOST` when you start the container, or type the address here. [Install](install.md) has that command.
+- **Look harder** checks this network for tuners and other servers. Add on a result puts it in the lineup.
+- **Free streaming channels (FastChannels)** looks for FastChannels, a separate free app that gathers internet channels. It can take about 15 seconds, and the page says it is looking. If FastChannels is not running, the page shows how to start it. The iPhone, iPad, and Apple TV apps call this Add free channels.
+- **Other sources** adds a playlist, an Xtream server, or a file.
 
-Look harder checks this network for tuners and other servers. Add on a result is what puts it in the lineup. Add free channels looks for a free-channel server that is already running. A playlist or an Xtream server can be added on this page too. You can skip both and come back to them in Settings.
+On iPhone, iPad, and Apple TV, these buttons say "Looking…" while they work, and adding a playlist says "Adding…".
 
-Continue stays off until a tuner or a channel is in the lineup. After a tuner or a channel is in the lineup, the page moves to Ready on its own after a few seconds, unless you have clicked or typed on that page.
+You can skip all of these and come back to them in Settings, Tuners and lineup.
+
+Continue stays off until a tuner or a channel is in the lineup. Then the page moves to Ready on its own after a few seconds, unless you have tapped or typed on it.
 
 ## Ready
 
-Ready runs six checks and marks each one Working, Done, Needs a look, or Skipped:
+Ready says "Setting up your TV" while it runs six checks, and marks each one Working, Done, Needs a look, or Skipped:
 
 1. Channels. If that tuner has no lineup yet, it scans the antenna.
 2. Guide. Listings are filled in.
@@ -25,7 +30,7 @@ Ready runs six checks and marks each one Working, Done, Needs a look, or Skipped
 5. Picture. The server times a 1080p60 encode and shows how fast it ran.
 6. Signal.
 
-The heading becomes a Ready line: the channel count, the tuner count, and the encoder, and the guide when some listings are in. Choose Watch.
+Then the heading sums it up (the channels, the tuners, and the guide when some listings are in) and says "Ready to watch." Choose Watch. Below, "Watch on your other screens" says how to connect the rest of the house.
 
 If you opened the page on the server itself, as localhost, it says "To connect your phone or TV, open this page from another device at this computer's network address, or open Broadwave there. It finds this server on its own." Opening the app lists the servers on your network. You pick one.
 

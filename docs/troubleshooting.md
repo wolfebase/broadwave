@@ -77,7 +77,7 @@ Diagnostics › Fix these, when the check applies: "Your tuner stopped answering
 
 ## Setup finds nothing
 
-Setup with an empty lineup says "No tuner answered yet." while it is idle. On the web, while no tuner is listed yet, it says "Searching…" while Add by address, Look harder, Add free channels, or a playlist add is running. On iPhone, iPad, and Apple TV, Add by address, Look harder, and Add free channels say "Looking…", adding a playlist says "Adding…", and "Searching…" is the first automatic look. Settings with no tuner yet says "No HDHomeRun has answered yet."
+On the web, setup with an empty lineup says "Looking for your tuner…" while it looks and "No tuner found" when nothing answered. In the iPhone, iPad, and Apple TV apps, the first look says "No tuner answered yet." On iPhone, iPad, and Apple TV, Add by address, Look harder, and Add free channels say "Looking…", adding a playlist says "Adding…", and "Searching…" is the first automatic look. Settings with no tuner yet says "No HDHomeRun has answered yet."
 
 An address that does not answer says "No HDHomeRun answered at that address. Add the port if it is not 80."
 

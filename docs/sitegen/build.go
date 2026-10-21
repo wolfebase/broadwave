@@ -22,6 +22,7 @@ var handbook = []struct {
 	Label string
 }{
 	{"index.md", "Home"},
+	{"server.md", "Set up a server"},
 	{"install.md", "Install"},
 	{"first-run.md", "First run"},
 	{"tuners.md", "Tuners"},

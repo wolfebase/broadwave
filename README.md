@@ -116,6 +116,7 @@ You need an always-on computer that runs Docker — a NAS, a mini PC, or a home 
 docker run -d --name broadwave --network host --restart unless-stopped \
   -e TZ=America/Chicago \
   -v ~/broadwave:/config \
+  -e PUID=$(id -u) -e PGID=$(id -g) \
   -v ~/broadwave/recordings:/config/work/recordings \
   ghcr.io/wolfebase/broadwave:latest
 ```
@@ -124,6 +125,7 @@ Then open **`http://<your-server>:8477`**. On a Linux server, Broadwave finds yo
 
 - **`--network host`** lets a Linux server hear your tuner, and lets phones and TVs find Broadwave. Keep it there.
 - **Graphics.** Add `--device /dev/dri` when that path exists (Intel or AMD). Docker refuses to start if the path is missing. The picture still plays without it.
+- **`PUID`, `PGID`** make the config and recordings yours instead of root's. `$(id -u)` and `$(id -g)` are the user running the command. Docker Desktop doesn't need them.
 - **`TZ`** is your time zone. Without it, a container runs on UTC.
 - **Tuner address.** When the tuner does not appear, enter its address on the setup page, or set `HDHR_HOST` to that address. Add `:port` only when it is not 80.
 - **Unraid.** Add the template [`deploy/unraid/broadwave.xml`](https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave.xml). It uses host networking and port 8477. Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Set Config and Recordings to folders on your server, and remove `/dev/dri` when the server has no Intel or AMD graphics. A plain `docker run` on Unraid needs `-e PUID=99 -e PGID=100` as well.
@@ -206,8 +208,8 @@ Without an updater, the web app says when a new release is out.
 <br>
 
 - **Any browser** at `http://<your-server>:8477` — live TV, the guide, recordings, and multiview. Nothing to install.
-- **Native apps** for iPhone, iPad, and Apple TV (coming to the App Store) list the servers they find on your home network. You pick one, or you type an address. The next launch connects to the one you saved. "Try the demo" plays sample films on the device.
-- **Away from home.** In Settings › Devices and away from home, choose Sign in with Cloudflare (0.15 and later): Broadwave makes a private tunnel and its own address on your domain, and only devices you pair or invite can open it. No domain? Use Tailscale and type that address with port 8477. Never forward the port. [Away from home](docs/guide/remote.md) has the details.
+- **Native apps** for iPhone, iPad, and Apple TV are coming soon to the App Store. Until then, the web app works on every device, phones and tablets included. The apps list the servers they find on your home network. You pick one, or you type an address. The next launch connects to the one you saved. "Try the demo" plays sample films on the device.
+- **Away from home.** First choice: in Settings › Devices and away from home, choose Sign in with Cloudflare (0.15 and later). Broadwave makes a tunnel and its own address on your domain, and only devices you pair or invite can open it. Second choice, with no domain: Tailscale, then open the server's Tailscale address with port 8477. Never forward the port. [Away from home](docs/guide/remote.md) has the details.
 
 </details>
 

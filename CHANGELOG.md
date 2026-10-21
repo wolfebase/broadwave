@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Docs: a short Set up a server page for people who installed an app first; README and Support say how to get the apps (App Store soon, the web app now), and put Sign in with Cloudflare first and Tailscale second for away from home.
+- Docs: Away from home lists its three ways and uses the Settings section's real name; First run matches the setup screens.
 - Web: Add free channels is now Free streaming channels (FastChannels), says FastChannels is a separate app, and says it is looking while it looks.
 - Web and server: Settings › Integrations opened at localhost shows the server's home network address for other apps, not localhost.
 - Web: Settings › About shows one version, the server's; the web app is part of it.

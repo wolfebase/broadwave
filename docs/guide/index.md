@@ -6,6 +6,7 @@ One tune of a channel feeds every screen and every recording. Screens in the hou
 
 ## Start here
 
+- [Set up a server](server.md), if you installed the app first
 - [Install](install.md) on Docker or Unraid
 - [First run](first-run.md)
 - [Tuners](tuners.md), including a FLEX 4K and ATSC 3.0

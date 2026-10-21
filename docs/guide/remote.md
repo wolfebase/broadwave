@@ -1,12 +1,12 @@
 # Away from home
 
-There are two ways to watch from somewhere else.
+There are three ways to watch from somewhere else. Try them in this order.
 
 - **Sign in with Cloudflare.** Broadwave gets a public `https` address, such as `tv.example.com`. You invite family, and only the phones, TVs, and browsers you invited can open it. Nothing on your router changes. This is the way to share with people outside the house.
-- **A VPN only your devices join**, such as [Tailscale](https://tailscale.com/). See [Tailscale](#tailscale) below.
+- **Tailscale**, a VPN only your devices join, for when you have no domain. See [Tailscale](#tailscale) below.
 - **A reverse proxy you already run**, such as Nginx Proxy Manager, SWAG, Caddy, or Traefik. It works like the Cloudflare tunnel: everything that comes in through it needs a paired device. See [Your own reverse proxy](#your-own-reverse-proxy).
 
-Either way, the tuner stays home. Your phone talks to Broadwave, and Broadwave talks to the tuner. One tune of a channel still feeds every screen and every recording. Do not forward port 8477 or 8478 on your router.
+Every way, the tuner stays home. Your phone talks to Broadwave, and Broadwave talks to the tuner. One tune of a channel still feeds every screen and every recording. Do not forward port 8477 or 8478 on your router.
 
 ## Sign in with Cloudflare
 
@@ -18,12 +18,12 @@ Broadwave makes a Cloudflare tunnel: an outbound connection from your server to 
 
 Do this on the home network, on a device that is an admin. It is refused from outside the house.
 
-1. Open Broadwave. Go to **Settings**, then **Away from home**.
+1. Open Broadwave. Go to **Settings**, then **Devices and away from home**.
 2. Choose **Sign in with Cloudflare**. A Cloudflare tab opens. Settings says **Waiting for Cloudflare…** with a countdown. The sign-in lasts about nine minutes.
 3. In the Cloudflare tab, sign in, pick the domain to use, and choose **Authorize**. Then come back to Broadwave. The tab can be closed.
 4. Settings says **Signed in · example.com**. Type a name for the address. `tv` makes `tv.example.com`.
 5. Choose **Turn on**. Broadwave makes the tunnel, adds the name to your DNS, and connects. It takes a few seconds.
-6. Settings says **Connected** and shows the address, such as `https://tv.example.com`. **Copy address** copies it. Now [invite family](#3-invite-family).
+6. Settings says **Connected** and shows the address, such as `https://tv.example.com`. **Copy address** copies it. Now [invite family](#2-invite-family).
 
 The tunnel is named `broadwave-` and the start of the server's id, so it is easy to find in the Cloudflare dashboard under **Zero Trust**, **Networks**, **Tunnels**.
 
@@ -49,7 +49,7 @@ Backups never hold the tunnel token, so restoring one does not start a tunnel. A
 
 ### Advanced: a token, or your own cloudflared
 
-**Advanced**, at the bottom of **Away from home**, keeps the older ways.
+**Advanced**, at the bottom of **Devices and away from home**, keeps the older ways.
 
 **Paste a tunnel token.** Make a tunnel yourself in the Cloudflare dashboard (**Zero Trust**, **Networks**, **Tunnels**, **Create a tunnel**, **Cloudflared**). Give it a public hostname such as `tv.example.com` with service `HTTP` and URL `localhost:8477`. Copy any install command Cloudflare shows. They all contain the token, a long string that starts with `eyJ`. Paste it into **Tunnel token** and choose **Save**. The whole command is fine. Broadwave keeps only the token, in the same `secrets/` file. The token is never shown again. **Remove token** stops the tunnel.
 
@@ -57,9 +57,9 @@ Backups never hold the tunnel token, so restoring one does not start a tunnel. A
 
 A token saved by an older version moves out of the catalog into `secrets/` the first time the new version starts.
 
-### 3. Invite family
+### 2. Invite family
 
-1. On the home network, open **Settings**, **Away from home**, **Invite someone**.
+1. On the home network, open **Settings**, **Devices and away from home**, **Invite someone**.
 2. Type who it is for, choose what they may do, and choose **Make an invite**.
    - **Watch** plays live TV and recordings.
    - **Record** also records and edits passes.
@@ -71,21 +71,21 @@ On their side:
 - **Apple TV, iPhone, or iPad.** Install Broadwave. On the first screen, choose **Join a home server**. Enter the address and the code. On iPhone and iPad, the app link from Settings does the same in one tap.
 - **A browser.** Open the browser link from Settings, name the browser, and choose **Pair**.
 
-Devices you invited are listed under **Settings**, **Devices**. **Revoke** stops one at once. **Remove** on a waiting invite stops it before anyone uses it.
+Devices you invited are listed under **Settings**, **Devices and away from home**, **Devices**. **Revoke** stops one at once. **Remove** on a waiting invite stops it before anyone uses it.
 
 ### Good to know
 
 - A live channel away from home uses one of your tuners, like a TV in the house. Recordings come first.
 - Video goes through Cloudflare. Cloudflare's terms limit serving mostly video through its network on some plans. Read the current terms for your plan before you rely on it.
-- Device sign-in at home (**Settings**, **Devices**, **Require a device to sign in**) is separate. Leave it off if everyone in the house should keep watching without a code.
+- Device sign-in at home (**Settings**, **Devices and away from home**, **Require a device to sign in**) is separate. Leave it off if everyone in the house should keep watching without a code.
 - The HDHomeRun port, 8478, is never on the tunnel.
 
 ## Your own reverse proxy
 
 A reverse proxy with its own certificate can publish Broadwave at a name such as `tv.example.com`. Point the name at `http://<the server's address>:8477` and turn on WebSockets for it (Nginx Proxy Manager calls it Websockets Support). Broadwave treats those requests like the Cloudflare tunnel: each one needs a paired device, whatever device sign-in is set to. That includes the guide, the video, recordings, settings, the support bundle, the playlist (`/export/lineup.m3u`), and the stream URLs. The home network does not change.
 
-1. On the home network, open **Settings**, **Away from home**, **Advanced**, and type the name into **Public address**, such as `tv.example.com`. Broadwave then answers to that name from the apps too, and invite links use it.
-2. [Invite family](#3-invite-family) the same way as with Cloudflare. A browser opens the invite link. The Apple apps choose **Join a home server** and type the address and the code.
+1. On the home network, open **Settings**, **Devices and away from home**, **Advanced**, and type the name into **Public address**, such as `tv.example.com`. Broadwave then answers to that name from the apps too, and invite links use it.
+2. [Invite family](#2-invite-family) the same way as with Cloudflare. A browser opens the invite link. The Apple apps choose **Join a home server** and type the address and the code.
 
 A request counts as outside the house when any of these is true:
 
@@ -113,15 +113,15 @@ On Docker Desktop, the published-port install maps only 8477. Port 8478 is reach
 
 ## What someone on that network can do
 
-Device sign-in is off until you turn it on. Settings, Devices, Require a device to sign in. While it is off, anyone who can open port 8477 can watch, record, change settings, delete recordings, and download the support bundle. The bundle leaves passwords out. It still has the logs and the settings.
+Device sign-in is off until you turn it on. Settings, Devices and away from home, Require a device to sign in. While it is off, anyone who can open port 8477 can watch, record, change settings, delete recordings, and download the support bundle. The bundle leaves passwords out. It still has the logs and the settings.
 
 The tailnet is everyone you invited to it. A tailnet you share is a shared server.
 
 Turn sign-in on when other people can reach the server and you watch in a browser. The hint under the switch, once it is on, is "A new device needs a code. This browser stays signed in. Health checks, playlists, and the HDHomeRun port stay open. The guide needs a signed-in device."
 
-A code is six digits and lasts 10 minutes. On a browser that is already signed in, Settings, Devices, choose Watch, Record, or Admin, then Pair a device. The hint is "Enter this code on the other device. It lasts 10 minutes." That page also has Approve a code. A browser that is not signed in says "Pair this device" and asks for the code from Settings. Show a code instead shows one there, and the hint is "Enter this code in Settings. It lasts 10 minutes." Pair this browser, on the signed-in page, opens that screen for the browser you are using. Watch plays and reads the guide. Record also records and edits passes. Admin also changes settings. Revoke stops one device. The last admin cannot be revoked while sign-in is on. The message is "Pair another admin device first. This is the last one that can change settings."
+A code is six digits and lasts 10 minutes. On a browser that is already signed in, Settings, Devices and away from home, choose Watch, Record, or Admin, then Pair a device. The hint is "Enter this code on the other device. It lasts 10 minutes." That page also has Approve a code. A browser that is not signed in says "Pair this device" and asks for the code from Settings. Show a code instead shows one there, and the hint is "Enter this code in Settings. It lasts 10 minutes." On a browser that is not signed in yet, Settings shows This browser with Pair this browser, which opens that screen. A signed-in browser shows the name it is signed in as instead. Watch plays and reads the guide. Record also records and edits passes. Admin also changes settings. Revoke stops one device. Revoking the browser you are using, or the only admin device, says so before it happens. The last admin cannot be revoked while sign-in is on. The message is "Pair another admin device first. This is the last one that can change settings."
 
-The iPhone, iPad, and Apple TV apps pair with a code too: **Join a home server** takes a code from Settings, Devices, Pair a device, or an invite.
+The iPhone, iPad, and Apple TV apps pair with a code too: **Join a home server** takes a code from Settings, Devices and away from home, Pair a device, or an invite.
 
 These stay open with no code, even after sign-in is on:
 
@@ -198,6 +198,6 @@ If **Require a device to sign in** is on and no admin device is left (a browser'
 
 The log says `reset-signin: DEVICE SIGN-IN IS NOW OFF`. The home network is open again, the way it is before sign-in is ever turned on. Devices that were already paired keep working, and a request from outside the house still needs a paired device. Then:
 
-1. On the home network, open **Settings**, **Devices**, and pair an admin device.
+1. On the home network, open **Settings**, **Devices and away from home**, and pair an admin device.
 2. Turn **Require a device to sign in** back on, if you want it.
 3. Remove `BROADWAVE_RESET_SIGNIN` or `-reset-signin`, and restart. While it is set, every start turns sign-in off again, and the log says so each time.
