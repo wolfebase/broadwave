@@ -1,5 +1,5 @@
 import qrcode from "qrcode-generator";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { addFree, addPlaylistFile, addSource, findFree, lookHarder, setupFinish, startSetupFinish, type FreeFeed, type SetupFinish } from "../../api";
 import { useData } from "../../app/data";
 import { navigate } from "../../app/router";
@@ -12,11 +12,15 @@ import { ChevronIcon } from "../../ui/icons";
 import { noteAfterFetch } from "./fetchNote";
 import { guideAfterFree, hitsAfterLook } from "./lookHits";
 import { HomeList } from "./HomeList";
+import { GetListings } from "../settings/GuideSources";
+import { guideSourcesMessages } from "../../i18n/messages/guideSources.ts";
+import { sameZone } from "./zone";
 import { foundHeading, setupSummary } from "./summary";
 import "../manage.css";
 import "./setup.css";
 
 const t = bind(setupMessages);
+const g = bind(guideSourcesMessages);
 
 // How long setup looks before it says nothing answered. Discovery answers in a
 // few seconds when a tuner is there.
@@ -40,7 +44,7 @@ const steps: { id: Step; readonly title: string }[] = [
 
 /** First run: find a tuner, then the server finishes setup on its own. */
 export function Setup() {
-  const { devices, channels, rediscover, refresh, saveSettings } = useData();
+  const { devices, channels, settings, rediscover, refresh, saveSettings } = useData();
   const [step, setStep] = useState<Step>("sources");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
@@ -403,7 +407,18 @@ export function Setup() {
           </section>
         ) : null}
 
-        {step === "finish" ? <FinishStep progress={progress} note={note} summary={setupSummary(devices, channels.length)} /> : null}
+        {step === "finish" ? (
+          <FinishStep
+            progress={progress}
+            note={note}
+            summary={setupSummary(devices, channels.length)}
+            saved={{ user: settings.sdUser, passwordSaved: settings.sdPasswordSet === "1", lineup: settings.sdLineup, url: settings.guideUrl }}
+            onListings={() => {
+              void setupFinish().then(setProgress, () => undefined);
+              void refresh(["channels", "airings", "settings"]);
+            }}
+          />
+        ) : null}
       </div>
       <div className="setup-foot">
         <div className="setup-foot-inner">
@@ -430,8 +445,22 @@ function Check() {
   );
 }
 
-function FinishStep({ progress, note, summary }: { progress: SetupFinish | null; note: string; summary: string }) {
+function FinishStep({
+  progress,
+  note,
+  summary,
+  saved,
+  onListings,
+}: {
+  progress: SetupFinish | null;
+  note: string;
+  summary: string;
+  saved: ComponentProps<typeof GetListings>["saved"];
+  onListings: () => void;
+}) {
   const ready = progress?.ready ?? "";
+  const guideStep = progress?.steps.find((s) => s.id === "guide");
+  const needsGuide = Boolean(ready && progress?.needsGuide && guideStep?.state !== "done");
   const url = window.location.origin;
   const loopback = /^(localhost|127\.|\[::1\]$)/.test(window.location.hostname);
   const svg = useMemo(() => {
@@ -468,6 +497,13 @@ function FinishStep({ progress, note, summary }: { progress: SetupFinish | null;
         </ul>
       ) : null}
       {note ? <p className="setup-note" role={/did not|not finish|nothing|no free/i.test(note) ? "alert" : "status"}>{note}</p> : null}
+      {ready && progress?.timeZone ? <ZoneNote zone={progress.timeZone} offset={progress.utcOffset ?? 0} /> : null}
+      {needsGuide ? (
+        <div className="setup-listings">
+          <h3>{g("gs.title")}</h3>
+          <GetListings saved={saved} onLoaded={onListings} lede />
+        </div>
+      ) : null}
       {ready ? (
         <div className="setup-connect">
           <h3>{t("setup.connect")}</h3>
@@ -485,6 +521,17 @@ function FinishStep({ progress, note, summary }: { progress: SetupFinish | null;
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** The server's zone, and how to fix it when it is not the zone this browser is in. */
+function ZoneNote({ zone, offset }: { zone: string; offset: number }) {
+  const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const same = sameZone(zone, offset, browser, new Date());
+  return (
+    <p className={same ? "setup-zone dim" : "setup-zone setup-zone-off"} role={same ? undefined : "alert"}>
+      {same ? g("gs.zoneSame", { zone }) : g("gs.zoneDiffers", { server: zone, browser })}
+    </p>
   );
 }
 

@@ -1,0 +1,196 @@
+/* Get listings: Schedules Direct by postal code, or an XMLTV link. Used on
+   the setup Ready step and in Settings › Guide. */
+.gs {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.gs-lede,
+.gs-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote-size);
+}
+
+.gs-lede {
+  font-size: var(--type-body-size);
+}
+
+.gs-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface2);
+  border: 1px solid var(--color-line);
+  min-width: 0;
+}
+
+.gs-card h4 {
+  font-size: var(--type-headline-size);
+  font-weight: 700;
+}
+
+.gs-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.gs-field {
+  display: grid;
+  gap: 6px;
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
+  min-width: 0;
+}
+
+.gs input:not([type="radio"]) {
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface1);
+  color: var(--color-text);
+  font-size: var(--type-body-size);
+}
+
+.gs input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
+  border-color: transparent;
+}
+
+.gs-form .btn,
+.gs-inline .btn {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.gs-inline {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.gs-inline input {
+  flex: 1;
+}
+
+.gs-lineups {
+  display: grid;
+  gap: var(--space-2);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.gs-lineups legend {
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.gs-lineup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface1);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.gs-lineup[data-on="1"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.gs-lineup input {
+  accent-color: var(--color-accent);
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.gs-lineup-text {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.gs-lineup-text .gs-hint {
+  overflow-wrap: anywhere;
+}
+
+.gs-badge {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--type-caption-size);
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-success);
+}
+
+.gs-note {
+  font-size: var(--type-body-size);
+  color: var(--color-text-secondary);
+}
+
+.gs-note.bad {
+  color: var(--color-warning);
+}
+
+.gs-sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.gs-sources li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--color-line);
+}
+
+.gs-source-text {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.gs-sources li + li {
+  border-top: 1px solid var(--color-line);
+}
+
+.gs-sources li[data-state="ok"] {
+  border-left-color: var(--color-success);
+}
+
+.gs-sources li[data-state="bad"] {
+  border-left-color: var(--color-warning);
+}
+
+.gs-sources li[data-state="off"] strong {
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 560px) {
+  .gs-card {
+    padding: var(--space-4);
+  }
+
+  .gs-inline {
+    flex-direction: column;
+  }
+}
