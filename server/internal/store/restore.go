@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -311,4 +312,13 @@ func (s *Store) AddFoundRecording(ctx context.Context, rec Recording) (int64, er
 	}
 	_, err = s.db.ExecContext(ctx, `UPDATE recordings SET ended_at = ?, partial = ? WHERE id = ?`, ended, boolInt(rec.Partial), id)
 	return id, err
+}
+
+// HasRecordingsIn reports a recording the catalog keeps inside dir.
+func (s *Store) HasRecordingsIn(ctx context.Context, dir string) (bool, error) {
+	prefix := strings.TrimRight(dir, `/\`) + string(filepath.Separator)
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(prefix)
+	var found bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM recordings WHERE path LIKE ? ESCAPE '\')`, escaped+"%").Scan(&found)
+	return found, err
 }

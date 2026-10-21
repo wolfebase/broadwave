@@ -2049,7 +2049,7 @@ export interface components {
         Error: {
             /**
              * @description Stable machine code. An unknown code is still a failure.
-             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
+             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, recordings_missing, recordings_unwritable, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
              */
             code: string;
             /** @description Short text safe to show a user. */
@@ -4560,7 +4560,7 @@ export interface operations {
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
-            /** @description `no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. `unavailable`: the player is not configured. */
+            /** @description `no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. `recordings_missing`: the recordings folder the server used is not there (a drive or share not mounted); the server does not make a new one. `recordings_unwritable`: the folder refuses a file (check PUID/PGID or the mount). `unavailable`: the player is not configured. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -6329,7 +6329,15 @@ export interface operations {
                     };
                 };
             };
-            503: components["responses"]["Error"];
+            /** @description `recordings_missing` or `recordings_unwritable`: see POST /recordings. `unavailable`: the player is not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     storageShows: {

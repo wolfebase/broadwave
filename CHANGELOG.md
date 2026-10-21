@@ -4,6 +4,8 @@
 
 - Restoring a backup brings back channel favorites, names, and hidden channels, recordings, paired devices, and followed teams, not only settings and passes. Recordings that moved are followed, and recordings in the folder that the backup didn't have are added.
 - Recordings found in the recordings folder (with the .json the server writes beside each) can be added back to the catalog: `POST /api/v1/recordings/import`.
+- A recordings folder on a drive or share that isn't mounted is no longer made again on the boot disk: recording stops with "The recordings folder isn't there. Is the drive mounted?" The server leaves a `.broadwave-recordings` file in the folder to tell it apart from an empty mount point; keep it there.
+- A recordings folder the server can't write to says "check PUID/PGID or the mount" instead of reporting a full disk.
 
 ## 0.15.1 — 2026-10-21
 

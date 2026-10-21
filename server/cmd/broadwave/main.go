@@ -187,6 +187,9 @@ func main() {
 		}()
 	}
 	slog.Info("encoder: " + encoderLine(encoder, hub.DeintBroadcast, hub.DeintSmooth))
+	if err := hub.RecordingsReady(context.Background()); err != nil {
+		slog.Warn(fmt.Sprintf("recordings: %s (%s)", err, hub.Recordings()))
+	}
 	bus := realtime.NewBus()
 	bus.MediaStart = hub.EarliestMedia
 	bus.LongHold = hub.LongGroups

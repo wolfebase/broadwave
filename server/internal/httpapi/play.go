@@ -338,7 +338,7 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 	meta := store.Recording{ChannelID: body.ChannelID, Title: strings.TrimSpace(body.Title)}
 	minutes := body.Minutes
 	if s.Hub.Dir != "" {
-		if err := disk.Writable(s.Hub.Recordings()); err != nil {
+		if err := s.Hub.RecordingsReady(r.Context()); err != nil {
 			writeError(w, err)
 			return
 		}

@@ -488,7 +488,7 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dir := s.Hub.Recordings()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := s.Hub.RecordingsReady(r.Context()); err != nil {
 		writeError(w, err)
 		return
 	}

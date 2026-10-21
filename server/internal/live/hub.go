@@ -3689,6 +3689,28 @@ func (h *Hub) rememberDuration(rec store.Recording) {
 	_ = h.Store.SetDuration(context.Background(), rec.ID, seconds)
 }
 
+// RecordingsReady checks the recordings folder before a recording: a folder
+// used before must still be there (a share not mounted is not replaced by a
+// new folder on the boot disk), and it must take a file.
+func (h *Hub) RecordingsReady(ctx context.Context) error {
+	if h.Dir == "" {
+		return nil
+	}
+	if err := h.prepareRecordings(ctx); err != nil {
+		return err
+	}
+	return disk.Writable(h.Recordings())
+}
+
+func (h *Hub) prepareRecordings(ctx context.Context) error {
+	dir := h.Recordings()
+	known := false
+	if h.Store != nil {
+		known, _ = h.Store.HasRecordingsIn(ctx, dir)
+	}
+	return disk.Prepare(dir, h.Dir, known)
+}
+
 // diskStat reads free space. Tests stand in for a disk that reports a delete late.
 var diskStat = disk.Stat
 
@@ -3701,7 +3723,7 @@ func (h *Hub) ensureSpace(ctx context.Context) error {
 		return err
 	}
 	dir := h.Recordings()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := h.prepareRecordings(ctx); err != nil {
 		return err
 	}
 	if err := h.keepReserve(ctx, dir, disk.WatermarkBytes(values["watermarkGB"])); err != nil {

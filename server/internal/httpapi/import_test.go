@@ -38,3 +38,30 @@ func TestImportFoundRecordings(t *testing.T) {
 		t.Fatalf("import: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestRecordingRefusedWhenTheFolderIsNotMounted(t *testing.T) {
+	dir := t.TempDir()
+	st := testStore(t)
+	root := filepath.Join(dir, "recordings")
+	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: filepath.Join(dir, "missing-ffmpeg")}
+	if err := hub.RecordingsReady(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Hub: hub}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/recordings", strings.NewReader(`{"channelId":1,"minutes":5,"title":"Nope"}`)))
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"recordings_missing"`) {
+		t.Fatalf("not mounted: %d %s", rec.Code, rec.Body.String())
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("the folder was made again: %v", err)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/storage", nil))
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "mounted") {
+		t.Fatalf("storage: %d %s", rec.Code, rec.Body.String())
+	}
+}
