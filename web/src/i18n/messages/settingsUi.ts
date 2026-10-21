@@ -212,7 +212,7 @@ export const settingsUiMessages = {
   "remote.copy": "Copy",
   "remote.copied": "Copied.",
   "remote.cf.heroTitle": "Watch from anywhere",
-  "remote.cf.heroBody": "Sign in to Cloudflare and Broadwave makes this server its own private address, such as tv.example.com. Nothing on your router changes.",
+  "remote.cf.heroBody": "Sign in to your Cloudflare account and Broadwave gives this server its own address, such as tv.example.com. Only devices you invite can open it, and the video goes through Cloudflare. Nothing on your router changes.",
   "remote.cf.signIn": "Sign in with Cloudflare",
   "remote.cf.opensTab": "Opens Cloudflare in a new tab.",
   "remote.cf.needs": "You need a free Cloudflare account with a domain on it.",

@@ -118,7 +118,7 @@ export const copyMessages = {
   "settings.sportsdbKey": "TheSportsDB key",
   "settings.sportsdbKeyHint": "Optional. Your own key. None is included.",
   "settings.updates": "Check for updates",
-  "settings.updatesHint": "Once a day. Nothing else is sent.",
+  "settings.updatesHint": "Asks GitHub once a day. Nothing about you or what you watch is sent.",
   "settings.passwordTitle": "This server is for the home network",
   "settings.passwordBody": "Device sign-in is in Devices, and it stays off until you turn it on.",
   "settings.profile": "Profile",

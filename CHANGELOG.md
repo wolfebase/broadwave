@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Privacy policy: says what the secure name sends to the Wolfe Up service (the server's key, its random id, and its home network addresses; nothing you watch) and what Sign in with Cloudflare does in your own Cloudflare account. The web app's About, Check for updates, and Cloudflare card say the same in a line.
 - Docs: a short Set up a server page for people who installed an app first; README and Support say how to get the apps (App Store soon, the web app now), and put Sign in with Cloudflare first and Tailscale second for away from home.
 - Docs: Away from home lists its three ways and uses the Settings section's real name; First run matches the setup screens.
 - Web: Add free channels is now Free streaming channels (FastChannels), says FastChannels is a separate app, and says it is looking while it looks.

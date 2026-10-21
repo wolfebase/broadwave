@@ -245,6 +245,7 @@ export const settingsHubMessages = {
   "about.secureStarting": "Starting",
   "about.secureError": "Not working",
   "about.secureOff": "Off",
+  "about.secureNote": "HTTPS at home. A Wolfe Up service lists this server's home network address under that name; nothing you watch is sent. BROADWAVE_DIRECT=0 turns it off.",
 
   "share.app": "App",
   "share.appPick": "Which app?",

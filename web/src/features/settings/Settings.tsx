@@ -480,9 +480,9 @@ function SecureNameRow() {
 function secureNameText(status: DirectStatus): { value: string; hint?: string } {
   switch (status.state) {
     case "ready":
-      return { value: h("about.secureReady"), hint: status.url ? status.url.replace(/^https:\/\//, "") : undefined };
+      return { value: h("about.secureReady"), hint: [status.url ? status.url.replace(/^https:\/\//, "") : "", h("about.secureNote")].filter(Boolean).join(". ") };
     case "starting":
-      return { value: h("about.secureStarting") };
+      return { value: h("about.secureStarting"), hint: h("about.secureNote") };
     case "error":
       return { value: h("about.secureError"), hint: status.lastError };
     case "unavailable":
