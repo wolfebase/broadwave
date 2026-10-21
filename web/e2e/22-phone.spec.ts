@@ -187,7 +187,7 @@ test("a phone walks home, the guide, and the player by touch", async ({ page }) 
   await expect(page.getByRole("heading", { name: "Recordings" })).toBeVisible();
   await fits(page);
 
-  await tap(page.getByRole("button", { name: "More" }));
+  await tap(page.getByRole("button", { name: "More", exact: true }));
   await tap(page.getByRole("link", { name: "Settings", exact: true }));
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
