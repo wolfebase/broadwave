@@ -22,6 +22,7 @@
 - Server: an ATSC 3.0 channel pairs with its 1.0 channel when the 1.0 channel is named by its brand ("FOX 5"), by a shared guide station, or by the tuner's 100-higher numbering, and never with a channel of another network.
 - Guide: when two stations share a channel number (a home between two markets), each gets its own listings, matched by call sign.
 - Diagnostics: "Your tuner stopped answering" no longer shows on an idle new server between two tuner checks; the guide line never lists more channels than the guide has; a tuner another device holds no longer reads "· ·".
+- Search (web, iPhone, iPad, Apple TV): results rank by where the words are: the show's title, then the episode title, the channel's name or call sign, people, and category. Whole words beat word starts. Shows that only mention the words in their description are left out when anything matches better, and infomercials and shopping sink unless their title is what you typed. A channel number ("4.1" or "4-1") finds that channel and its ATSC 3.0 twin, not 41.1.
 
 ## 0.15.1 — 2026-10-21
 

@@ -552,9 +552,15 @@ export interface paths {
         };
         /**
          * @description Listings that have not ended, from every day the guide has, on the channels the guide shows
-         *     (one row per channel when two tuners carry it): shows whose title has the words first, then
-         *     the rest, each on now first and then by start time, with at most six airings of one show (a
-         *     game is its own show) and 60 in all; and matching recordings.
+         *     (one row per channel when two tuners carry it), best match first: a channel number ("4.1",
+         *     "4-1", "41") is that channel and its ATSC 3.0 twin, exact before prefix (4.1, then 4.10; never
+         *     41.1); then the words in the title (the whole title, whole words, word starts), the episode
+         *     title, the channel's name or call sign, the cast, and the category. A listing that only
+         *     mentions the words in its description is left out when anything matches better. Paid
+         *     programming and shopping rank last unless the title is the words. Within a rank, on now
+         *     first and then by start time, with at most six airings of one show (a game is its own show)
+         *     and 60 in all. Recordings are newest first; one that only mentions the words is left out
+         *     when another is named by them.
          */
         get: operations["search"];
         put?: never;
@@ -4125,7 +4131,7 @@ export interface operations {
     search: {
         parameters: {
             query?: {
-                /** @description Words to match in titles, descriptions, cast, and recordings. */
+                /** @description Words to match in titles, episode titles, channels, cast, categories, descriptions, and recordings, or a channel number. */
                 q?: string;
             };
             header?: never;

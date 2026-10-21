@@ -31,6 +31,9 @@ type Store struct {
 
 	settingsMu sync.Mutex
 	settings   map[string]string
+
+	// categories is every listing category, read again when the guide changes.
+	categories categoryCache
 }
 
 type Device struct {
