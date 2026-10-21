@@ -35,3 +35,8 @@ func Networks(data []byte, lineup []store.Channel) map[int64]string {
 	}
 	return out
 }
+
+// Affiliation is network.Of: the broadcast network from guide names and call signs.
+func Affiliation(guideNames []string, callSigns ...string) string {
+	return network.Of(guideNames, callSigns...)
+}
