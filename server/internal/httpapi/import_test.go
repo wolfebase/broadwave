@@ -65,3 +65,27 @@ func TestRecordingRefusedWhenTheFolderIsNotMounted(t *testing.T) {
 		t.Fatalf("storage: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestCaptionsWithoutAFileAreAnEmptyTrack(t *testing.T) {
+	dir := t.TempDir()
+	st := testStore(t)
+	h := (&Server{Store: st, Hub: &live.Hub{Store: st, Dir: dir}}).Handler()
+	get := func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/7/captions.vtt", nil))
+		return rec
+	}
+	if rec := get(); rec.Code != http.StatusOK || rec.Body.String() != "WEBVTT\n\n" || rec.Header().Get("Content-Type") != "text/vtt" {
+		t.Fatalf("no captions: %d %q %q", rec.Code, rec.Body.String(), rec.Header().Get("Content-Type"))
+	}
+	cues := "WEBVTT\n\n00:00.000 --> 00:01.000\nHello\n"
+	if err := os.MkdirAll(filepath.Join(dir, "file", "7"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "file", "7", "captions.vtt"), []byte(cues), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if rec := get(); rec.Code != http.StatusOK || rec.Body.String() != cues {
+		t.Fatalf("captions: %d %q", rec.Code, rec.Body.String())
+	}
+}
