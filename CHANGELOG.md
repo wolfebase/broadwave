@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.15.1 — 2026-10-21
 
 ### Added
 
@@ -11,10 +11,17 @@
 
 ### Changed
 
+- Apple TV: Back in the player goes to the guide with the channel still playing in its corner; Back again goes to the Apple TV home screen. With nothing playing, the first Back in the guide brings back the last channel once.
 - Server: a reverse proxy at a public name (Nginx Proxy Manager, SWAG, Caddy, Traefik) now works like the Cloudflare tunnel: every request through it needs a paired device. A request by a public name, or that a proxy says came from outside the home network, counts as away from home. A device at home that opens a public name needs to be paired too; the server's address and `.local` name stay open, and so does a Tailscale MagicDNS name (`.ts.net`) or Tailscale Serve used from the tailnet. Tailscale Funnel needs a paired device.
 
 ### Fixed
 
+- Apple TV: the server list starts on your server, not on the demo; with none found it starts on Enter an address and says what to check.
+- Apple TV: the guide always opens on a channel, not on the Now button.
+- Apple TV: Down in the player shows one overlay at a time, and Back leaves the player in one press.
+- Apple TV: Info reads clearly over bright pictures; the time header's now mark no longer covers a time; card titles take two lines instead of being cut off.
+- iPhone and iPad: Recordings keeps its Unwatched, Show and Sort choices; a recording's line reads "Today, 4:10 AM · 1h 15m"; pulling on Sports updates the scores; recording from Sports confirms at the bottom of the screen.
+- Apple: the Home hero says Sports only over a real game.
 - Web: the guide keeps its filter (Favorites, News, Sports…) when you leave it or reload.
 - Web: Tomorrow and the other day buttons in the guide land where there are listings, not on an empty evening past the end of a short guide.
 - Web: recordings play at the volume and mute you last chose, like live TV.
