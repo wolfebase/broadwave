@@ -176,7 +176,7 @@ GROUP BY i.id`); err != nil {
 	}
 	// A recording that was running when the backup was taken stopped there.
 	over := map[string]string{
-		`"status"`:     `CASE WHEN status = 'recording' THEN 'interrupted' ELSE status END`,
+		`"status"`: `CASE WHEN status = 'recording' THEN 'interrupted' ELSE status END`,
 		// A channel the backup has no row for is not pointed at another channel here.
 		`"channel_id"`: `CASE WHEN channel_id = 0 THEN 0 ELSE COALESCE((SELECT new FROM temp.restore_channels WHERE old = channel_id), 0) END`,
 	}
