@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -106,13 +105,7 @@ func benchCommand(ctx context.Context, ffmpeg string, args []string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, ffmpeg, args...)
 	// CommandContext kills the direct child only. A shell that started the
 	// encode keeps the pipes open, and Wait then sits until that child exits.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-	}
+	killGroupOnCancel(cmd)
 	cmd.WaitDelay = time.Second
 	return cmd
 }

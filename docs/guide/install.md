@@ -63,6 +63,28 @@ Add the template [`deploy/unraid/broadwave.xml`](https://github.com/wolfebase/br
 
 The optional updater is [`deploy/unraid/broadwave-updater.xml`](https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave-updater.xml). It checks at 03:30 and updates only the Broadwave container. It skips a night while a tuner is in use, a recording is running, or a recording starts within two hours. To update by hand, pull the new image and recreate the container with the same folders.
 
+## Without Docker
+
+Each [release](https://github.com/wolfebase/broadwave/releases) has the server as one file for Linux (x86-64 and ARM64), macOS (Apple silicon and Intel), and Windows (x86-64), with the web app built in, and a `SHA256SUMS` file to check the downloads against (`sha256sum -c SHA256SUMS --ignore-missing`).
+
+```bash
+tar xzf broadwave-<version>-linux-amd64.tar.gz
+cd broadwave-<version>-linux-amd64
+./broadwave -config ~/broadwave
+```
+
+Then open `http://<your-server>:8477`. `-config` is the folder for the database; recordings go in `work/recordings` inside it, or set `-recordings` (or `BROADWAVE_RECORDINGS`). `-addr :8477` changes the port. The settings in the table below work as environment variables here too; `PUID`, `PGID`, and `UMASK` are for containers and are ignored on Windows.
+
+ffmpeg is not included. Install it so that `ffmpeg` and `ffprobe` are on the `PATH` before you start the server:
+
+- **Version:** ffmpeg 6.1 or newer. The Docker image uses jellyfin-ffmpeg 7, and that is the one to pick when you can (Debian and Ubuntu packages are at repo.jellyfin.org).
+- **Needed:** `libx264` (the picture when there is no graphics encoder), the built-in AAC encoder, and the MPEG-2, H.264, HEVC, AC-3, and E-AC-3 decoders. Distribution packages (`apt install ffmpeg`, Homebrew, the gyan.dev or BtbN builds on Windows) have all of these.
+- **ATSC 3.0 sound** needs the AC-4 decoder, which only jellyfin-ffmpeg has. With another ffmpeg, ATSC 3.0 channels play without sound, and the server log says so.
+- **Hardware encoding** uses what that ffmpeg has: VAAPI or QSV (Intel, AMD), NVENC (NVIDIA), or VideoToolbox (Mac). Settings › About shows the encoder in use.
+- **Commercial detection** also uses [comskip](https://github.com/erikkaashoek/Comskip) when it is on the `PATH`; without it the server's own break finder runs.
+
+To keep it running, start it from systemd, launchd, or a Windows service manager such as NSSM. To update, stop the server, replace the file, and start it again; the database is copied before a new version changes it.
+
 ## Other settings
 
 | Setting | What it does |
