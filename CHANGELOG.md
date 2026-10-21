@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Added
+
+- Server: channels name more networks from the name they broadcast ("FOX 5", "NBC4", "PBS", "UNIVSN", "TELEMUN") and from listings, including PBS, CW, MyNetworkTV, ION, Univision, Telemundo, UniMás, and in Canada CBC, Radio-Canada, CTV, CTV 2, Global, Citytv, TVO, Télé-Québec, TVA, and Noovo, so voice and search find them anywhere.
+- Server: `/server` reports the server's time zone, whether it is a real zone, its UTC offset, and its country (from `TZ`, or `BROADWAVE_COUNTRY=US|CA`).
+- Web: an admin sees one line when the server's time zone is mistyped, missing, or hours away from the browser's, with the `TZ` to set.
+- Sports: women's college basketball, FCS football, Liga MX, and IndyCar scores; college boards ask for every Division I game, not only ranked ones.
+- Server: timed recordings. Record a channel from a start time for a set number of minutes, once on a date or on the weekdays you pick, whether or not the guide lists anything then. They plan with the other recordings: tuner conflicts, priority, padding, retries, resume after a restart, keep and limit rules, and Skip all apply.
+- Server: times stay on the server's clock across daylight saving changes; a 10:00 PM recording stays at 10:00 PM. A time the spring change skips starts an hour later.
+- Server: when the guide later lists a show at that time, the recording takes its title and details; a name you gave it wins.
+- API: `POST /passes` with `kind: "manual"`, `channelId`, `timeStart`, `duration`, and `date` or `days`; the same fields in `PATCH /passes/{id}` and `POST /passes/preview`. Planned items carry `manual`, and `POST /schedule/skip` takes `passId` to skip one time.
+- Web: Record a time on the Schedule page, and from a channel's sheet in the guide (tap a channel with no listings to open it): channel, date or days, start, length (30 min to 2 hours, or custom), with the plan and conflicts shown before you save.
+- Restoring a backup brings back channel favorites, names, and hidden channels, recordings, paired devices, and followed teams, not only settings and passes. Recordings that moved are followed, and recordings in the folder that the backup didn't have are added.
+- Recordings found in the recordings folder (with the .json the server writes beside each) can be added back to the catalog: `POST /api/v1/recordings/import`.
+- Releases include ready-to-run server downloads for Linux (x86 and ARM), macOS, and Windows, with checksums. Without Docker, install ffmpeg 6.1 or newer.
+- Install notes for Synology, QNAP, TrueNAS SCALE, and Raspberry Pi; the Compose file starts on machines without Intel or AMD graphics (hardware transcoding is one uncommented line).
+- The update notice says how to update this server (Unraid, Docker, or the download).
+
 ### Changed
 
 - Setup stars Canada's main networks too, and says it couldn't tell which channels are ABC, CBS, FOX, or NBC instead of saying the lineup has none.
@@ -18,6 +35,12 @@
 - Guide: when two stations share a channel number (a home between two markets), each gets its own listings, matched by call sign.
 - Diagnostics: "Your tuner stopped answering" no longer shows on an idle new server between two tuner checks; the guide line never lists more channels than the guide has; a tuner another device holds no longer reads "· ·".
 - Search (web, iPhone, iPad, Apple TV): results rank by where the words are: the show's title, then the episode title, the channel's name or call sign, people, and category. Whole words beat word starts. Shows that only mention the words in their description are left out when anything matches better, and infomercials and shopping sink unless their title is what you typed. A channel number ("4.1" or "4-1") finds that channel and its ATSC 3.0 twin, not 41.1.
+- Diagnostics: a recordings folder that isn't mounted or can't be written shows under Fix these.
+- A recordings folder on a drive or share that isn't mounted is no longer made again on the boot disk: recording stops with "The recordings folder isn't there. Is the drive mounted?" The server leaves a `.broadwave-recordings` file in the folder to tell it apart from an empty mount point; keep it there.
+- A recordings folder the server can't write to says "check PUID/PGID or the mount" instead of reporting a full disk.
+- API: `POST /api/v1/recordings` with `minutes` records that many minutes from now, even over a longer listing. Without `minutes` it still records the whole show.
+- A recording that resumes after a restart stops at its planned end, and shows one note about the restart.
+- Playing a recording without captions no longer logs an error.
 
 ## 0.15.1 — 2026-10-21
 
