@@ -7,20 +7,18 @@ export type InstallKind = "docker" | "unraid" | "updater" | "binary";
 
 const kinds: InstallKind[] = ["unraid", "docker", "updater", "binary"];
 
-/** The server may say how it was installed; older servers don't. */
-export function installKind(server: unknown): InstallKind | "" {
-  if (!server || typeof server !== "object") return "";
-  const raw = (server as Record<string, unknown>).install;
-  const value = typeof raw === "string" ? raw.toLowerCase() : "";
-  if (value === "compose") return "docker";
+/** What the update notice may carry about this install. Older servers send neither. */
+export type UpdateInstall = { install?: string; howTo?: string } | null | undefined;
+
+/** How the server says it was installed: unraid, docker, or binary. */
+export function installKind(update: UpdateInstall): InstallKind | "" {
+  const value = (update?.install ?? "").toLowerCase();
   return (kinds as string[]).includes(value) ? (value as InstallKind) : "";
 }
 
-/** A plain sentence the server gives for its own install, when it has one. */
-export function updateHint(server: unknown): string {
-  if (!server || typeof server !== "object") return "";
-  const raw = (server as Record<string, unknown>).updateHow;
-  return typeof raw === "string" ? raw.trim() : "";
+/** The server's own sentence on updating this install, when it has one. */
+export function updateHint(update: UpdateInstall): string {
+  return (update?.howTo ?? "").trim();
 }
 
 /**

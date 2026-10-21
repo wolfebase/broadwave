@@ -14,7 +14,7 @@ import { PlayerProvider, usePlayer } from "./player";
 import { focusRing, installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
 import { isSearchShortcut } from "./searchKey";
-import { installKind, updateHint, updateSteps } from "../lib/updateHow";
+import { installKind, updateHint, updateSteps, type UpdateInstall } from "../lib/updateHow";
 import "./app.css";
 
 const shell = bind(shellMessages);
@@ -235,7 +235,7 @@ function Shell() {
             ) : null}
             <button type="button" className="btn small" aria-expanded={updateHowOpen} aria-controls="update-how" onClick={() => setUpdateHowOpen((open) => !open)}>{shell("shell.howToUpdate")}</button>
             <button type="button" className="btn small ghost" onClick={() => setHiddenUpdate(notice.message)}>{shell("shell.notNow")}</button>
-            {updateHowOpen ? <UpdateHow server={server} /> : null}
+            {updateHowOpen ? <UpdateHow update={notice} /> : null}
           </div>
         ) : null}
         {!booting && admin && !immersive && !fullPlayer && path !== "/setup" && !firstRun ? <Suspense fallback={null}><ZoneBanner server={server} /></Suspense> : null}
@@ -305,13 +305,14 @@ function HomeNotice({ message, onDismiss }: { message: string; onDismiss: () => 
 }
 
 /** The ways to update, or only this server's way when it says how it was installed. */
-function UpdateHow({ server }: { server: unknown }) {
-  const hint = updateHint(server);
-  const kind = installKind(server);
+function UpdateHow({ update }: { update: UpdateInstall }) {
+  const hint = updateHint(update);
+  const kind = installKind(update);
   const steps = updateSteps(kind);
   return (
     <div id="update-how" className="update-how">
-      {hint ? <p>{hint}</p> : <p className="hint">{shell(kind ? "update.ledeKnown" : "update.lede")}</p>}
+      {hint ? <p>{hint}</p> : null}
+      <p className="hint">{shell(kind || hint ? "update.ledeKnown" : "update.lede")}</p>
       {hint ? null : (
         <dl>
           {steps.map((step) => (
