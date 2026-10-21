@@ -1,11 +1,13 @@
-package guide
+// Package network names the broadcast network of a station from its guide
+// names, its name on the air, and its call sign.
+package network
 
 import (
 	"regexp"
 	"strings"
 )
 
-// Affiliation reports the broadcast network of a station: ABC, CBS, FOX, NBC,
+// Of reports the broadcast network of a station: ABC, CBS, FOX, NBC,
 // PBS, CW, MyNetworkTV, ION, Univision, Telemundo, UniMás, and in Canada CBC,
 // Radio-Canada, CTV, CTV 2, Global, Citytv, TVO, Télé-Québec, TVA, and Noovo.
 // A guide name wins when it is the network ("PBS", "UNIVSN"), a branded
@@ -13,7 +15,7 @@ import (
 // "KBWV (NBC)"). Anything else is a call sign: DT/HD suffixes come off, then
 // the call-sign rules and the table. A name that merely contains those
 // letters is not a network.
-func Affiliation(guideNames []string, callSigns ...string) string {
+func Of(guideNames []string, callSigns ...string) string {
 	for _, name := range guideNames {
 		if net := brandedNetwork(name); net != "" {
 			return net
@@ -21,7 +23,7 @@ func Affiliation(guideNames []string, callSigns ...string) string {
 	}
 	seen := map[string]bool{}
 	for _, name := range append(append([]string{}, guideNames...), callSigns...) {
-		call := normCall(name)
+		call := NormCall(name)
 		if len(call) < 3 || seen[call] {
 			continue
 		}
@@ -78,20 +80,20 @@ var networks = []network{
 	{"Noovo", "CA", []string{"NOOVO"}},
 }
 
-// MainNetworks are the networks setup stars and names in a country: the big
+// Main are the networks setup stars and names in a country: the big
 // four in the US, the national English networks in Canada (and the French
 // ones, since a Quebec lineup carries those instead).
-func MainNetworks(country string) []string {
+func Main(country string) []string {
 	if country == "CA" {
 		return []string{"CBC", "CTV", "Global", "Citytv", "Radio-Canada", "TVA", "Noovo"}
 	}
 	return []string{"ABC", "CBS", "FOX", "NBC"}
 }
 
-// IsMainNetwork is a network setup stars, in either country.
-func IsMainNetwork(name string) bool {
+// IsMain is a network setup stars, in either country.
+func IsMain(name string) bool {
 	for _, country := range []string{"US", "CA"} {
-		for _, net := range MainNetworks(country) {
+		for _, net := range Main(country) {
 			if net == name {
 				return true
 			}
@@ -200,3 +202,17 @@ func callRule(call string) string {
 }
 
 func isLetter(b byte) bool { return b >= 'A' && b <= 'Z' }
+
+// NormCall is a call sign without dashes, spaces, and a DT, DT1, HD, TV, or
+// LD suffix. DT2 and higher are subchannels (KBWV-DT2) and stay.
+func NormCall(s string) string {
+	s = strings.ToUpper(strings.TrimSpace(s))
+	s = strings.ReplaceAll(s, "-", "")
+	s = strings.ReplaceAll(s, " ", "")
+	for _, suf := range []string{"DT1", "HD", "DT", "TV", "LD"} {
+		if strings.HasSuffix(s, suf) && len(s)-len(suf) >= 3 {
+			s = strings.TrimSuffix(s, suf)
+		}
+	}
+	return s
+}

@@ -21,9 +21,9 @@ import (
 	"broadwave/internal/cloudflare"
 	"broadwave/internal/discovery"
 	"broadwave/internal/dvr"
-	"broadwave/internal/guide"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
+	"broadwave/internal/network"
 	"broadwave/internal/realtime"
 	"broadwave/internal/region"
 	"broadwave/internal/source"
@@ -546,7 +546,7 @@ func (s *Server) channels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) affiliations(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"calls": guide.Calls()})
+	writeJSON(w, http.StatusOK, map[string]any{"calls": network.Calls()})
 }
 
 func (s *Server) starNetworks(w http.ResponseWriter, r *http.Request) {
@@ -569,7 +569,7 @@ func withNetworks(channels []store.Channel) []store.Channel {
 		if channels[i].DisplayName != "" && channels[i].DisplayName != channels[i].GuideName {
 			names = append(names, channels[i].DisplayName)
 		}
-		channels[i].Network = guide.Affiliation(names)
+		channels[i].Network = network.Of(names)
 	}
 	return channels
 }

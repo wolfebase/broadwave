@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"broadwave/internal/network"
 	"broadwave/internal/store"
 )
 
@@ -58,7 +59,7 @@ func SDNetworks(body []byte, lineup []store.Channel) map[int64]string {
 		for _, suf := range []string{" Affiliate", " affiliate", " AFFILIATE"} {
 			affiliate = strings.TrimSuffix(affiliate, suf)
 		}
-		if net := Affiliation([]string{affiliate, st.Name}, st.Callsign); net != "" {
+		if net := network.Of([]string{affiliate, st.Name}, st.Callsign); net != "" {
 			out[id] = net
 		}
 	}

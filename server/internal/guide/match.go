@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"broadwave/internal/network"
 	"broadwave/internal/store"
 )
 
@@ -130,14 +131,5 @@ func namesCall(ch channel, call string) bool {
 }
 
 func normCall(s string) string {
-	s = strings.ToUpper(strings.TrimSpace(s))
-	s = strings.ReplaceAll(s, "-", "")
-	s = strings.ReplaceAll(s, " ", "")
-	// DT2 and higher are subchannels (KBWV-DT2). Only a bare DT or DT1 is the primary.
-	for _, suf := range []string{"DT1", "HD", "DT", "TV", "LD"} {
-		if strings.HasSuffix(s, suf) && len(s)-len(suf) >= 3 {
-			s = strings.TrimSuffix(s, suf)
-		}
-	}
-	return s
+	return network.NormCall(s)
 }

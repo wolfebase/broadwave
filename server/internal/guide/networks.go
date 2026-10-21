@@ -3,6 +3,7 @@ package guide
 import (
 	"encoding/xml"
 
+	"broadwave/internal/network"
 	"broadwave/internal/store"
 )
 
@@ -28,7 +29,7 @@ func Networks(data []byte, lineup []store.Channel) map[int64]string {
 	out := map[int64]string{}
 	for id, list := range names {
 		line := byID[id]
-		if net := Affiliation(list, line.GuideName, line.DisplayName); net != "" {
+		if net := network.Of(list, line.GuideName, line.DisplayName); net != "" {
 			out[id] = net
 		}
 	}

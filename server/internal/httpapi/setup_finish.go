@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"broadwave/internal/disk"
-	"broadwave/internal/guide"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
+	"broadwave/internal/network"
 	"broadwave/internal/region"
 	"broadwave/internal/source"
 	"broadwave/internal/store"
@@ -337,7 +337,7 @@ func (s *Server) stepFolder(ctx context.Context) {
 
 func (s *Server) stepFavorites(ctx context.Context) {
 	country := region.CountryOf(s.zone().Name)
-	s.setFinish("favorites", "running", "Picking "+joinAnd(guide.MainNetworks(country)[:4])+".")
+	s.setFinish("favorites", "running", "Picking "+joinAnd(network.Main(country)[:4])+".")
 	starred, err := s.starBigFour(ctx)
 	if err != nil {
 		s.setFinish("favorites", "check", "Favorites could not be saved.")
@@ -575,7 +575,7 @@ func (s *Server) starBigFour(ctx context.Context) ([]map[string]any, error) {
 	}
 	var starred []map[string]any
 	for _, ch := range withNetworks(channels) {
-		if ch.Hidden || !guide.IsMainNetwork(ch.Network) {
+		if ch.Hidden || !network.IsMain(ch.Network) {
 			continue
 		}
 		if !ch.Favorite {
@@ -659,7 +659,7 @@ func favoriteLine(starred []map[string]any, country string, unknown int) string 
 			have[name] = true
 		}
 	}
-	order := append(guide.MainNetworks(country), guide.MainNetworks(otherCountry(country))...)
+	order := append(network.Main(country), network.Main(otherCountry(country))...)
 	var names []string
 	for _, name := range order {
 		if have[name] {
@@ -670,7 +670,7 @@ func favoriteLine(starred []map[string]any, country string, unknown int) string 
 	if len(names) > 0 {
 		return joinAnd(names) + "."
 	}
-	main := orList(guide.MainNetworks(country)[:4])
+	main := orList(network.Main(country)[:4])
 	if unknown > 0 {
 		return "Couldn't tell which channels are " + main + ". Star them in the guide."
 	}
