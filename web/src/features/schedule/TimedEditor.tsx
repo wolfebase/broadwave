@@ -247,6 +247,7 @@ export function TimedEditor({
             value={draft.title}
             onChange={(e) => set("title", e.target.value)}
           />
+          {draft.title.trim() ? null : <span className="pe-note pe-wide">{t("schedule.timedTitleHint")}</span>}
         </div>
       </div>
       <div className="pe-row" role="group" aria-labelledby={`pe-pad-${id}`}>

@@ -12,7 +12,7 @@ import { formatClock } from "../../time";
 import { Passes } from "./Passes";
 import { timedRequest } from "./manual";
 import { takeScheduleRead, takeScheduleWrite } from "./plan";
-import { activityRows, dayOf } from "./view";
+import { activityRows, dayOf, notRecording } from "./view";
 import "../manage.css";
 import "./schedule.css";
 
@@ -110,6 +110,7 @@ export function Schedule({
     }
   }
   const number = (item: PlannedAiring) => item.airing.guideNumber || channels.find((ch) => ch.id === item.airing.channelId)?.displayNumber || "";
+  const upcoming = notRecording(items, active);
   const { rows: activity, hidden } = activityRows(events, everything);
   const listed = more ? activity : activity.slice(0, firstActivity);
   const now = new Date();
@@ -119,7 +120,7 @@ export function Schedule({
         <h2 id="sched-coming" className="section-title">
           {t("schedule.comingUp")}
         </h2>
-        {items.length === 0 && active.length === 0 ? (
+        {upcoming.length === 0 && active.length === 0 ? (
           <div className="sched-empty">
             <p>{passes.length === 0 ? t("schedule.nothingSet") : t("schedule.noMatch")}</p>
             <button type="button" className="btn small" onClick={() => navigate("/guide")}>
@@ -131,7 +132,7 @@ export function Schedule({
             {active.map((rec) => (
               <LiveRow key={`rec-${rec.id}`} rec={rec} onStop={onStop} />
             ))}
-            {items.map((item) => {
+            {upcoming.map((item) => {
               const start = new Date(item.airing.start);
               const window = recordWindow(item);
               const ch = number(item);

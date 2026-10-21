@@ -670,8 +670,9 @@ export function passDetails(pass: Pass, channels: Channel[]) {
   const parts: string[] = [];
   const ch = pass.channelId ? channels.find((c) => c.id === pass.channelId) : undefined;
   // Two one-time recordings of one title differ by channel and time, so both show.
-  if (ch) parts.push(`${ch.displayNumber} ${ch.displayName}`);
-  else if (pass.kind !== "once") parts.push(t("schedule.anyChannel"));
+  // An untitled timed recording is already named by its channel.
+  if (ch && !(pass.kind === "manual" && !pass.title)) parts.push(`${ch.displayNumber} ${ch.displayName}`);
+  else if (pass.kind !== "once" && pass.kind !== "manual") parts.push(t("schedule.anyChannel"));
   if (pass.kind === "manual" && pass.timeStart && pass.duration) {
     if (pass.days?.length) parts.push(daysLabel(pass.days));
     else if (pass.date) parts.push(dateLabel(pass.date));

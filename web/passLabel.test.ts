@@ -91,7 +91,8 @@ test("a timed recording is named by its title or channel, and says when", () => 
   expect(passLabel(pass({ kind: "manual", title: "Late news", channelId: 4 }), channels)).toBe("Late news");
   expect(passLabel(pass({ kind: "manual", title: "", channelId: 9 }), channels)).toBe("Timed");
   const once = pass({ kind: "manual", title: "", channelId: 4, date: "2026-10-21", timeStart: "22:00", duration: 90 });
-  expect(passDetails(once, channels)).toBe(`4.1 Den TV · Wed 10/21 · ${clock("22:00")}–${clock("23:30")}`);
+  expect(passDetails(once, channels)).toBe(`Wed 10/21 · ${clock("22:00")}–${clock("23:30")}`);
+  expect(passDetails({ ...once, title: "Late news" }, channels)).toBe(`4.1 Den TV · Wed 10/21 · ${clock("22:00")}–${clock("23:30")}`);
   const nightly = pass({ kind: "manual", title: "", channelId: 4, days: [1, 2, 3, 4, 5], timeStart: "23:30", duration: 60, keepMode: "last", keepCount: 3 });
-  expect(passDetails(nightly, channels)).toBe(`4.1 Den TV · Weekdays · ${clock("23:30")}–${clock("00:30")} · Keeps the newest 3`);
+  expect(passDetails(nightly, channels)).toBe(`Weekdays · ${clock("23:30")}–${clock("00:30")} · Keeps the newest 3`);
 });

@@ -987,8 +987,12 @@ func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 		p.Rerecord = rerecord != 0
 		p.Commercials = commercials != 0
 		p.Days = DaysOf(days)
-		if p.Kind == "manual" && !p.AiringStart.IsZero() && len(p.Days) == 0 {
-			p.Date = p.AiringStart.In(time.Local).Format(time.DateOnly)
+		if p.Kind == "manual" {
+			// A manual pass matches no listing, so the matching rules don't apply to it.
+			p.Episodes, p.MatchKind = "", ""
+			if !p.AiringStart.IsZero() && len(p.Days) == 0 {
+				p.Date = p.AiringStart.In(time.Local).Format(time.DateOnly)
+			}
 		}
 		out = append(out, p)
 	}
