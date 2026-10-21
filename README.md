@@ -114,7 +114,7 @@ You need an always-on computer that runs Docker — a NAS, a mini PC, or a home 
 
 ```bash
 docker run -d --name broadwave --network host --restart unless-stopped \
-  -e TZ=America/Chicago \
+  -e TZ=<your time zone> \
   -v ~/broadwave:/config \
   -v ~/broadwave/recordings:/config/work/recordings \
   ghcr.io/wolfebase/broadwave:latest
@@ -124,7 +124,7 @@ Then open **`http://<your-server>:8477`**. On a Linux server, Broadwave finds yo
 
 - **`--network host`** lets a Linux server hear your tuner, and lets phones and TVs find Broadwave. Keep it there.
 - **Graphics.** Add `--device /dev/dri` when that path exists (Intel or AMD). Docker refuses to start if the path is missing. The picture still plays without it.
-- **`TZ`** is your time zone. Without it, a container runs on UTC.
+- **`TZ`** is your time zone: replace `<your time zone>` with a name like `America/New_York`, `America/Chicago`, `America/Denver`, `America/Phoenix`, `America/Los_Angeles`, `America/Anchorage`, `Pacific/Honolulu`, `America/Toronto`, or `America/Vancouver`. Without it, or with a name that is mistyped, the server runs on UTC and records at the wrong hour; it says so in its log, on Diagnostics, and to an admin in the web app.
 - **Tuner address.** When the tuner does not appear, enter its address on the setup page, or set `HDHR_HOST` to that address. Add `:port` only when it is not 80.
 - **Unraid.** Add the template [`deploy/unraid/broadwave.xml`](https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave.xml). It uses host networking and port 8477. Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Set Config and Recordings to folders on your server, and remove `/dev/dri` when the server has no Intel or AMD graphics. A plain `docker run` on Unraid needs `-e PUID=99 -e PGID=100` as well.
 
@@ -132,7 +132,7 @@ On Docker Desktop for Mac and Windows, the container's host network is a virtual
 
 ```bash
 docker run -d --name broadwave --restart unless-stopped \
-  -e TZ=America/Chicago \
+  -e TZ=<your time zone> \
   -e HDHR_HOST=<tuner address> \
   -p 8477:8477 \
   -v ~/broadwave:/config \
@@ -151,7 +151,7 @@ curl -fsSLO https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/do
 docker compose pull && docker compose up -d
 ```
 
-Set `TZ` in a `.env` file next to `compose.yaml` first (`TZ=America/Chicago`); Compose stops and says so when it is missing. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing — Docker will not start while they point at a path that is not there. `PUID` and `PGID` default to 1000; on Unraid set them to 99 and 100.
+Set `TZ` in a `.env` file next to `compose.yaml` first (such as `TZ=America/Denver`); Compose stops and says so when it is missing. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing — Docker will not start while they point at a path that is not there. `PUID` and `PGID` default to 1000; on Unraid set them to 99 and 100.
 
 </details>
 
@@ -163,7 +163,8 @@ One image, `ghcr.io/wolfebase/broadwave`, for x86-64 and ARM64. It carries its o
 
 | Setting | What it does |
 | --- | --- |
-| `TZ` | Your time zone, such as `America/New_York`. Without it, a container runs on UTC. The guide on a phone or in a browser uses that device's clock. Pass times use `TZ`. |
+| `TZ` | Your time zone, such as `America/New_York`. Without it, or with a name that isn't a zone, the server runs on UTC. The guide on a phone or in a browser uses that device's clock. Pass times use `TZ`. |
+| `BROADWAVE_COUNTRY` | `US` or `CA`. Leave it out: the country follows `TZ`. It picks the free channel region and which networks setup stars. |
 | `PUID`, `PGID` | The user and group that own the config folder and recordings. Broadwave starts as root, hands the config folder to them, and then runs as them. Leave them out to run as root. |
 | `UMASK` | Permissions for new files, such as `002` so the group can write. Default `022`. |
 | `HDHR_HOST` | The tuner's address, when discovery can't reach it. |

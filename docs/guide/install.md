@@ -10,7 +10,7 @@ The tag `latest` is the newest release. It moves when a version is published. A 
 
 ```bash
 docker run -d --name broadwave --network host --restart unless-stopped \
-  -e TZ=America/Chicago \
+  -e TZ=<your time zone> \
   -v ~/broadwave:/config \
   -v ~/broadwave/recordings:/config/work/recordings \
   ghcr.io/wolfebase/broadwave:latest
@@ -18,7 +18,7 @@ docker run -d --name broadwave --network host --restart unless-stopped \
 
 Then open `http://<your-server>:8477`.
 
-- `TZ` is your time zone. Without it, a container runs on UTC, and Diagnostics says "The time zone is not set. Set TZ so the guide uses your local time." The guide on a phone or in a browser uses that device's clock. Pass times and the server's own clock messages use `TZ`.
+- `TZ` is your time zone: replace `<your time zone>` with a name like `America/New_York`, `America/Chicago`, `America/Denver`, `America/Phoenix`, `America/Los_Angeles`, `America/Anchorage`, `Pacific/Honolulu`, `America/Toronto`, or `America/Vancouver`. Without it, a container runs on UTC, and Diagnostics says "The time zone is not set. Set TZ so the guide uses your local time." A mistyped name (`America/Denvr`) also runs on UTC; the log, Diagnostics, and the web app (for an admin) name it. The guide on a phone or in a browser uses that device's clock. Pass times and the server's own clock messages use `TZ`.
 - The two folders keep the database and the recordings. An update replaces the container and leaves the folders.
 - Add `--device /dev/dri` when that path exists (Intel or AMD graphics). Docker refuses to start if the path is missing. The picture still plays from the processor without it.
 - When the tuner does not appear, set `HDHR_HOST` to its address. Add `:port` only when the port is not 80.
@@ -31,7 +31,7 @@ The container's host network is a virtual machine, so discovery cannot see the t
 
 ```bash
 docker run -d --name broadwave --restart unless-stopped \
-  -e TZ=America/Chicago \
+  -e TZ=<your time zone> \
   -e HDHR_HOST=<tuner address> \
   -p 8477:8477 \
   -v ~/broadwave:/config \
@@ -50,7 +50,7 @@ curl -fsSLO https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/do
 docker compose pull && docker compose up -d
 ```
 
-Put your time zone in a `.env` file next to `compose.yaml` first (`TZ=America/Chicago`); Compose stops and says so when `TZ` is missing. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing. `PUID` and `PGID` default to 1000, the first user on most Linux hosts; set them in `.env` to another user that exists there (99 and 100 on Unraid).
+Put your time zone in a `.env` file next to `compose.yaml` first (such as `TZ=America/Denver`); Compose stops and says so when `TZ` is missing. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing. `PUID` and `PGID` default to 1000, the first user on most Linux hosts; set them in `.env` to another user that exists there (99 and 100 on Unraid).
 
 ## Unraid
 
