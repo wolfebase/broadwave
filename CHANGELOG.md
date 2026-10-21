@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Server: channels name more networks from the name they broadcast ("FOX 5", "NBC4", "PBS", "UNIVSN", "TELEMUN") and from listings, including PBS, CW, MyNetworkTV, ION, Univision, Telemundo, UniMás, and in Canada CBC, Radio-Canada, CTV, CTV 2, Global, Citytv, TVO, Télé-Québec, TVA, and Noovo, so voice and search find them anywhere.
+- Server: `/server` reports the server's time zone, whether it is a real zone, its UTC offset, and its country (from `TZ`, or `BROADWAVE_COUNTRY=US|CA`).
+- Web: an admin sees one line when the server's time zone is mistyped, missing, or hours away from the browser's, with the `TZ` to set.
+- Sports: women's college basketball, FCS football, Liga MX, and IndyCar scores; college boards ask for every Division I game, not only ranked ones.
+
+### Changed
+
+- Setup stars Canada's main networks too, and says it couldn't tell which channels are ABC, CBS, FOX, or NBC instead of saying the lineup has none.
+- Web: Tonight and the day buttons start at 7 PM in the Central and Mountain time zones (8 PM elsewhere).
+- Recording a sports show that isn't matched to a live score keeps going 30 minutes (basketball, hockey, soccer), an hour (football, baseball), or 90 minutes (golf, racing, tennis) past the listing; talk shows end on time.
+- Free channels: Samsung TV Plus asks for Canada's channels on a server in Canada.
+
+### Fixed
+
+- Server: a mistyped `TZ` (`America/Denvr`) no longer runs on UTC silently: the log warns at start and Diagnostics names it.
+- Server: an ATSC 3.0 channel pairs with its 1.0 channel when the 1.0 channel is named by its brand ("FOX 5"), by a shared guide station, or by the tuner's 100-higher numbering, and never with a channel of another network.
+- Guide: when two stations share a channel number (a home between two markets), each gets its own listings, matched by call sign.
+- Diagnostics: "Your tuner stopped answering" no longer shows on an idle new server between two tuner checks; the guide line never lists more channels than the guide has; a tuner another device holds no longer reads "· ·".
+
 ## 0.15.1 — 2026-10-21
 
 ### Added
