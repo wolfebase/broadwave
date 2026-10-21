@@ -6,6 +6,7 @@
 - Recordings found in the recordings folder (with the .json the server writes beside each) can be added back to the catalog: `POST /api/v1/recordings/import`.
 - A recordings folder on a drive or share that isn't mounted is no longer made again on the boot disk: recording stops with "The recordings folder isn't there. Is the drive mounted?" The server leaves a `.broadwave-recordings` file in the folder to tell it apart from an empty mount point; keep it there.
 - A recordings folder the server can't write to says "check PUID/PGID or the mount" instead of reporting a full disk.
+- API: `POST /api/v1/recordings` with `minutes` records that many minutes from now, even over a longer listing. Without `minutes` it still records the whole show.
 
 ## 0.15.1 — 2026-10-21
 

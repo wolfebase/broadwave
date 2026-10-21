@@ -766,7 +766,7 @@ export interface paths {
         };
         get: operations["listRecordings"];
         put?: never;
-        /** @description Record a channel now. When the guide has the current airing, the recording runs to its end plus padding, for a day at most. */
+        /** @description Record a channel now. With minutes, the recording runs that long from now and stops there, with no padding, even when the guide's current airing runs longer; it still takes that airing's title and details. Without minutes, when the guide has the current airing, the recording covers it: from its start when the tuner's buffer still holds it, to its end plus padding. A day at most. */
         post: operations["startRecording"];
         delete?: never;
         options?: never;
@@ -4541,7 +4541,7 @@ export interface operations {
                 "application/json": {
                     /** Format: int64 */
                     channelId: number;
-                    /** @description How long to record, in minutes. Blank or 0 records for an hour, or until the current listing ends when that is longer. A day at most. */
+                    /** @description How long to record from now, in minutes; the recording stops then. Blank or 0 records the current listing to its end plus padding, or an hour when the guide has none. A day at most. */
                     minutes?: number;
                     title?: string;
                 };
