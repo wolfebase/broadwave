@@ -368,6 +368,11 @@ export function setWatched(id: number, watched: boolean) {
   });
 }
 
+/** Adds recordings in the recordings folder that the list doesn't have. */
+export function importRecordings() {
+  return request<{ added: number }>("/api/v1/recordings/import", { method: "POST", body: "{}" });
+}
+
 export function moveRecording(id: number, name: string) {
   return request<{ ok: boolean; file: string }>(`/api/v1/recordings/${id}/move`, {
     method: "POST",

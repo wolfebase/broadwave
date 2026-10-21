@@ -194,6 +194,12 @@ export const settingsHubMessages = {
 
   "rec.files": "Files",
   "rec.folder": "Recordings folder",
+  "rec.find": "Find recordings in the folder",
+  "rec.findHint": "Adds recordings that are in the folder but not in the list, such as after moving to a new server. Each needs the .json file Broadwave wrote beside it.",
+  "rec.findButton": "Find recordings",
+  "rec.finding": "Looking…",
+  "rec.found": { zero: "Nothing new in the folder.", one: "Added {count} recording.", other: "Added {count} recordings." },
+  "rec.findFailed": "Could not look in the folder.",
   "rec.folderHint": "Set where the server runs. In Docker, it is the folder mapped to /recordings.",
   "rec.space": "Space",
   "rec.free": "{free} free of {total}",

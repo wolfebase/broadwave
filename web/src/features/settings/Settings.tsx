@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { CatalogBackup, DirectStatus, ServerInfo, Settings, StorageInfo, StorageShow } from "../../types";
-import { getDirect, getStorageShows, listBackups, restoreBackup } from "../../api";
+import { getDirect, getStorageShows, importRecordings, listBackups, restoreBackup } from "../../api";
+import { useData } from "../../app/data";
 import { navigate } from "../../app/router";
 import { authHeaders } from "../../lib/deviceToken";
 import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
@@ -162,9 +163,42 @@ export function RecordingSection({ settings, storage, onChange }: { settings: Se
           onChange={(folderLayout) => onChange({ folderLayout })}
         />
         <SwitchRow label={copy.settings.nfo} hint={copy.settings.nfoHint} checked={settings.writeNfo === "1"} onChange={(on) => onChange({ writeNfo: on ? "1" : "0" })} />
+        <FindRecordingsRow />
       </Group>
       <ShowSpace />
     </>
+  );
+}
+
+/** Adds recordings that are in the folder but not in the list, and says how many. */
+function FindRecordingsRow() {
+  const { refresh } = useData();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  async function find() {
+    setBusy(true);
+    setNote("");
+    try {
+      const res = await importRecordings();
+      setNote(h("rec.found", res.added));
+      if (res.added > 0) await refresh(["recordings"]);
+    } catch (err) {
+      setNote(err instanceof Error && err.message ? err.message : h("rec.findFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Row label={h("rec.find")} hint={h("rec.findHint")}>
+      <button type="button" className="btn small" disabled={busy} onClick={() => void find()}>
+        {busy ? h("rec.finding") : h("rec.findButton")}
+      </button>
+      {note ? (
+        <span className="set-row-hint" role="status">
+          {note}
+        </span>
+      ) : null}
+    </Row>
   );
 }
 
