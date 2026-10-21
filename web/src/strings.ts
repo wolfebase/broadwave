@@ -48,6 +48,9 @@ export const copy = {
     get freeHint() {
       return t("sources.freeHint");
     },
+    get freeLooking() {
+      return t("sources.freeLooking");
+    },
     get freeEmpty() {
       return t("sources.freeEmpty");
     },

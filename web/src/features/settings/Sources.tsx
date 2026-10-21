@@ -436,6 +436,11 @@ function FindTuners({ busy, onLookup }: { busy: boolean; onLookup: (ip: string) 
           </button>
         </div>
       ))}
+      {findingFree ? (
+        <p className="set-note" role="status">
+          {copy.sources.freeLooking}
+        </p>
+      ) : null}
       {freeGuide ? <pre className="set-note">{freeGuide}</pre> : null}
       {freeNote ? (
         <p className="set-note" role="status">

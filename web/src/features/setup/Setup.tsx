@@ -48,6 +48,7 @@ export function Setup() {
   const [hits, setHits] = useState<{ kind: string; name: string; addr: string }[]>([]);
   const [feeds, setFeeds] = useState<FreeFeed[]>([]);
   const [freeGuide, setFreeGuide] = useState("");
+  const [findingFree, setFindingFree] = useState(false);
   const [playlistURL, setPlaylistURL] = useState("");
   const [xtreamUser, setXtreamUser] = useState("");
   const [xtreamPass, setXtreamPass] = useState("");
@@ -283,6 +284,8 @@ export function Setup() {
                   onClick={() => {
                     const mine = ++freeN.current;
                     setBusy(true);
+                    setFindingFree(true);
+                    setFreeGuide("");
                     void findFree()
                       .then((res) => {
                         if (mine !== freeN.current) return;
@@ -296,13 +299,18 @@ export function Setup() {
                         if (mine === freeN.current) setNote((n) => noteAfterFetch(n, false, copy.sources.freeEmpty));
                       })
                       .finally(() => {
-                        if (mine === freeN.current) setBusy(false);
+                        if (mine !== freeN.current) return;
+                        setBusy(false);
+                        setFindingFree(false);
                       });
                   }}
                 >
                   {copy.sources.free}
                 </button>
               </div>
+              <p className="hint" role="status">
+                {findingFree ? copy.sources.freeLooking : copy.sources.freeHint}
+              </p>
               {hits.length > 0 || feeds.length > 0 ? (
                 <ul className="setup-list">
                   {hits.map((hit) => (

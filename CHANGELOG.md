@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Web: Add free channels is now Free streaming channels (FastChannels), says FastChannels is a separate app, and says it is looking while it looks.
 - Web and server: Settings › Integrations opened at localhost shows the server's home network address for other apps, not localhost.
 - Web: Settings › About shows one version, the server's; the web app is part of it.
 - Web: the update notice has How to update, with the steps for Unraid, Docker, the updater, and the binary (only the server's own way when it says how it was installed).

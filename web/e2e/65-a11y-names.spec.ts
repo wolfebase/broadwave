@@ -108,7 +108,7 @@ test("repeated actions name the show", async ({ page }) => {
   await expect(page.getByRole("switch", { name: "4.1 KBWV on the guide", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Scan channels on Fake HDHomeRun", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Roof Tuner", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Add free channels" }).click();
+  await page.getByRole("button", { name: "Free streaming channels (FastChannels)" }).click();
   await expect(page.getByRole("button", { name: "Add Harbor Feed", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Look harder" }).click();
   await expect(page.getByRole("button", { name: "Add Attic Tuner", exact: true })).toBeVisible();

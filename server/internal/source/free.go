@@ -17,7 +17,11 @@ import (
 const FreeGroup = "Streamed from the internet"
 
 // FreeGuide is what to show when no free-channel server is on the network.
-const FreeGuide = `Run FastChannels next to Broadwave, then add it here.
+const FreeGuide = `FastChannels is a separate free app, not part of Broadwave, that
+gathers internet channels such as Pluto TV. To use it, start it next to
+Broadwave, then look again.
+
+With Docker Compose:
 
 services:
   fastchannels:
