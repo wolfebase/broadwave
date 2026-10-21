@@ -3198,6 +3198,13 @@ components:
         version: { type: string, description: "Release tag without a leading v." }
         notesUrl: { type: string, description: "Release notes page." }
         message: { type: string, description: "Banner text, for example Broadwave 0.7 is available." }
+        install:
+          type: string
+          enum: [unraid, docker, binary]
+          description: "How this server was installed, as far as it can tell: an Unraid template (HOST_OS=Unraid), another container (Docker, Compose, Podman, a NAS app), or the file from a release. Omitted by older servers."
+        howTo:
+          type: string
+          description: "One or two sentences on updating this install, for a How to update line under the banner. Omitted by older servers."
     Device:
       type: object
       required: [deviceId, friendlyName, baseUrl, tunerCount]

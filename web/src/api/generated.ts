@@ -540,6 +540,8 @@ export type ServerUpdate = {
   version: string;
   notesUrl: string;
   message: string;
+  install?: string;
+  howTo?: string;
 };
 
 export type Settings = {

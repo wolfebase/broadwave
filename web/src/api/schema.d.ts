@@ -2160,6 +2160,13 @@ export interface components {
             notesUrl: string;
             /** @description Banner text, for example Broadwave 0.7 is available. */
             message: string;
+            /**
+             * @description How this server was installed, as far as it can tell: an Unraid template (HOST_OS=Unraid), another container (Docker, Compose, Podman, a NAS app), or the file from a release. Omitted by older servers.
+             * @enum {string}
+             */
+            install?: "unraid" | "docker" | "binary";
+            /** @description One or two sentences on updating this install, for a How to update line under the banner. Omitted by older servers. */
+            howTo?: string;
         };
         Device: {
             deviceId: string;
