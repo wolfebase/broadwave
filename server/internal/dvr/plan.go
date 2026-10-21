@@ -21,6 +21,9 @@ type Planned struct {
 	Skipped    bool         `json:"skipped"`
 	Reason     string       `json:"reason,omitempty"`
 	Suggestion *Suggestion  `json:"suggestion,omitempty"`
+	// Manual is a slot a manual pass records by the clock; its airing id is
+	// negative and its title is the guide's, the pass's, or the channel's.
+	Manual bool `json:"manual,omitempty"`
 	// runsUntil is a recording of this airing already running past its
 	// planned end: a game that went long.
 	runsUntil time.Time
@@ -64,6 +67,10 @@ func PlanLibrary(passes []store.Pass, airings []store.Airing, tunerCount int, fr
 func noteRunning(items []Planned, recs []store.Recording) {
 	for i := range items {
 		air := items[i].Airing
+		if air.ManualPass != 0 {
+			// A manual slot records its set length.
+			continue
+		}
 		for _, rec := range recs {
 			if rec.Status != "recording" || rec.EndsAt == nil || rec.ChannelID != air.ChannelID || !strings.EqualFold(rec.Title, air.Title) {
 				continue
@@ -77,7 +84,8 @@ func noteRunning(items []Planned, recs []store.Recording) {
 
 func match(passes []store.Pass, airings []store.Airing, from, to time.Time) []Planned {
 	items := make([]Planned, 0)
-	for _, airing := range airings {
+	manual := manualAirings(passes, airings, from, to)
+	for _, airing := range append(airings[:len(airings):len(airings)], manual...) {
 		if !airing.End.After(from) || !airing.Start.Before(to) {
 			continue
 		}
@@ -85,7 +93,7 @@ func match(passes []store.Pass, airings []store.Airing, from, to time.Time) []Pl
 		if !ok {
 			continue
 		}
-		items = append(items, Planned{PassID: pass.ID, Airing: airing, Priority: pass.Priority, PadBefore: pass.PadBefore, PadAfter: pass.PadAfter})
+		items = append(items, Planned{PassID: pass.ID, Airing: airing, Priority: pass.Priority, PadBefore: pass.PadBefore, PadAfter: pass.PadAfter, Manual: airing.ManualPass != 0})
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].Airing.Start.Equal(items[j].Airing.Start) {
@@ -112,6 +120,10 @@ func matchPass(passes []store.Pass, airing store.Airing) (store.Pass, bool) {
 }
 
 func passMatches(pass store.Pass, airing store.Airing) bool {
+	// A manual pass records only the slots made for it, and a slot belongs to its pass alone.
+	if pass.Kind == "manual" || airing.ManualPass != 0 {
+		return airing.ManualPass != 0 && airing.ManualPass == pass.ID
+	}
 	if pass.ChannelID != 0 && pass.ChannelID != airing.ChannelID {
 		return false
 	}

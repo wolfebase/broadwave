@@ -1102,7 +1102,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Plan the next 14 days as if this pass were saved. With id, the rules edit that pass (rename for a new title); without, it is a new series pass. Nothing is saved. */
+        /** @description Plan the next 14 days as if this pass were saved. With id, the rules edit that pass (rename for a new title); without, it is a new series pass, or a new manual pass with kind manual. Nothing is saved. */
         post: operations["previewPass"];
         delete?: never;
         options?: never;
@@ -2676,7 +2676,7 @@ export interface components {
             title: string;
             /** Format: int64 */
             channelId?: number;
-            /** @description series, team, or once */
+            /** @description series, team, once, or manual. A manual pass records channelId from timeStart for duration minutes, on date or on each of days, whether or not the guide lists anything then. */
             kind?: string;
             padBefore?: number;
             padAfter?: number;
@@ -2689,7 +2689,7 @@ export interface components {
             limitCount?: number;
             rerecord?: boolean;
             commercials?: boolean;
-            /** @description HH:MM local */
+            /** @description HH:MM local. A manual pass starts recording then on the server's clock. */
             timeStart?: string;
             /** @description HH:MM local */
             timeEnd?: string;
@@ -2699,16 +2699,35 @@ export interface components {
             days?: number[];
             /**
              * Format: date-time
-             * @description Start of the one airing a once pass records
+             * @description Start of the one airing a once pass records, or of a one-time manual pass's recording
              */
             airingStart?: string;
+            /** @description Manual passes: minutes recorded from timeStart */
+            duration?: number;
+            /**
+             * Format: date
+             * @description One-time manual passes: the server-local day (YYYY-MM-DD) it records on. A manual pass with days repeats instead.
+             */
+            date?: string;
         };
         NewPass: {
-            /** @description The title, the words a title contains, or the category. A blank title, including one that is only spaces, is 400. */
+            /** @description The title, the words a title contains, or the category. A blank title, including one that is only spaces, is 400. For kind manual it is optional: the recording takes the guide's title for that time, or the channel's name. */
             title: string;
             /**
+             * @description manual records channelId from timeStart (HH:MM on the server's clock) for duration minutes, once on date or on each of days; padBefore and padAfter default to 0, and a one-time pass ranks above every pass unless priority is sent. A manual pass reads only channelId, timeStart, duration, date, days, padBefore, padAfter, priority, keepMode, keepCount, limitCount, and commercials. A missing channel, a bad time, a duration outside 1 to 480, no date and no days, or a one-time pass that has already ended is 400. Absent is a series or once pass.
+             * @enum {string}
+             */
+            kind?: "series" | "manual";
+            /** @description kind manual: minutes to record */
+            duration?: number;
+            /**
+             * Format: date
+             * @description kind manual without days: the server-local day (YYYY-MM-DD)
+             */
+            date?: string;
+            /**
              * Format: int64
-             * @description 0 records on any channel
+             * @description 0 records on any channel. Required for kind manual.
              */
             channelId?: number;
             padBefore?: number;
@@ -2787,6 +2806,8 @@ export interface components {
             skipped: boolean;
             reason?: string;
             suggestion?: components["schemas"]["Suggestion"];
+            /** @description A manual pass's slot. Its airing id is negative and made up for the slot; its times are the pass's, and its title and details are the guide's listing for most of that time when there is one. */
+            manual?: boolean;
         };
         Event: {
             /** Format: int64 */
@@ -5003,6 +5024,11 @@ export interface operations {
                     /** Format: int64 */
                     channelId?: number;
                     /**
+                     * Format: int64
+                     * @description The planned item's passId. For a manual pass's slot it skips that slot alone, not the listing's episode; other passes ignore it.
+                     */
+                    passId?: number;
+                    /**
                      * Format: date-time
                      * @description An offset is accepted and stored as UTC, which is how the skip is matched. A missing or unreadable time is 400.
                      */
@@ -5145,6 +5171,18 @@ export interface operations {
             content: {
                 "application/json": {
                     /**
+                     * @description With id absent or 0: manual previews a new manual pass, whose title may be blank. Otherwise ignored.
+                     * @enum {string}
+                     */
+                    kind?: "series" | "manual";
+                    /** @description Manual passes only: minutes to record from timeStart. */
+                    duration?: number;
+                    /**
+                     * Format: date
+                     * @description Manual passes only: the server-local day (YYYY-MM-DD) a pass without days records on.
+                     */
+                    date?: string;
+                    /**
                      * Format: int64
                      * @description Absent or 0 previews a new series pass. Any other id previews an edit of that pass.
                      */
@@ -5247,6 +5285,13 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Manual passes only: minutes to record from timeStart. */
+                    duration?: number;
+                    /**
+                     * Format: date
+                     * @description Manual passes only: the server-local day (YYYY-MM-DD) a pass without days records on. Sending days that are not empty makes the pass repeat and drops the date.
+                     */
+                    date?: string;
                     /**
                      * Format: int64
                      * @description Ignored. The path id is the pass.

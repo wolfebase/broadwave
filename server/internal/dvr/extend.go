@@ -66,7 +66,7 @@ func NextExtension(id int64, ends time.Time, game sports.Game, found bool, now t
 
 // SportsTail is an hour after the listing when a sports show is not a matched game.
 func SportsTail(airing store.Airing) time.Duration {
-	if airing.GameID != "" || !sportsCategory(airing.Category) {
+	if airing.GameID != "" || airing.ManualPass != 0 || !sportsCategory(airing.Category) {
 		return 0
 	}
 	return sportsPad

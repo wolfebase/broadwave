@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -65,6 +66,9 @@ type Airing struct {
 	// Simulcast is the channel that records this broadcast when it also airs
 	// there (an ATSC 1.0 and 3.0 pair). Only RecordingAirings sets it.
 	Simulcast int64 `json:"-"`
+	// ManualPass is the manual pass this slot was made for; the planner sets
+	// it on a time it records whether or not the guide lists anything then.
+	ManualPass int64 `json:"-"`
 }
 
 // RecordingHealth is the damage counted in a finished recording file.
@@ -185,7 +189,44 @@ type Pass struct {
 	// Days are the weekdays (0 Sunday … 6 Saturday) an airing may start on; none is every day.
 	Days []int `json:"days,omitempty"`
 	// AiringStart pins a kind "once" pass to the airing starting then on ChannelID.
+	// A one-time "manual" pass starts recording then.
 	AiringStart time.Time `json:"airingStart,omitzero"`
+	// Duration is how many minutes a kind "manual" pass records from TimeStart.
+	Duration int `json:"duration,omitempty"`
+	// Date is the server-local day a one-time manual pass records on (YYYY-MM-DD).
+	// A manual pass with Days repeats on them instead.
+	Date string `json:"date,omitempty"`
+}
+
+// ManualStart is the instant a manual pass records from on the given local
+// day: TimeStart on the server's clock, so 22:00 stays 22:00 across a DST
+// change. A time the spring change skips (02:30) starts when the clock
+// reads it an hour on (03:30).
+func ManualStart(p Pass, day time.Time) (time.Time, bool) {
+	hour, minute, ok := clock(p.TimeStart)
+	if !ok {
+		return time.Time{}, false
+	}
+	day = day.In(time.Local)
+	start := time.Date(day.Year(), day.Month(), day.Day(), hour, minute, 0, 0, time.Local)
+	// Go can land a skipped time before the gap; move it past.
+	if short := (hour*60 + minute) - (start.Hour()*60 + start.Minute()); short > 0 && start.Day() == day.Day() {
+		start = start.Add(time.Duration(short) * time.Minute)
+	}
+	return start, true
+}
+
+func clock(v string) (int, int, bool) {
+	v = strings.TrimSpace(v)
+	if len(v) != 5 || v[2] != ':' {
+		return 0, 0, false
+	}
+	h, err1 := strconv.Atoi(v[:2])
+	m, err2 := strconv.Atoi(v[3:])
+	if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, 0, false
+	}
+	return h, m, true
 }
 
 // SourceChannel is the channel's stream. An encrypted 3.0 channel with a clear
@@ -876,6 +917,34 @@ func (s *Store) AddOncePass(ctx context.Context, title string, channelID int64, 
 	return err
 }
 
+// AddManualPass saves a manual pass and returns its id. A one-time pass
+// keeps its start in airing_start; a repeating one keeps only its days.
+func (s *Store) AddManualPass(ctx context.Context, p Pass) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `INSERT INTO passes (title, channel_id, kind, pad_before, pad_after, priority, keep_mode,
+		keep_count, limit_count, commercials, time_start, days, airing_start, duration)
+		VALUES (?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Title, p.ChannelID, p.PadBefore, p.PadAfter, p.Priority, blank(p.KeepMode, "all"),
+		p.KeepCount, p.LimitCount, boolInt(p.Commercials), p.TimeStart, DaysMask(p.Days), unixOrZero(p.AiringStart), p.Duration)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func unixOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
+// DeleteEndedManualPasses drops one-time manual passes that ended before cutoff.
+func (s *Store) DeleteEndedManualPasses(ctx context.Context, cutoff time.Time) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM passes WHERE kind = 'manual' AND days = 0 AND airing_start > 0
+		AND airing_start + (duration + pad_after) * 60 < ?`, cutoff.Unix())
+	return err
+}
+
 // DeleteEndedOncePasses drops once passes whose airing started before cutoff.
 func (s *Store) DeleteEndedOncePasses(ctx context.Context, cutoff time.Time) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM passes WHERE kind = 'once' AND airing_start < ?`, cutoff.Unix())
@@ -896,7 +965,7 @@ func (s *Store) UpdatePass(ctx context.Context, id int64, padBefore, padAfter, p
 
 func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, title, channel_id, kind, pad_before, pad_after, priority,
-	episodes, keep_mode, keep_count, limit_count, rerecord, commercials, time_start, time_end, match_kind, airing_start, days
+	episodes, keep_mode, keep_count, limit_count, rerecord, commercials, time_start, time_end, match_kind, airing_start, days, duration
 	FROM passes ORDER BY priority DESC, title COLLATE NOCASE, id`)
 	if err != nil {
 		return nil, err
@@ -909,7 +978,7 @@ func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 		var airingStart int64
 		var days int
 		if err := rows.Scan(&p.ID, &p.Title, &p.ChannelID, &p.Kind, &p.PadBefore, &p.PadAfter, &p.Priority,
-			&p.Episodes, &p.KeepMode, &p.KeepCount, &p.LimitCount, &rerecord, &commercials, &p.TimeStart, &p.TimeEnd, &p.MatchKind, &airingStart, &days); err != nil {
+			&p.Episodes, &p.KeepMode, &p.KeepCount, &p.LimitCount, &rerecord, &commercials, &p.TimeStart, &p.TimeEnd, &p.MatchKind, &airingStart, &days, &p.Duration); err != nil {
 			return nil, err
 		}
 		if airingStart > 0 {
@@ -918,6 +987,9 @@ func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 		p.Rerecord = rerecord != 0
 		p.Commercials = commercials != 0
 		p.Days = DaysOf(days)
+		if p.Kind == "manual" && !p.AiringStart.IsZero() && len(p.Days) == 0 {
+			p.Date = p.AiringStart.In(time.Local).Format(time.DateOnly)
+		}
 		out = append(out, p)
 	}
 	return out, rows.Err()
@@ -925,10 +997,12 @@ func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 
 func (s *Store) UpdatePassRules(ctx context.Context, p Pass) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE passes SET title = ?, pad_before = ?, pad_after = ?, priority = ?, episodes = ?, keep_mode = ?,
-		keep_count = ?, limit_count = ?, rerecord = ?, commercials = ?, time_start = ?, time_end = ?, match_kind = ?, channel_id = ?, days = ?
+		keep_count = ?, limit_count = ?, rerecord = ?, commercials = ?, time_start = ?, time_end = ?, match_kind = ?, channel_id = ?, days = ?,
+		airing_start = CASE WHEN kind = 'manual' THEN ? ELSE airing_start END, duration = ?
 		WHERE id = ?`,
 		p.Title, p.PadBefore, p.PadAfter, p.Priority, blank(p.Episodes, "all"), blank(p.KeepMode, "all"),
-		p.KeepCount, p.LimitCount, boolInt(p.Rerecord), boolInt(p.Commercials), p.TimeStart, p.TimeEnd, blank(p.MatchKind, "title"), p.ChannelID, DaysMask(p.Days), p.ID)
+		p.KeepCount, p.LimitCount, boolInt(p.Rerecord), boolInt(p.Commercials), p.TimeStart, p.TimeEnd, blank(p.MatchKind, "title"), p.ChannelID, DaysMask(p.Days),
+		unixOrZero(p.AiringStart), p.Duration, p.ID)
 	if err != nil {
 		return err
 	}

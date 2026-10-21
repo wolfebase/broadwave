@@ -292,6 +292,9 @@ export type MultiviewPlan = {
 
 export type NewPass = {
   title: string;
+  kind?: string;
+  duration?: number;
+  date?: string;
   channelId?: number;
   padBefore?: number;
   padAfter?: number;
@@ -355,6 +358,8 @@ export type Pass = {
   matchKind?: string;
   days?: number[];
   airingStart?: string;
+  duration?: number;
+  date?: string;
 };
 
 export type PassList = {
@@ -386,6 +391,7 @@ export type PlannedAiring = {
   skipped: boolean;
   reason?: string;
   suggestion?: Suggestion;
+  manual?: boolean;
 };
 
 export type Playback = {
