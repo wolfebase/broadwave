@@ -61,14 +61,19 @@
 # JS raised 2026-10-20: the guide remembers its filter and lands day jumps on
 # listings, and the shell opens search on "/". The guide and shell load up
 # front. Measured entry gzip 104017, plus 300 bytes of slack.
+# JS raised 2026-10-21: the shell tells a TV browser from an iPad, and the
+# update notice says how to update for each kind of install. The shell loads
+# up front. Measured entry gzip 104765, plus 300 bytes of slack.
+# CSS raised 2026-10-21: the update notice's How to update steps load with the
+# shell. Measured entry gzip 13623, plus 200 bytes.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=104317
-CSS_GZIP_MAX=13608
+JS_GZIP_MAX=105065
+CSS_GZIP_MAX=13823
 
 if [[ ! -f "$INDEX" ]]; then
   echo "bundle budget: missing $INDEX" >&2
