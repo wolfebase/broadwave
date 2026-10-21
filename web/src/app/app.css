@@ -407,6 +407,36 @@ html[data-layout="phone"] .install-offer p {
   flex-basis: 100%;
 }
 
+/* How to update opens under the notice, across its full width. */
+.update-how {
+  flex-basis: 100%;
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-glass-stroke);
+}
+
+.update-how .hint {
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote-size);
+}
+
+.update-how dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.update-how dt {
+  font-weight: 700;
+}
+
+.update-how dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
 .layout-tv .banner-update {
   font-size: var(--type-headline-size);
 }

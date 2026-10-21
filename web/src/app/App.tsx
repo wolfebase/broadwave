@@ -14,6 +14,7 @@ import { PlayerProvider, usePlayer } from "./player";
 import { focusRing, installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
 import { isSearchShortcut } from "./searchKey";
+import { installKind, updateHint, updateSteps } from "../lib/updateHow";
 import "./app.css";
 
 const shell = bind(shellMessages);
@@ -88,6 +89,7 @@ function Shell() {
     return installTvRemote();
   }, [layout]);
   const [hiddenUpdate, setHiddenUpdate] = useState("");
+  const [updateHowOpen, setUpdateHowOpen] = useState(false);
   const notice = update && update.message && hiddenUpdate !== update.message ? update : undefined;
   const player = usePlayer();
   const [online, setOnline] = useState(true);
@@ -229,7 +231,9 @@ function Shell() {
             {notesHref(notice.notesUrl) ? (
               <a className="btn small" href={notesHref(notice.notesUrl)} target="_blank" rel="noreferrer">{shell("shell.releaseNotes")}</a>
             ) : null}
+            <button type="button" className="btn small" aria-expanded={updateHowOpen} aria-controls="update-how" onClick={() => setUpdateHowOpen((open) => !open)}>{shell("shell.howToUpdate")}</button>
             <button type="button" className="btn small ghost" onClick={() => setHiddenUpdate(notice.message)}>{shell("shell.notNow")}</button>
+            {updateHowOpen ? <UpdateHow server={server} /> : null}
           </div>
         ) : null}
         {!booting && notices[0] && !immersive && !fullPlayer ? (
@@ -293,6 +297,28 @@ function HomeNotice({ message, onDismiss }: { message: string; onDismiss: () => 
         {shell("shell.yourHome")}
       </button>
       <button type="button" className="btn small ghost" onClick={onDismiss}>{shell("shell.notNow")}</button>
+    </div>
+  );
+}
+
+/** The ways to update, or only this server's way when it says how it was installed. */
+function UpdateHow({ server }: { server: unknown }) {
+  const hint = updateHint(server);
+  const kind = installKind(server);
+  const steps = updateSteps(kind);
+  return (
+    <div id="update-how" className="update-how">
+      {hint ? <p>{hint}</p> : <p className="hint">{shell(kind ? "update.ledeKnown" : "update.lede")}</p>}
+      {hint ? null : (
+        <dl>
+          {steps.map((step) => (
+            <div key={step.label}>
+              <dt>{step.label}</dt>
+              <dd>{step.text}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </div>
   );
 }
