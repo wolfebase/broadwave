@@ -621,6 +621,8 @@ export type SetupFinish = {
   channelId?: number;
   steps: SetupStep[];
   needsGuide?: boolean;
+  timeZone?: string;
+  utcOffset?: number;
 };
 
 export type SetupStep = {

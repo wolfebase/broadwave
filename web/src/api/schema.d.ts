@@ -2955,6 +2955,10 @@ export interface components {
             steps: components["schemas"]["SetupStep"][];
             /** @description Setup ended with no listings. Offer Schedules Direct or an XMLTV link. */
             needsGuide?: boolean;
+            /** @description The server's time zone (an IANA name when TZ is set), which listing days and recording times are read in. */
+            timeZone?: string;
+            /** @description The server's offset from UTC in seconds, now. */
+            utcOffset?: number;
         };
         /** @description What the storage rules would do right now. Nothing is deleted. */
         StoragePlan: {

@@ -32,10 +32,15 @@ type finishStatus struct {
 	// NeedsGuide is a setup that ended with no listings; the Ready step
 	// offers Schedules Direct or an XMLTV link.
 	NeedsGuide bool `json:"needsGuide,omitempty"`
+	// TimeZone is the zone the server reads listing days and recording times
+	// in; the Ready step compares it with the browser's.
+	TimeZone  string `json:"timeZone"`
+	UTCOffset int    `json:"utcOffset"`
 }
 
 func (st finishStatus) clone() finishStatus {
 	out := st
+	out.TimeZone, out.UTCOffset = serverZone(time.Now())
 	out.Steps = append([]finishStep(nil), st.Steps...)
 	return out
 }
@@ -79,7 +84,7 @@ func (s *Server) getSetupFinish(w http.ResponseWriter, r *http.Request) {
 	s.finishMu.Lock()
 	defer s.finishMu.Unlock()
 	if s.finishRun == nil {
-		idle := newFinishStatus()
+		idle := newFinishStatus().clone()
 		idle.Running = false
 		writeJSON(w, http.StatusOK, idle)
 		return
@@ -617,6 +622,16 @@ func visibleChannels(channels []store.Channel) []store.Channel {
 		}
 	}
 	return out
+}
+
+// serverZone is the server's zone name (an IANA name when TZ set one) and
+// its offset from UTC in seconds at that time.
+func serverZone(at time.Time) (string, int) {
+	zone, offset := at.Zone()
+	if name := time.Local.String(); name != "Local" {
+		zone = name
+	}
+	return zone, offset
 }
 
 func countLine(n int, one, many string) string {

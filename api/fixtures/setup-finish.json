@@ -37,5 +37,7 @@
       "state": "waiting",
       "title": "Signal"
     }
-  ]
+  ],
+  "timeZone": "UTC",
+  "utcOffset": 0
 }
