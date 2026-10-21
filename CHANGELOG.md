@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Web: an iPad (or any touch screen) gets the regular layout, not the TV one; the TV layout is for TV browsers, or `?layout=tv`, which this browser then remembers (`?layout=auto` forgets it).
+- Web: the sync pill in the player says Waiting or Syncing until it is in sync, and Sync on when this is the only screen.
+
 ## 0.15.1 — 2026-10-21
 
 ### Added

@@ -73,6 +73,7 @@ afterEach(() => {
   settings.layout = "auto";
   window.history.replaceState(null, "", "/");
   for (const list of lists) list.matches = false;
+  localStorage.clear();
 });
 
 test("a saved layout wins, and auto follows the window and the address", () => {
@@ -99,6 +100,15 @@ test("a saved layout wins, and auto follows the window and the address", () => {
   rerender();
   expect(document.body.textContent).toBe("desktop");
 
+  // The address choice sticks to this browser until ?layout=auto.
+  window.history.replaceState(null, "", "/");
+  rerender();
+  expect(document.body.textContent).toBe("desktop");
+
+  window.history.replaceState(null, "", "/?layout=auto");
+  rerender();
+  expect(document.body.textContent).toBe("tv");
+
   window.history.replaceState(null, "", "/?layout=nope");
   rerender();
   expect(document.body.textContent).toBe("tv");
@@ -118,4 +128,18 @@ test("a saved layout wins, and auto follows the window and the address", () => {
   root = null;
   expect(phone.listeners.size).toBeLessThan(listening);
   expect(() => phone.dispatch()).not.toThrow();
+});
+
+test("a wide touch screen like an iPad gets the desktop layout, not the TV one", () => {
+  const tv = lists[1];
+  tv.matches = true;
+  const touch = Object.getOwnPropertyDescriptor(Navigator.prototype, "maxTouchPoints");
+  Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, get: () => 5 });
+  try {
+    mount(<Show />);
+    expect(document.body.textContent).toBe("desktop");
+  } finally {
+    if (touch) Object.defineProperty(navigator, "maxTouchPoints", touch);
+    else delete (navigator as { maxTouchPoints?: number }).maxTouchPoints;
+  }
 });

@@ -6,6 +6,7 @@ import { bind } from "../../i18n/runtime.ts";
 import { copy } from "../../strings";
 import { accents, readAccent, readTheme, saveAccent, saveTheme, themeChoices } from "../../theme/look";
 import { ChoiceRow, Group, Row } from "./rows";
+import { forgetLayoutChoice } from "../../app/layout";
 
 const t = bind(settingsUiMessages);
 const h = bind(settingsHubMessages);
@@ -61,7 +62,10 @@ export function Appearance({ settings, onChange }: { settings: Settings; onChang
             { value: "tv", label: t("settings.layoutTv") },
             { value: "phone", label: t("settings.layoutPhone") },
           ]}
-          onChange={(layout) => onChange({ layout })}
+          onChange={(layout) => {
+            if (layout === "auto") forgetLayoutChoice();
+            onChange({ layout });
+          }}
         />
       </Group>
     </>
