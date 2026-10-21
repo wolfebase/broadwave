@@ -1,0 +1,17 @@
+{
+  "map": [
+    {"stationID": "90001", "uhfVhf": 20, "atscMajor": 4, "atscMinor": 1, "matchType": "providerCallsign"},
+    {"stationID": "90002", "uhfVhf": 20, "atscMajor": 4, "atscMinor": 2},
+    {"stationID": "90003", "uhfVhf": 31, "atscMajor": 5, "atscMinor": 1},
+    {"stationID": "90009", "uhfVhf": 44, "atscMajor": 4, "atscMinor": 1}
+  ],
+  "stations": [
+    {"stationID": "90001", "name": "KBWV", "callsign": "KBWV", "affiliate": "NBC Affiliate", "broadcastLanguage": ["en"],
+     "logo": {"URL": "https://logos.example/kbwv.png", "height": 270, "width": 360, "md5": "a1"}},
+    {"stationID": "90002", "name": "KBWV2", "callsign": "KBWVDT2", "affiliate": "Diginet", "broadcastLanguage": ["en"],
+     "stationLogo": [{"URL": "https://logos.example/kbwv2.png", "height": 270, "width": 360, "md5": "a2", "source": "Gracenote", "category": "dark"}]},
+    {"stationID": "90003", "name": "WTST", "callsign": "WTST", "affiliate": "CBS", "broadcastLanguage": ["en"]},
+    {"stationID": "90009", "name": "KFAR", "callsign": "KFAR", "affiliate": "ABC Affiliate", "broadcastLanguage": ["en"]}
+  ],
+  "metadata": {"lineup": "USA-OTA80000", "modified": "2026-10-01T00:00:00Z", "transport": "Antenna"}
+}

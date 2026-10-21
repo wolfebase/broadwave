@@ -39,5 +39,7 @@
       "state": "done",
       "title": "Signal"
     }
-  ]
+  ],
+  "timeZone": "UTC",
+  "utcOffset": 0
 }

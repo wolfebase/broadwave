@@ -1,0 +1,15 @@
+[
+  {"programID": "EP012345670003", "md5": "p1",
+   "titles": [{"title120": "Harbor Lights"}], "episodeTitle150": "The Long Tide",
+   "descriptions": {"description100": [{"descriptionLanguage": "en", "description": "Short."}],
+                    "description1000": [{"descriptionLanguage": "es", "description": "Largo."}, {"descriptionLanguage": "en", "description": "A storm keeps the crew at sea."}]},
+   "originalAirDate": "2026-10-20", "genres": ["Drama"], "showType": "Series", "entityType": "Episode",
+   "metadata": [{"Gracenote": {"season": 3, "episode": 1}}],
+   "cast": [{"name": "Rowan Ellis", "role": "Actor", "billingOrder": "02"}, {"name": "Sam Ortega", "role": "Actor", "billingOrder": "01"}, {"name": "Pat Lee", "role": "Director", "billingOrder": "00"}]},
+  {"programID": "SP009876540012", "md5": "p2",
+   "titles": [{"title120": "College Football"}], "episodeTitle150": "Plainsview at Ridgecrest",
+   "genres": ["Football"], "showType": "Sports event", "entityType": "Sports"},
+  {"programID": "MV000111220000", "md5": "p3",
+   "titles": [{"title120": "The Quiet Orchard"}], "genres": ["Drama"], "showType": "Feature Film", "entityType": "Movie",
+   "movie": {"year": "1987"}, "contentRating": [{"body": "Motion Picture Association of America", "code": "PG"}]}
+]

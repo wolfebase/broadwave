@@ -279,7 +279,11 @@ func TestContractFixtures(t *testing.T) {
 			}
 			continue
 		}
-		matchFixture(t, root, tc.name, rec.Body.Bytes())
+		body := rec.Body.Bytes()
+		if tc.name == "setup-finish" {
+			body = fixedZone(t, body)
+		}
+		matchFixture(t, root, tc.name, body)
 	}
 	matchSetup(t, h, root)
 	// A pass that would record in the next half hour depends on the wall clock.
@@ -430,7 +434,7 @@ func matchSetup(t *testing.T, h http.Handler, root string) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("setup post %d %s", rec.Code, rec.Body.String())
 	}
-	matchFixture(t, root, "setup-finish-post", rec.Body.Bytes())
+	matchFixture(t, root, "setup-finish-post", fixedZone(t, rec.Body.Bytes()))
 	deadline := time.Now().Add(5 * time.Second)
 	var body []byte
 	for time.Now().Before(deadline) {
@@ -442,12 +446,31 @@ func matchSetup(t *testing.T, h http.Handler, root string) {
 		}
 		body = append([]byte(nil), rec.Body.Bytes()...)
 		if strings.Contains(rec.Body.String(), `"ready"`) && strings.Contains(rec.Body.String(), `"running":false`) {
-			matchFixture(t, root, "setup-finish-done", body)
+			matchFixture(t, root, "setup-finish-done", fixedZone(t, body))
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("setup did not finish: %s", body)
+}
+
+// fixedZone writes the server's zone as UTC, so a fixture recorded on one
+// machine matches on another.
+func fixedZone(t *testing.T, raw []byte) []byte {
+	t.Helper()
+	var v map[string]any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := v["timeZone"].(string); !ok {
+		t.Fatalf("no timeZone in %s", raw)
+	}
+	v["timeZone"], v["utcOffset"] = "UTC", 0
+	out, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
 
 func waitSignal(t *testing.T, api *Server) {

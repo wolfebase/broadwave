@@ -18,6 +18,9 @@
 - Releases include ready-to-run server downloads for Linux (x86 and ARM), macOS, and Windows, with checksums. Without Docker, install ffmpeg 6.1 or newer.
 - Install notes for Synology, QNAP, TrueNAS SCALE, and Raspberry Pi; the Compose file starts on machines without Intel or AMD graphics (hardware transcoding is one uncommented line).
 - The update notice says how to update this server (Unraid, Docker, or the download).
+- Web: setup's Ready step offers to get listings when none loaded: sign in to Schedules Direct and pick your lineup by ZIP or postal code (US and Canada), or paste an XMLTV link. It says what each is, loads the listings right away, and says plainly why when one does not work.
+- Web: Settings › Guide lists where listings come from, when each last loaded, and its last error, and picks a Schedules Direct lineup by ZIP or postal code instead of a typed lineup id.
+- Web: the Ready step shows the server's time zone, and how to set `TZ` when it is not the zone you are in.
 
 ### Changed
 
@@ -27,6 +30,9 @@
 - Free channels: Samsung TV Plus asks for Canada's channels on a server in Canada.
 - Web: the Schedule page calls passes "Recording rules", and each one says what it is: Series, One time, Timed, or Games. One-time recordings show their channel, so two of the same show tell apart.
 - Web: a recording that is running shows once in Coming up, not again as the airing it is recording.
+- Server: guide sources are combined channel by channel. The most detailed source keeps the hours they share, and a longer source fills the days after a shorter one ends, so a Schedules Direct or XMLTV guide's two weeks are no longer cut to SiliconDust's two days.
+- Server: Schedules Direct listings carry descriptions, episode titles, season and episode, genres, original air dates, new, live, premiere, and finale, ratings, and cast, plus channel logos and networks. New-only passes, sports detection, and favorites work for them. Antenna lineups match channels by their broadcast number.
+- Server: each guide source keeps its own schedule. Schedules Direct and XMLTV links load once a day and right after their settings change, and a source that fails waits longer each time (30 minutes, up to 6 hours) instead of retrying every half hour forever. The one-hour limit on Refresh now applies only to SiliconDust.
 
 ### Fixed
 
@@ -41,6 +47,9 @@
 - API: `POST /api/v1/recordings` with `minutes` records that many minutes from now, even over a longer listing. Without `minutes` it still records the whole show.
 - A recording that resumes after a restart stops at its planned end, and shows one note about the restart.
 - Playing a recording without captions no longer logs an error.
+- Server: setup never stops because the guide did not load, and a Refresh where every source failed says why instead of answering with a server error.
+- Server: XMLTV times without a space before the offset, or without seconds, are read. A link that gives no programs is reported ("The XMLTV link gave no programs") instead of quietly leaving the guide empty.
+- Server: the guide keeps refreshing when the tuner could not be reached at start (after a power cut, with `HDHR_HOST` set).
 
 ## 0.15.1 — 2026-10-21
 

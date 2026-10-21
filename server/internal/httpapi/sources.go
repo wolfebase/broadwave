@@ -405,6 +405,10 @@ func (s *Server) attachXMLTV(ctx context.Context, sourceID int64, rawURL string)
 		}
 	}
 	rows, art, err := guide.Parse(body, mine)
+	// Many playlist services send an empty guide; that is no listings, not a failure.
+	if errors.Is(err, guide.ErrNoPrograms) {
+		err = nil
+	}
 	if err != nil {
 		return err
 	}

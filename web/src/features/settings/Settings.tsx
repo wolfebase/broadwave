@@ -5,6 +5,9 @@ import { navigate } from "../../app/router";
 import { authHeaders } from "../../lib/deviceToken";
 import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
 import { settingsHubMessages } from "../../i18n/messages/settingsHub.ts";
+import { guideSourcesMessages } from "../../i18n/messages/guideSources.ts";
+import { useData } from "../../app/data";
+import { GetListings, GuideSourceList } from "./GuideSources";
 import { bind, formatDateTime } from "../../i18n/runtime.ts";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
@@ -17,6 +20,7 @@ import { ChoiceRow, Group, Row, SelectRow, SwitchRow } from "./rows";
 
 const t = bind(settingsUiMessages);
 const h = bind(settingsHubMessages);
+const g = bind(guideSourcesMessages);
 
 type Change = (values: Partial<Settings>) => void;
 
@@ -77,14 +81,34 @@ export function PlaybackSection({ settings, onChange }: { settings: Settings; on
 }
 
 export function GuideSection({ settings, onChange }: { settings: Settings; onChange: Change }) {
+  const { refresh } = useData();
+  const [version, setVersion] = useState(0);
+  const reload = () => {
+    setVersion((v) => v + 1);
+    void refresh(["settings", "airings", "channels"]);
+  };
   return (
     <>
-      <Group title={h("guide.listings")} lede={h("guide.listingsLede")}>
-        <TextRow label={h("guide.sdUser")} hint={copy.settings.guideAccountHint} value={settings.sdUser ?? ""} autoComplete="username" onSave={(sdUser) => onChange({ sdUser })} />
-        <SecretRow label={h("guide.sdPassword")} saved={settings.sdPasswordSet === "1"} autoComplete="current-password" onSave={(sdPassword) => onChange({ sdPassword })} />
-        <TextRow label={copy.settings.guideLineup} value={settings.sdLineup ?? ""} onSave={(sdLineup) => onChange({ sdLineup })} />
-        <TextRow label={copy.settings.guideAddress} hint={copy.settings.guideAddressHint} value={settings.guideUrl ?? ""} placeholder={t("settings.guidePlaceholder")} onSave={(guideUrl) => onChange({ guideUrl })} />
+      <Group title={h("guide.listings")} lede={g("gs.lede")}>
+        <GuideSourceList
+          version={version}
+          onTurnOff={(source) => {
+            onChange(source === "xmltv" ? { guideUrl: "" } : { sdLineup: "" });
+            // The server pulls a few seconds after a source changes.
+            window.setTimeout(reload, 5000);
+          }}
+        />
       </Group>
+      <section className="set-group" aria-label={g("gs.title")}>
+        <header className="set-group-head">
+          <h3>{g("gs.title")}</h3>
+        </header>
+        <GetListings
+          key={`${settings.sdUser ?? ""}|${settings.sdLineup ?? ""}`}
+          saved={{ user: settings.sdUser, passwordSaved: settings.sdPasswordSet === "1", lineup: settings.sdLineup, url: settings.guideUrl }}
+          onLoaded={reload}
+        />
+      </section>
       <Group title={h("guide.art")}>
         <SecretRow label={h("guide.tmdb")} hint={copy.settings.movieArtHint} saved={settings.tmdbKeySet === "1"} onSave={(tmdbKey) => onChange({ tmdbKey })} />
       </Group>

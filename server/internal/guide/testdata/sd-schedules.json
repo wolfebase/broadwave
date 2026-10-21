@@ -1,0 +1,14 @@
+[
+  {"stationID": "90001", "programs": [
+    {"programID": "EP012345670003", "airDateTime": "2026-10-21T02:00:00Z", "duration": 3600, "md5": "p1",
+     "new": true, "isPremiereOrFinale": "Season Premiere", "premiere": true,
+     "ratings": [{"body": "USA Parental Rating", "code": "TV14"}]},
+    {"programID": "SP009876540012", "airDateTime": "2026-10-21T03:00:00Z", "duration": 10800, "md5": "p2", "liveTapeDelay": "Live"}
+  ], "metadata": {"modified": "2026-10-20T12:00:00Z", "md5": "s1", "startDate": "2026-10-21"}},
+  {"stationID": "90003", "programs": [
+    {"programID": "MV000111220000", "airDateTime": "2026-10-21T02:00:00Z", "duration": 7200, "md5": "p3"}
+  ], "metadata": {"modified": "2026-10-20T12:00:00Z", "md5": "s3", "startDate": "2026-10-21"}},
+  {"stationID": "90009", "programs": [
+    {"programID": "EP055555550001", "airDateTime": "2026-10-21T02:00:00Z", "duration": 1800, "md5": "p9"}
+  ], "metadata": {"modified": "2026-10-20T12:00:00Z", "md5": "s9", "startDate": "2026-10-21"}}
+]
