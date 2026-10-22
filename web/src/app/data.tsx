@@ -512,7 +512,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const mine = beginSave(saveSeq.current);
         // Drops a GET that already started. commitSave drops one that starts during the PUT.
         reads.current.start(["settings", "storage", "server"]);
-        const put = await putSettings(values);
+        // The switch or choice moves at once; the saved settings replace it after the PUT.
+        // Only keys the page already shows: a token or password is never echoed into it.
+        setSettings((cur) => {
+          const shown = Object.entries(values).filter(([key, value]) => key in cur && typeof value === "string");
+          return shown.length ? { ...cur, ...Object.fromEntries(shown) } : cur;
+        });
+        let put: Awaited<ReturnType<typeof putSettings>>;
+        try {
+          put = await putSettings(values);
+        } catch (err) {
+          // Put the controls back to what the server has.
+          await refresh(["settings"]).catch(() => undefined);
+          throw err;
+        }
         // The token is handed out once, so it is kept even when a newer save wins.
         if (put.deviceToken) writeToken(put.deviceToken);
         const stored = { ...put };
