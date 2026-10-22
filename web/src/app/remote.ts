@@ -298,3 +298,15 @@ export function installTvRemote(): () => void {
   window.addEventListener("keydown", onKey);
   return () => window.removeEventListener("keydown", onKey);
 }
+
+/**
+ * A notice that floats over the page sits under the notices in its flow (a new
+ * release, the time zone), not on top of their words.
+ */
+export function floatBelowNotices(el: HTMLElement | null) {
+  if (!el) return;
+  el.style.top = "";
+  let bottom = 0;
+  for (const line of document.querySelectorAll(".banner-update")) bottom = Math.max(bottom, line.getBoundingClientRect().bottom);
+  if (bottom > 0 && el.getBoundingClientRect().top < bottom + 8) el.style.top = `${Math.round(bottom + 8)}px`;
+}
