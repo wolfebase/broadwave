@@ -66,13 +66,16 @@
 # up front. Measured entry gzip 104765, plus 300 bytes of slack.
 # CSS raised 2026-10-21: the update notice's How to update steps load with the
 # shell. Measured entry gzip 13623, plus 200 bytes.
+# JS raised 2026-10-21: a TV remote lines notice buttons up with the page and
+# keeps a ring after a notice closes. The shell loads up front. Measured entry
+# gzip 105170, plus 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=105065
+JS_GZIP_MAX=105470
 CSS_GZIP_MAX=13823
 
 if [[ ! -f "$INDEX" ]]; then
