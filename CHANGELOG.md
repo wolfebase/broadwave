@@ -77,6 +77,7 @@
 - Server: a channel that was playing or warmed a moment ago and is now off the air says "This channel isn't coming in" instead of "didn't start".
 - Web: a switch or choice in Settings moves the moment you press it instead of after the server answers.
 - Web: a show's page puts All recordings at the start of the line, not centered.
+- Multiview: opening a mosaic of channels whose tiles were still running no longer lets their tuners go and tunes them again; on a slow server that retune could find every tuner busy.
 
 ## 0.15.1 — 2026-10-21
 

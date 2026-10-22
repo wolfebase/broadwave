@@ -170,7 +170,13 @@ func (h *Hub) WatchMosaic(ctx context.Context, ids []int64) (MosaicSession, erro
 	}
 	// Checked again after tuning; this one keeps a mosaic that cannot fit
 	// from tuning anything.
-	if !h.mosaicFitsLocked() {
+	if !h.mosaicFitsLocked(ids) {
+		// The tunes it kept for itself go the usual way.
+		for _, id := range ids {
+			if f := h.channels[id]; f != nil {
+				h.dropIfUnusedLocked(f)
+			}
+		}
 		h.mu.Unlock()
 		return MosaicSession{}, &PictureError{Tiles: h.Host.Tiles}
 	}
@@ -229,7 +235,7 @@ func (h *Hub) WatchMosaic(ctx context.Context, ids []int64) (MosaicSession, erro
 		}
 		return h.joinMosaicLocked(mo), nil
 	}
-	if !h.mosaicFitsLocked() {
+	if !h.mosaicFitsLocked(ids) {
 		for _, f := range feeds {
 			f.mosaics--
 			h.dropIfUnusedLocked(f)
@@ -253,13 +259,16 @@ func (h *Hub) WatchMosaic(ctx context.Context, ids []int64) (MosaicSession, erro
 }
 
 // mosaicFitsLocked frees pictures nobody watches, then says whether a
-// mosaic fits the host's picture budget.
-func (h *Hub) mosaicFitsLocked() bool {
+// mosaic fits the host's picture budget. The tunes of the mosaic's own
+// channels stay: freeing a closed multiview's idle tiles used to let their
+// tuners go, and the mosaic then had to tune the same channels again while
+// the device was still releasing them, and found every tuner busy.
+func (h *Hub) mosaicFitsLocked(ids []int64) bool {
 	if h.Host.Tiles <= 0 {
 		return true
 	}
 	if h.transcodesLocked()+mosaicCost > h.Host.Tiles {
-		h.releaseIdlePicturesLocked(nil, time.Now(), mosaicCost)
+		h.releaseIdlePicturesLocked(func(f *feed) bool { return slices.Contains(ids, f.channel.ID) }, time.Now(), mosaicCost)
 	}
 	return h.transcodesLocked()+mosaicCost <= h.Host.Tiles
 }
@@ -421,13 +430,13 @@ func (h *Hub) detachMosaicLocked(mo *mosaic) {
 
 // stopMosaicLocked ends the encode and lets go of every channel it held.
 func (h *Hub) stopMosaicLocked(mo *mosaic) {
-	h.stopMosaicKeepingLocked(mo, nil)
+	h.stopMosaicKeepingLocked(mo, func(*feed) bool { return false })
 }
 
 // stopMosaicKeepingLocked is stopMosaicLocked for a watch about to encode on
-// keep, one of the mosaic's channels: that tune stays, since an encode
+// a tune keep names, one of the mosaic's channels: that tune stays, since an encode
 // started on a stopped tune reads nothing and ends at once.
-func (h *Hub) stopMosaicKeepingLocked(mo *mosaic, keep *feed) {
+func (h *Hub) stopMosaicKeepingLocked(mo *mosaic, keep func(*feed) bool) {
 	if h.mosaics[mo.key] != mo {
 		return
 	}
@@ -436,7 +445,7 @@ func (h *Hub) stopMosaicKeepingLocked(mo *mosaic, keep *feed) {
 	_ = os.RemoveAll(mo.out.dir)
 	for _, f := range mo.feeds {
 		f.mosaics--
-		if f != keep {
+		if !keep(f) {
 			h.dropIfUnusedLocked(f)
 		}
 	}
@@ -535,9 +544,8 @@ func (h *Hub) releaseAbandonedMosaicsLocked(now time.Time, maxAge time.Duration)
 }
 
 // releaseIdleMosaicsLocked frees the pictures of mosaics nobody watches
-// until the budget has room for need more. The tune of asking, the feed
-// that needs the room, stays.
-func (h *Hub) releaseIdleMosaicsLocked(asking *feed, now time.Time, need int) {
+// until the budget has room for need more. The tunes keep names stay.
+func (h *Hub) releaseIdleMosaicsLocked(keep func(*feed) bool, now time.Time, need int) {
 	if h.Host.Tiles <= 0 {
 		return
 	}
@@ -547,7 +555,7 @@ func (h *Hub) releaseIdleMosaicsLocked(asking *feed, now time.Time, need int) {
 		}
 		if freePicture(mo.out, now) {
 			mo.out.viewers = 0
-			h.stopMosaicKeepingLocked(mo, asking)
+			h.stopMosaicKeepingLocked(mo, keep)
 		}
 	}
 }

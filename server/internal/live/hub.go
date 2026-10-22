@@ -1357,12 +1357,13 @@ const stalePicture = 15 * time.Second
 // flip back. The tuner goes too unless it is the feed asking. The caller
 // holds h.mu.
 func (h *Hub) releaseIdleTranscodesLocked(asking *feed, now time.Time) {
-	h.releaseIdlePicturesLocked(asking, now, 1)
+	h.releaseIdlePicturesLocked(func(f *feed) bool { return f == asking }, now, 1)
 }
 
 // releaseIdlePicturesLocked frees pictures nobody watches, oldest first,
-// until need more fit the budget.
-func (h *Hub) releaseIdlePicturesLocked(asking *feed, now time.Time, need int) {
+// until need more fit the budget. A feed keep names keeps its tune: the
+// picture that asked for room, or the channels a mosaic is about to read.
+func (h *Hub) releaseIdlePicturesLocked(keep func(*feed) bool, now time.Time, need int) {
 	type idle struct {
 		f    *feed
 		key  string
@@ -1383,7 +1384,7 @@ func (h *Hub) releaseIdlePicturesLocked(asking *feed, now time.Time, need int) {
 		}
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].seen.Before(list[j].seen) })
-	defer h.releaseIdleMosaicsLocked(asking, now, need)
+	defer h.releaseIdleMosaicsLocked(keep, now, need)
 	for _, item := range list {
 		if h.Host.Tiles > 0 && h.transcodesLocked()+need <= h.Host.Tiles {
 			return
@@ -1393,7 +1394,7 @@ func (h *Hub) releaseIdlePicturesLocked(asking *feed, now time.Time, need int) {
 			r.viewers = 0
 		}
 		h.stopRenditionLocked(item.f, item.key)
-		if item.f != asking {
+		if !keep(item.f) {
 			h.dropIfUnusedLocked(item.f)
 		}
 	}
