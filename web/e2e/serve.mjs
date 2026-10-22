@@ -534,7 +534,10 @@ function removeContainer() {
 
 function launchServer() {
   if (!image) {
-    server = start(serverBin, serverArgs, { env: serverEnv });
+    // The browser runs in UTC (playwright.config.ts timezoneId). A server on this
+    // computer's zone would show every admin page the time zone notice, so the
+    // server matches the browser unless a run asks for another zone.
+    server = start(serverBin, serverArgs, { env: { ...serverEnv, TZ: process.env.E2E_SERVER_TZ || "UTC" } });
     return server;
   }
   removeContainer();
