@@ -125,6 +125,7 @@ export const playerUiMessages = {
   "player.tuneAntenna": "Tuning the antenna…",
   "player.tunePicture": "Starting the picture…",
   "player.tuneLive": "Lining up with live…",
+  "player.tuneAlmost": "Almost ready…",
   "player.tuneWeak": "Still tuning. A weak signal can take longer…",
   "player.looking": "Looking for screens…",
   "player.openAnother": "Open Broadwave on another screen and it shows up here.",

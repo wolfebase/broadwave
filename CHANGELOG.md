@@ -63,6 +63,7 @@
 - Web: the sync pill in the player says Waiting or Syncing until it is in sync, and Sync on when this is the only screen.
 - Web and server: Settings › Integrations opened at localhost shows the server's home network address for other apps, not localhost.
 - Web on a TV: Up from the page reaches a notice across the top (a new release, the server's time zone), and closing it with the remote puts the ring on the page instead of nowhere.
+- Web: a channel that is slow to start says "Almost ready" instead of "Lining up with live" unless Line up automatically is on, as on the Apple apps.
 
 ## 0.15.1 — 2026-10-21
 

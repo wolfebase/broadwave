@@ -35,7 +35,8 @@ import { recordingHoldingStart, scrubHold, startOverChoice } from "./startOver";
 import { Stage } from "./Stage";
 import { groupRoom, peopleSentence, personLabel, useGroup } from "./together";
 import { useLiveStream } from "./useLiveStream";
-import { neighbourIds } from "./warmPlan";
+import { neighbourIds, warmIds } from "./warmPlan";
+import { tuneStepId } from "./tuneSteps";
 import { noteHandoff } from "../multiview/handoff";
 import { readCaptionStyle, saveCaptionStyle, type CaptionStyle } from "./captionStyle";
 
@@ -219,8 +220,9 @@ export function LivePlayer({
   }, [mode, channel.displayNumber, channel.displayName, airing?.title]);
   // A master switches sound without a new picture.
   const tuning = useFirstFrame(videoRef, `${channel.id}:${opts.quality}:${opts.audio}:${stream.sounds ? "" : opts.track}:${opts.even}:${picture}`);
-  // Once the picture moves, start the likely next change (channel up, then the
-  // last channel) and fetch their art, so the change that follows is instant.
+  // Once the picture moves, start the likely next changes (channel up and
+  // channel down) and fetch the art of those and the last channel, so the
+  // change that follows is instant.
   // Once per picture: a sound switched in place on a master, or a guide
   // refresh, is not a new picture and asks the server for nothing.
   const warmNext = stream.warm;
@@ -230,10 +232,12 @@ export function LivePlayer({
   guideNow.current = index;
   useEffect(() => {
     if (tuning || mode !== "full") return;
-    const neighbours = neighbourIds(channels.map((c) => c.id), channel.id, previous.current?.id);
+    const order = channels.map((c) => c.id);
+    const neighbours = neighbourIds(order, channel.id, previous.current?.id);
     if (neighbours.length === 0) return;
     const timer = window.setTimeout(() => {
-      warmRef.current(neighbours[0]);
+      // Up, then down: the server keeps both, so either direction starts warm.
+      for (const id of warmIds(order, channel.id)) warmRef.current(id);
       for (const id of neighbours) {
         const a = airingAt(guideNow.current, id, Date.now());
         if (a?.imageUrl) new Image().src = `/media/art/airing/${a.id}?w=960`;
@@ -810,7 +814,7 @@ export function LivePlayer({
           {mode === "full" ? syncHeard : ""}
         </span>
       }
-      loading={tuning ? <TuningCard channel={channel} show={airing?.title} art={airing?.imageUrl ? `/media/art/airing/${airing.id}?w=960` : ""} mini={mode === "mini"} /> : null}
+      loading={tuning ? <TuningCard channel={channel} show={airing?.title} art={airing?.imageUrl ? `/media/art/airing/${airing.id}?w=960` : ""} mini={mode === "mini"} lining={syncing} /> : null}
       tools={
         <>
           <CastButton appId={server?.castAppId ?? ""} channelId={channel.id} playlist={stream.session?.playlist ?? ""} room={room} title={airing?.title || channel.displayName} subtitle={channel.displayName} />
@@ -1301,21 +1305,14 @@ function useFirstFrame(videoRef: RefObject<HTMLVideoElement | null>, key: string
   return readyKey !== key;
 }
 
-const tuneSteps = [
-  { at: 0, id: "player.tuneAntenna" },
-  { at: 3000, id: "player.tunePicture" },
-  { at: 7000, id: "player.tuneLive" },
-  { at: 18000, id: "player.tuneWeak" },
-] as const;
-
-function TuningCard({ channel, show, art, mini }: { channel: Channel; show?: string; art: string; mini: boolean }) {
+function TuningCard({ channel, show, art, mini, lining }: { channel: Channel; show?: string; art: string; mini: boolean; lining: boolean }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const started = performance.now();
     const id = window.setInterval(() => setElapsed(performance.now() - started), 500);
     return () => window.clearInterval(id);
   }, [channel.id]);
-  const step = [...tuneSteps].reverse().find((s) => elapsed >= s.at) ?? tuneSteps[0];
+  const step = tuneStepId(elapsed, lining);
   return (
     <div className={mini ? "tuning mini" : "tuning"} role="status" aria-live="polite">
       {art ? <span className="tuning-art" aria-hidden="true" style={{ backgroundImage: `url(${art})` }} /> : null}
@@ -1327,7 +1324,7 @@ function TuningCard({ channel, show, art, mini }: { channel: Channel; show?: str
         {mini ? null : (
           <>
             <span className="tuning-bar" aria-hidden="true" />
-            <p className="tuning-step">{t(step.id)}</p>
+            <p className="tuning-step">{t(step)}</p>
           </>
         )}
       </div>
