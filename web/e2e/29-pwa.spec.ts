@@ -220,7 +220,8 @@ test("the offline page is used only when the shell is not cached", async ({ page
   const offline = await page.request.get("/offline.html");
   expect(offline.status()).toBe(200);
   expect(offline.headers()["content-type"]).toContain("text/html");
-  expect(await offline.text()).toContain("Can't reach the server");
+  // It names the server it last reached, or says Broadwave.
+  expect(await offline.text()).toContain("Can't reach Broadwave");
 
   try {
     await page.context().setOffline(true);
@@ -235,15 +236,15 @@ test("the offline page is used only when the shell is not cached", async ({ page
       }
     });
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Can't reach the server" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Can't reach / })).toBeVisible();
     await expect(page.locator("#retry")).toBeVisible();
     await expect(page.locator("#root")).toHaveCount(0);
   } finally {
     await page.context().setOffline(false);
   }
 
-  await page.locator("#retry").click();
-  await expect(page.locator("#root")).toBeVisible();
+  // Back online, the page goes back to the app by itself as soon as the server answers.
+  await expect(page.locator("#root")).toBeVisible({ timeout: 20_000 });
   const cached = await page.evaluate(async () => {
     const names = await caches.keys();
     const urls: string[] = [];
@@ -261,7 +262,7 @@ test("the offline page is used only when the shell is not cached", async ({ page
 
 test("the install offer opens the browser dialog and Back dismisses it", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Broadwave home" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Broadwave home" })).toBeVisible();
   await page.evaluate(() => {
     const prompted = { n: 0 };
     (window as unknown as { __installs?: { n: number } }).__installs = prompted;
