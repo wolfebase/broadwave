@@ -4,6 +4,7 @@
 
 ### Added
 
+- Search: a Channels row comes first when you type a channel number ("5.1", "5-1"), a name, a call sign, or a network ("pbs"), even before the guide has listings. It shows what is on now; choosing it starts watching. The guide's search field also finds a channel by "4-1", by its ATSC 3.0 twin's number, or by its network.
 - Server: channels name more networks from the name they broadcast ("FOX 5", "NBC4", "PBS", "UNIVSN", "TELEMUN") and from listings, including PBS, CW, MyNetworkTV, ION, Univision, Telemundo, UniMás, and in Canada CBC, Radio-Canada, CTV, CTV 2, Global, Citytv, TVO, Télé-Québec, TVA, and Noovo, so voice and search find them anywhere.
 - Server: `/server` reports the server's time zone, whether it is a real zone, its UTC offset, and its country (from `TZ`, or `BROADWAVE_COUNTRY=US|CA`).
 - Web: an admin sees one line when the server's time zone is mistyped, missing, or hours away from the browser's, with the `TZ` to set.

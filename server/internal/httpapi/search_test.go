@@ -65,3 +65,34 @@ func TestSearchListsNamedShowsOnNowFirst(t *testing.T) {
 		}
 	}
 }
+
+// A channel is found by its number before the guide lists anything.
+func TestSearchListsChannelsWithoutListings(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	if err := st.UpsertDevice(ctx, hdhr.Device{
+		DeviceID: "D", FriendlyName: "DUO", BaseURL: "http://127.0.0.1:9", TunerCount: 2,
+	}, []hdhr.Channel{{GuideNumber: "4.1", GuideName: "KBWV"}, {GuideNumber: "5.1", GuideName: "PBS"}}); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Clock: time.Now}).Handler()
+	for q, want := range map[string]string{"5-1": "5.1 PBS", "pbs": "5.1 PBS", "kbwv": "4.1 KBWV"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/search?q="+q, nil))
+		var got struct {
+			Channels []struct {
+				ID      int64  `json:"id"`
+				Number  string `json:"number"`
+				Name    string `json:"name"`
+				Network string `json:"network"`
+			} `json:"channels"`
+			Airings []json.RawMessage `json:"airings"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || rec.Code != http.StatusOK {
+			t.Fatal(rec.Code, err)
+		}
+		if len(got.Channels) != 1 || got.Channels[0].Number+" "+got.Channels[0].Name != want || got.Channels[0].ID == 0 || len(got.Airings) != 0 {
+			t.Fatalf("%q: %+v", q, got)
+		}
+	}
+}

@@ -271,3 +271,71 @@ func BenchmarkSearchRanked(b *testing.B) {
 		})
 	}
 }
+
+// Channels are found by number, name, call sign, or network with no listings
+// at all, and a channel with something on says what.
+func TestSearchChannelsWithoutListings(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	flex := hdhr.Device{DeviceID: "FLEX1", BaseURL: "http://flex", LineupURL: "http://flex/lineup.json", TunerCount: 4}
+	if err := s.UpsertDevice(ctx, flex, []hdhr.Channel{
+		{GuideNumber: "4.1", GuideName: "KBWV-DT", VideoCodec: "MPEG2", AudioCodec: "AC3"},
+		{GuideNumber: "5.1", GuideName: "WTSTDT1", VideoCodec: "MPEG2", AudioCodec: "AC3"},
+		{GuideNumber: "9.1", GuideName: "FOX9", VideoCodec: "MPEG2", AudioCodec: "AC3"},
+		{GuideNumber: "11.1", GuideName: "PBS", VideoCodec: "MPEG2", AudioCodec: "AC3"},
+		{GuideNumber: "41.1", GuideName: "KRVT-TV", VideoCodec: "MPEG2", AudioCodec: "AC3"},
+		{GuideNumber: "104.1", GuideName: "KBWV", VideoCodec: "HEVC", AudioCodec: "AC4"},
+		{GuideNumber: "105.1", GuideName: "WTST", VideoCodec: "HEVC", AudioCodec: "AC4", Protected: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 9, 18, 10, 0, 0, time.UTC)
+	numbers := func(q string) []string {
+		t.Helper()
+		hits, err := s.SearchChannels(ctx, q, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := []string{}
+		for _, h := range hits {
+			out = append(out, h.Number)
+		}
+		return out
+	}
+	for q, want := range map[string][]string{
+		"4.1": {"104.1"}, "4-1": {"104.1"}, "104.1": {"104.1"}, "4": {"104.1"},
+		"105.1": {"5.1"}, "5-1": {"5.1"},
+		"fox": {"9.1"}, "pbs": {"11.1"}, "kbwv": {"104.1"}, "krv": {"41.1"}, "wtst": {"5.1"},
+		"kr": {}, "news": {}, "7.3": {}, "": {},
+	} {
+		if got := numbers(q); !slices.Equal(got, want) {
+			t.Errorf("%q: %v, want %v", q, got, want)
+		}
+	}
+	chs := map[string]Channel{}
+	for n, list := range byNumber(t, s, ctx) {
+		chs[n] = list[0]
+	}
+	if err := s.SetTwinChoice(ctx, chs["104.1"].ID, TwinBoth); err != nil {
+		t.Fatal(err)
+	}
+	if got := numbers("4.1"); !slices.Equal(got, []string{"4.1", "104.1"}) {
+		t.Fatalf("both shown: %v", got)
+	}
+	if got := numbers("104.1"); !slices.Equal(got, []string{"104.1", "4.1"}) {
+		t.Fatalf("104.1 first: %v", got)
+	}
+	if err := s.ReplaceAirings(ctx, []Airing{
+		{ChannelID: chs["104.1"].ID, Title: "Harbor Tonight", Start: now.Add(-10 * time.Minute), End: now.Add(20 * time.Minute)},
+		{ChannelID: chs["104.1"].ID, Title: "Wheel Spin", Start: now.Add(20 * time.Minute), End: now.Add(50 * time.Minute)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	hits, err := s.SearchChannels(ctx, "104.1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hits[0].OnNow == nil || hits[0].OnNow.Title != "Harbor Tonight" || hits[0].Standard != "atsc3" || hits[0].Name != "KBWV" || hits[1].OnNow != nil {
+		t.Fatalf("on now %+v", hits)
+	}
+}

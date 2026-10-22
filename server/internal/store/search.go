@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"broadwave/internal/hdhr"
+	"broadwave/internal/network"
 )
 
 // AiringHit is a guide listing that matched a search, with the channel it is on.
@@ -151,7 +153,17 @@ type searchScope struct {
 func newSearchScope(all []Channel) searchScope {
 	sc := searchScope{all: all, byID: map[int64]Channel{}, in: map[int64]bool{}, standIn: map[int64]int64{}}
 	shown := map[int64]bool{}
-	for _, ch := range all {
+	for i, ch := range all {
+		if ch.Network == "" {
+			// As the channel list fills it, so "fox" finds a station whose
+			// guide never said FOX.
+			names := []string{ch.GuideName}
+			if ch.DisplayName != "" && ch.DisplayName != ch.GuideName {
+				names = append(names, ch.DisplayName)
+			}
+			ch.Network = network.Of(names)
+			all[i] = ch
+		}
 		sc.byID[ch.ID] = ch
 		if ch.Present && ch.Enabled && !ch.Hidden && ch.SameAs == 0 {
 			shown[ch.ID] = true
@@ -230,8 +242,10 @@ func (sc searchScope) numbered(number string) []searchPick {
 }
 
 // named is the channels every word names: the guide name, a custom name, the
-// call sign, or the network. "tv" alone names no channel.
-func (sc searchScope) named(words []string) []searchPick {
+// call sign, or the network. "tv" alone names no channel. With starts, a word
+// of three letters or more may start a name ("kbw" for KBWV); those follow the
+// whole-word matches.
+func (sc searchScope) named(words []string, starts bool) []searchPick {
 	generic := map[string]bool{"tv": true, "dt": true, "hd": true, "ld": true, "cd": true}
 	specific := false
 	for _, w := range words {
@@ -240,18 +254,111 @@ func (sc searchScope) named(words []string) []searchPick {
 	if len(words) == 0 || !specific {
 		return nil
 	}
-	var out []searchPick
+	var whole, part []Channel
 	for _, ch := range sc.all {
 		names := foldWords(ch.GuideName + " " + ch.DisplayName + " " + ch.Network + " " + callKey(ch.GuideName))
-		if !allWords(words, names, false) {
-			continue
+		switch {
+		case allWords(words, names, false):
+			whole = append(whole, ch)
+		case starts && nameStarts(words, names):
+			part = append(part, ch)
 		}
+	}
+	var out []searchPick
+	for _, ch := range append(whole, part...) {
 		for _, id := range sc.route(ch) {
 			out = append(out, searchPick{channel: id, tier: tierChannel, order: len(out)})
 		}
 	}
 	return out
 }
+
+// nameStarts is every word a whole name word, or the start of one when it has
+// three letters or more.
+func nameStarts(words, names []string) bool {
+	for _, w := range words {
+		m := wordMatch(w, names)
+		if m == 0 || (m == 1 && utf8.RuneCountInString(w) < 3) {
+			return false
+		}
+	}
+	return true
+}
+
+// ChannelHit is a channel a search names by its number, name, call sign, or
+// network, with what is on it now when the guide knows.
+type ChannelHit struct {
+	ID       int64   `json:"id"`
+	Number   string  `json:"number"`
+	Name     string  `json:"name"`
+	Network  string  `json:"network,omitempty"`
+	Logo     string  `json:"logo,omitempty"`
+	Standard string  `json:"standard,omitempty"`
+	OnNow    *Airing `json:"onNow,omitempty"`
+}
+
+// channelResults is how many channels a search lists.
+const channelResults = 12
+
+// SearchChannels finds the channels the guide shows that a query names: a
+// channel number (exact, then prefix, each with its ATSC 3.0 or 1.0 twin), or
+// every word in the channel's name, call sign, or network. It needs no
+// listings, so a house with only broadcast listings, or none yet, still finds
+// 5.1 or "pbs". An encrypted 3.0 station is listed as the clear channel it
+// plays as.
+func (s *Store) SearchChannels(ctx context.Context, query string, now time.Time) ([]ChannelHit, error) {
+	query = strings.TrimSpace(query)
+	number, dotted := channelNumber(query)
+	words := queryWords(query)
+	if number == "" && (dotted || ftsMatch(query) == "") {
+		return []ChannelHit{}, nil
+	}
+	all, err := s.Channels(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	sc := newSearchScope(all)
+	var picks []searchPick
+	if number != "" {
+		picks = sc.numbered(number)
+	}
+	if !dotted {
+		picks = append(picks, sc.named(words, true)...)
+	}
+	out := []ChannelHit{}
+	seen := map[int64]bool{}
+	for _, p := range picks {
+		id := p.channel
+		if twin, ok := sc.standIn[id]; ok {
+			id = twin
+		}
+		if seen[id] || len(out) == channelResults {
+			continue
+		}
+		seen[id] = true
+		ch := sc.byID[id]
+		hit := ChannelHit{ID: ch.ID, Number: ch.DisplayNumber, Name: ch.DisplayName, Network: ch.Network, Standard: ch.Standard}
+		if ch.ArtURL != "" {
+			hit.Logo = "/media/art/channel/" + strconv.FormatInt(ch.ID, 10)
+		}
+		on, err := s.querySearchHits(ctx, searchOnNowSQL, ch.ID, now.UTC().Format(time.RFC3339))
+		if err != nil {
+			return nil, err
+		}
+		if len(on) > 0 {
+			hit.OnNow = &on[0].Airing
+		}
+		out = append(out, hit)
+	}
+	return out, nil
+}
+
+const searchOnNowSQL = `SELECT ` + searchHitColumns + `
+FROM airings a
+JOIN channels c ON c.id = a.channel_id
+WHERE a.channel_id = ?1 AND a.starts_at <= ?2 AND a.ends_at > ?2
+ORDER BY a.starts_at DESC
+LIMIT 1`
 
 // searchAirings ranks listings by where the words are: title, then episode
 // title, channel, cast, category, and last a mention in the description, which
@@ -298,7 +405,7 @@ func (s *Store) searchAirings(ctx context.Context, q searchQuery, from time.Time
 		}
 	}
 	if q.match != "" {
-		if err := readChannels(sc.named(words)); err != nil {
+		if err := readChannels(sc.named(words, false)); err != nil {
 			return nil, err
 		}
 		phrase := strings.Join(foldWords(q.text), " ")

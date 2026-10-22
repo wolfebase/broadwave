@@ -69,13 +69,16 @@
 # JS raised 2026-10-21: a TV remote lines notice buttons up with the page and
 # keeps a ring after a notice closes. The shell loads up front. Measured entry
 # gzip 105170, plus 300 bytes of slack.
+# JS raised 2026-10-22: the guide's search field finds a channel by "4-1", its
+# 3.0 twin, or its network. The guide loads up front. Measured entry gzip
+# 105509, plus 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=105470
+JS_GZIP_MAX=105809
 CSS_GZIP_MAX=13823
 
 if [[ ! -f "$INDEX" ]]; then

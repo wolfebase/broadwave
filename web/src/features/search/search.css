@@ -224,3 +224,16 @@ button.search-main {
 .layout-tv .search-form > svg {
   font-size: 28px;
 }
+
+/* A channel with no logo shows its number where the logo would be. */
+.search-rec .search-chnum {
+  display: grid;
+  color: var(--color-text);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.search-channel strong {
+  color: var(--color-text);
+}

@@ -556,6 +556,16 @@ export type SearchAiring = {
   title: string;
 };
 
+export type SearchChannel = {
+  id: number;
+  number: string;
+  name: string;
+  network?: string;
+  logo?: string;
+  standard?: string;
+  onNow?: Airing;
+};
+
 export type ServerInfo = {
   id: string;
   name: string;

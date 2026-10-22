@@ -5,6 +5,8 @@ export const searchMessages = {
   "search.placeholder": "Shows, people, recordings",
   "search.label": "Search shows, people, and recordings",
   "search.guide": "Guide",
+  "search.channels": "Channels",
+  "search.channelOnNow": "On now · {title} · {left}",
   "search.recordings": "Recordings",
   "search.recordEvery": "Record every airing",
   "search.nothing": "Nothing matches.",

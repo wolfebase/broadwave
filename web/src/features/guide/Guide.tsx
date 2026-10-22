@@ -40,6 +40,7 @@ import { useScoreMap } from "../sports/scores";
 import { LiveFrame } from "../../ui/LiveFrame";
 import { dayJumpTarget, readGuideFilter, saveGuideFilter, type GuideFilter } from "./prefs";
 import "./guide.css";
+import { channelMatches } from "../search/channelMatch";
 
 const t = bind(guideUiMessages);
 
@@ -73,7 +74,7 @@ function dayWord(midnight: number, now: number) {
 }
 
 export function Guide() {
-  const { channels, devices, index, now, planned, recordings, virtuals, favorite, editChannel, ready } = useData();
+  const { channels, allChannels, devices, index, now, planned, recordings, virtuals, favorite, editChannel, ready } = useData();
   const player = usePlayer();
   const layout = useLayout();
   const [filter, setFilterRaw] = useState<Filter>(readGuideFilter);
@@ -138,10 +139,10 @@ export function Guide() {
         if (!list.some((a) => Date.parse(a.end) > now && Date.parse(a.start) < windowEnd && categoryOf(a) === filter)) return false;
       }
       if (!q) return true;
-      if (c.displayNumber.startsWith(q) || c.displayName.toLowerCase().includes(q)) return true;
+      if (channelMatches(c, q, allChannels)) return true;
       return list.some((a) => a.title.toLowerCase().includes(q) || (a.subtitle ?? "").toLowerCase().includes(q));
     });
-  }, [ordered, index, filter, query, now, keys]);
+  }, [ordered, allChannels, index, filter, query, now, keys]);
 
   const kept = keptRow(rows, focus);
   if (kept.row !== focus.row || kept.id !== focus.id) setFocus({ ...focus, row: kept.row, id: kept.id });

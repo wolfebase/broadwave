@@ -20,10 +20,17 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	// Channels come from the lineup, not the listings, so 5.1 or "pbs" is
+	// found before the guide has anything.
+	channels, err := s.Store.SearchChannels(r.Context(), query, s.now())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	for i := range recordings {
 		recordings[i].Missing = fileGone(recordings[i])
 	}
-	writeCachedJSON(w, r, map[string]any{"query": query, "airings": airings, "recordings": recordings})
+	writeCachedJSON(w, r, map[string]any{"query": query, "channels": channels, "airings": airings, "recordings": recordings})
 }
 
 // fileGone is a finished recording whose file was moved or deleted outside Broadwave.

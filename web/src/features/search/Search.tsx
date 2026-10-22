@@ -12,7 +12,7 @@ import { cappedCss } from "../../lib/art";
 import { categoryOf, dayLabel, minutesLeft, searchRows, spanLabel, timeLabel } from "../../lib/guide";
 import { noteTone, searchFieldValue } from "./field";
 import { groupByShow, seriesChannelId, type ShowGroup } from "./groups";
-import type { Recording, SearchAiring } from "../../types";
+import type { Recording, SearchAiring, SearchChannel } from "../../types";
 import { PlayIcon, RecordIcon, SearchIcon } from "../../ui/icons";
 import { Atsc3Tag, Empty } from "../../ui/primitives";
 import { ProgramSheet } from "../guide/ProgramSheet";
@@ -71,6 +71,7 @@ export function SearchPage() {
   const [shownQ, setShownQ] = useState(initial);
   const [airings, setAirings] = useState<SearchAiring[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [channelHits, setChannelHits] = useState<SearchChannel[]>([]);
   const [note, setNote] = useState("");
   // The query those rows belong to. A newer query shows nothing until its own request finishes.
   const [resultQuery, setResultQuery] = useState("");
@@ -98,6 +99,7 @@ export function SearchPage() {
   );
   const groups = groupByShow(listed.airings, now, (id) => allChannels.some((c) => c.id === id));
   const channelOf = (id: number) => allChannels.find((c) => c.id === id);
+  const shownChannels = active && q === resultQuery ? channelHits : [];
 
   function where(a: SearchAiring) {
     return `${a.guideNumber ?? ""} ${a.channelName ?? ""}`.trim();
@@ -194,9 +196,12 @@ export function SearchPage() {
         if (stop) return;
         const playable = res.recordings.filter((rec) => !rec.missing);
         const next = searchRows({ status: "done", airings: res.airings, recordings: playable });
+        // An older server sends no channels.
+        const named = res.channels ?? [];
         setAirings(next.airings);
         setRecordings(next.recordings);
-        setNote(next.airings.length === 0 && next.recordings.length === 0 ? t("search.nothing") : "");
+        setChannelHits(named);
+        setNote(named.length === 0 && next.airings.length === 0 && next.recordings.length === 0 ? t("search.nothing") : "");
         setResultQuery(q);
       })
       .catch((err: unknown) => {
@@ -204,6 +209,7 @@ export function SearchPage() {
         const next = searchRows<SearchAiring, Recording>({ status: "error" });
         setAirings(next.airings);
         setRecordings(next.recordings);
+        setChannelHits([]);
         setNote(err instanceof Error ? err.message : t("search.failed"));
         setResultQuery(q);
       });
@@ -262,6 +268,37 @@ export function SearchPage() {
         </div>
       ) : null}
       {!active ? <p className="hint search-hint">{t("search.startHint")}</p> : null}
+      {shownChannels.length > 0 ? (
+        <section>
+          <h2 className="section-title">{t("search.channels")}</h2>
+          <ul className="search-list">
+            {shownChannels.map((hit) => {
+              const channel = channelOf(hit.id);
+              const label = `${hit.number} ${hit.name}`;
+              return (
+                <li key={hit.id}>
+                  <button type="button" className="search-rec search-channel" disabled={!channel} aria-label={actionName(t("search.watchNow"), label)} onClick={() => channel && player.open(channel)}>
+                    {hit.logo ? (
+                      <SearchArt src={`${hit.logo}?w=160`} boxW={84} boxH={48} />
+                    ) : (
+                      <span className="search-thumb search-chnum" style={{ width: 84, height: 48 }} aria-hidden="true">
+                        {hit.number}
+                      </span>
+                    )}
+                    <span>
+                      <strong>{label}</strong>
+                      <span className="search-meta">
+                        {hit.standard === "atsc3" ? <Atsc3Tag /> : null}
+                        <span>{hit.onNow ? t("search.channelOnNow", { title: hit.onNow.title, left: minutesLeft(hit.onNow, now) }) : (hit.network ?? "")}</span>
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
       {groups.length > 0 ? (
         <section>
           <h2 className="section-title">{t("search.guide")}</h2>

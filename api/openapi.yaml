@@ -987,9 +987,18 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [query, airings, recordings]
+                required: [query, channels, airings, recordings]
                 properties:
                   query: { type: string }
+                  channels:
+                    type: array
+                    description: |
+                      Channels the guide shows that the query names, at most 12, with or without listings: a
+                      channel number ("5.1", "5-1", "5") exact and then prefix, each followed by its ATSC 3.0
+                      or 1.0 twin; then channels whose name, call sign, or network has every word (whole words
+                      first, then words of three letters or more that start a name). An encrypted 3.0 station
+                      is listed as the clear channel it plays as.
+                    items: { $ref: "#/components/schemas/SearchChannel" }
                   airings:
                     type: array
                     items: { $ref: "#/components/schemas/SearchAiring" }
@@ -3589,6 +3598,17 @@ components:
         color: { type: string }
         altColor: { type: string }
         logo: { type: string }
+    SearchChannel:
+      type: object
+      required: [id, number, name]
+      properties:
+        id: { type: integer, format: int64, description: "The channel id, as in /channels; watch it as that channel." }
+        number: { type: string, description: "The number the guide shows (a custom number when set)." }
+        name: { type: string, description: "The name the guide shows (a custom name when set)." }
+        network: { type: string, description: "The broadcast network when the server can tell, as on Channel." }
+        logo: { type: string, description: "Path of the channel's logo (/media/art/channel/{id}). Omitted when the guide has none." }
+        standard: { type: string, enum: [atsc3], description: "atsc3 for an ATSC 3.0 broadcast. Omitted otherwise." }
+        onNow: { $ref: "#/components/schemas/Airing", description: "What is on now, when the guide lists it." }
     SearchAiring:
       allOf:
         - $ref: "#/components/schemas/Airing"

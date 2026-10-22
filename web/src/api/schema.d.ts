@@ -2507,6 +2507,28 @@ export interface components {
             altColor?: string;
             logo?: string;
         };
+        SearchChannel: {
+            /**
+             * Format: int64
+             * @description The channel id, as in /channels; watch it as that channel.
+             */
+            id: number;
+            /** @description The number the guide shows (a custom number when set). */
+            number: string;
+            /** @description The name the guide shows (a custom name when set). */
+            name: string;
+            /** @description The broadcast network when the server can tell, as on Channel. */
+            network?: string;
+            /** @description Path of the channel's logo (/media/art/channel/{id}). Omitted when the guide has none. */
+            logo?: string;
+            /**
+             * @description atsc3 for an ATSC 3.0 broadcast. Omitted otherwise.
+             * @enum {string}
+             */
+            standard?: "atsc3";
+            /** @description What is on now, when the guide lists it. */
+            onNow?: components["schemas"]["Airing"];
+        };
         SearchAiring: components["schemas"]["Airing"] & {
             guideNumber: string;
             channelName: string;
@@ -4446,6 +4468,14 @@ export interface operations {
                 content: {
                     "application/json": {
                         query: string;
+                        /**
+                         * @description Channels the guide shows that the query names, at most 12, with or without listings: a
+                         *     channel number ("5.1", "5-1", "5") exact and then prefix, each followed by its ATSC 3.0
+                         *     or 1.0 twin; then channels whose name, call sign, or network has every word (whole words
+                         *     first, then words of three letters or more that start a name). An encrypted 3.0 station
+                         *     is listed as the clear channel it plays as.
+                         */
+                        channels: components["schemas"]["SearchChannel"][];
                         airings: components["schemas"]["SearchAiring"][];
                         recordings: components["schemas"]["Recording"][];
                     };

@@ -25,6 +25,7 @@ export type {
   Recording,
   Screen,
   SearchAiring,
+  SearchChannel,
   ServerInfo,
   Settings,
   StorageKeep,

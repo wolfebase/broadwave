@@ -1,4 +1,4 @@
-import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, ClientDevice, Device, DeviceHealth, DirectStatus, FrameList, MultiviewPlan, NewPass, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StoragePlan, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, ClientDevice, Device, DeviceHealth, DirectStatus, FrameList, MultiviewPlan, NewPass, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, SearchChannel, ServerInfo, Settings, StorageInfo, StoragePlan, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 import { requestFailedMessage } from "./i18n/messages/requestFailed.ts";
 import { translate } from "./i18n/runtime.ts";
 import { authHeaders, noteIfUnauthorized } from "./lib/deviceToken.ts";
@@ -260,7 +260,7 @@ export function getServer() {
 }
 
 export function search(q: string) {
-  return request<{ query: string; airings: SearchAiring[]; recordings: Recording[] }>(`/api/v1/search?q=${encodeURIComponent(q)}`);
+  return request<{ query: string; channels?: SearchChannel[]; airings: SearchAiring[]; recordings: Recording[] }>(`/api/v1/search?q=${encodeURIComponent(q)}`);
 }
 
 /** fields "grid" leaves out the description, cast, and the other details a grid does not draw. */
