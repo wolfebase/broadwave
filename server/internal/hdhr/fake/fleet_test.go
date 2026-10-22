@@ -303,7 +303,7 @@ func assertFlex4K(t *testing.T, base string, ctrl hdhr.Control, channels []hdhr.
 	}
 	var drm bool
 	for _, ch := range channels {
-		if ch.GuideNumber == "105.1" && ch.Protected {
+		if ch.GuideNumber == "170.1" && ch.Protected {
 			drm = true
 		}
 	}
@@ -340,7 +340,7 @@ func assertFlex4K(t *testing.T, base string, ctrl hdhr.Control, channels []hdhr.
 		t.Fatalf("3.0 tune landed on tuner %d", found)
 	}
 	expectHTTP(t, base+"/tuner2/v104.1", http.StatusServiceUnavailable, "806")
-	expectHTTP(t, base+"/auto/v105.1", http.StatusServiceUnavailable, "811")
+	expectHTTP(t, base+"/auto/v170.1", http.StatusServiceUnavailable, "811")
 }
 
 func assertPrime(t *testing.T, base string, channels []hdhr.Channel) {
