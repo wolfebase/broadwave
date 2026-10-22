@@ -208,7 +208,9 @@ func TestWarmStartsAGuessOnlyWhereItCostsNothing(t *testing.T) {
 
 	h.mu.Lock()
 	h.Host.Tiles = 4
-	h.RenditionIdle = 300 * time.Millisecond
+	// Long enough that the two guesses outlive the third Warm on a slow,
+	// race-instrumented runner; short enough that the idle check below ends.
+	h.RenditionIdle = 1500 * time.Millisecond
 	h.mu.Unlock()
 	if ok, _ := h.Warm(ctx, idOf(t, st, "4.3"), tile, false); !ok {
 		t.Fatal("no guess for 4.3")
@@ -225,7 +227,7 @@ func TestWarmStartsAGuessOnlyWhereItCostsNothing(t *testing.T) {
 	if running("4.3") != nil || running("4.4") == nil || running("4.5") == nil {
 		t.Fatal("a third guess did not replace the oldest")
 	}
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(6 * time.Second)
 	for (running("4.4") != nil || running("4.5") != nil) && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}
