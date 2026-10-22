@@ -65,6 +65,7 @@
 - Web and server: Settings › Integrations opened at localhost shows the server's home network address for other apps, not localhost.
 - Web on a TV: Up from the page reaches a notice across the top (a new release, the server's time zone), and closing it with the remote puts the ring on the page instead of nowhere.
 - Web: a channel that is slow to start says "Almost ready" instead of "Lining up with live" unless Line up automatically is on, as on the Apple apps.
+- SD channels no longer show white dashes (closed caption data) along the top of the picture on the web, AirPlay, Cast, and multiview: an encode of a picture 576 lines or shorter drops its top four rows. A picture sent as broadcast is unchanged.
 
 ## 0.15.1 — 2026-10-21
 

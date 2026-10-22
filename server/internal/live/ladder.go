@@ -256,7 +256,7 @@ func ladderGraph(program int, src Source, videos []string, mode, encoder string)
 		audioIn = fmt.Sprintf("[0:i:%d]", src.AudioPID)
 	}
 	fps, _, _, _, _ := ladderTiming(src, mode)
-	var pre []string
+	pre := []string{sdCaptionCrop}
 	if src.HD {
 		pre = append(pre, "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709")
 	}
