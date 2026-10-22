@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { CatalogBackup, DirectStatus, ServerInfo, Settings, StorageInfo, StorageShow } from "../../types";
 import { getDirect, getStorageShows, importRecordings, listBackups, restoreBackup } from "../../api";
-import { useData } from "../../app/data";
 import { navigate } from "../../app/router";
 import { authHeaders } from "../../lib/deviceToken";
 import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
