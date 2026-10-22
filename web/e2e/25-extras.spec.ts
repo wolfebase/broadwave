@@ -200,7 +200,11 @@ test("a paused player keeps counting how far behind live it is", async ({ page }
 
   await page.keyboard.press("i");
   const behind = page.getByRole("dialog", { name: "Stats" }).locator("dt", { hasText: "Behind live" }).locator("+ dd");
-  const seconds = async () => Number((await behind.textContent())?.match(/^(\d+)s$/)?.[1] ?? NaN);
+  // "45s", or "1m 5s" past a minute.
+  const seconds = async () => {
+    const m = (await behind.textContent())?.match(/^(?:(\d+)m )?(\d+)s$/);
+    return m ? Number(m[1] ?? 0) * 60 + Number(m[2]) : NaN;
+  };
   await expect(behind).toBeVisible();
   await page.locator("video.stage-video").evaluate((video: HTMLVideoElement) => video.pause());
   const from = await seconds();

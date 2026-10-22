@@ -87,14 +87,16 @@ test("two recordings of one show are one row", async ({ page }) => {
       { name: "1440", width: 1440, height: 900 },
     ] as const) {
       await page.setViewportSize({ width: size.width, height: size.height });
-      await page.goto("/settings");
+      // Settings is a list of sections; Space by show is under Recording and storage.
+      await page.goto("/settings/recording");
       await settle(page);
       await expect(space.getByRole("heading", { name: "Space by show" })).toBeVisible();
       const link = space.getByRole("link", { name: row?.title ?? title });
       await link.scrollIntoViewIfNeeded();
       await expect(link).toBeVisible();
       await expect(link).toHaveAttribute("href", `/recordings?show=${encodeURIComponent(row?.title ?? title)}`);
-      await expect(space.getByText(`${row?.count} recording${row?.count === 1 ? "" : "s"}`, { exact: true })).toBeVisible();
+      // Another show can have the same count; read this show's own row.
+      await expect(space.locator(".set-row", { has: page.getByRole("link", { name: row?.title ?? title }) }).getByText(`${row?.count} recording${row?.count === 1 ? "" : "s"}`, { exact: true })).toBeVisible();
       await space.screenshot({ path: path.join(evidence, `settings-${size.name}.jpg`), type: "jpeg", quality: 70, animations: "disabled" });
     }
 
@@ -102,7 +104,8 @@ test("two recordings of one show are one row", async ({ page }) => {
     await space.getByRole("link", { name: row?.title ?? title }).click();
     await expect(page).toHaveURL(/\/recordings\?show=/);
     await settle(page);
-    await expect(page.getByRole("heading", { name: title, level: 3 })).toBeVisible();
+    // A show's own page is headed by the show's name.
+    await expect(page.getByRole("heading", { name: title, level: 2 })).toBeVisible();
     await expect(page.locator(`img.poster[src="/media/poster/${first.id}"]`)).toBeVisible();
     await expect(page.locator(`img.poster[src="/media/poster/${second.id}"]`)).toBeVisible();
   } finally {

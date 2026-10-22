@@ -85,11 +85,12 @@ test("each Live delay plays at its distance from live", async ({ page }, info) =
   }
   await page.goto("/settings/playback");
   await settle(page);
-  const setting = page.getByRole("group", { name: "Live delay" });
+  // Settings choices are radio groups.
+  const setting = page.getByRole("radiogroup", { name: "Live delay" });
   // The last pick in Options is this device's default now.
-  await expect(setting.getByRole("button", { name: "Balanced" })).toHaveAttribute("aria-pressed", "true");
-  await setting.getByRole("button", { name: "Lowest" }).click();
-  await expect(setting.getByRole("button", { name: "Lowest" })).toHaveAttribute("aria-pressed", "true");
+  await expect(setting.getByRole("radio", { name: "Balanced" })).toHaveAttribute("aria-checked", "true");
+  await setting.getByRole("radio", { name: "Lowest" }).click();
+  await expect(setting.getByRole("radio", { name: "Lowest" })).toHaveAttribute("aria-checked", "true");
   expect(await page.evaluate(() => localStorage.getItem("broadwave-live-delay"))).toBe("lowest");
   info.annotations.push({ type: "latency", description: lines.join("; ") });
 });

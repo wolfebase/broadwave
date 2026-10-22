@@ -161,3 +161,8 @@ html[data-layout="tv"] .library-sort select {
   font-size: var(--type-footnote-size);
   color: var(--color-text-secondary);
 }
+
+/* A show's page: All recordings sits at the start, above the show's name. */
+.library .page-head .text-btn {
+  justify-self: start;
+}

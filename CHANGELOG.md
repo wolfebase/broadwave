@@ -74,6 +74,9 @@
 - Web on a TV: Down from the tabs goes into the page, not to the far end of a notice above it; Up from the page reaches the notice. Closing a notice with a pointer remote also keeps the ring on the page.
 - Web: a channel that is slow to start says "Almost ready" instead of "Lining up with live" unless Line up automatically is on, as on the Apple apps.
 - SD channels no longer show white dashes (closed caption data) along the top of the picture on the web, AirPlay, Cast, and multiview: an encode of a picture 576 lines or shorter drops its top four rows. A picture sent as broadcast is unchanged.
+- Server: a channel that was playing or warmed a moment ago and is now off the air says "This channel isn't coming in" instead of "didn't start".
+- Web: a switch or choice in Settings moves the moment you press it instead of after the server answers.
+- Web: a show's page puts All recordings at the start of the line, not centered.
 
 ## 0.15.1 — 2026-10-21
 

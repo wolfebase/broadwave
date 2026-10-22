@@ -43,12 +43,13 @@ test("a finished recording writes an nfo and delete removes it", async ({ page }
   expect(prepared.ok()).toBeTruthy();
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/settings");
+  // Settings is a list of sections; the switch is under Recording and storage.
+  await page.goto("/settings/recording");
   await settle(page);
-  const control = page.getByLabel("Write .nfo files for Plex, Jellyfin, and Kodi");
+  const control = page.getByRole("switch", { name: "Write .nfo files for Plex, Jellyfin, and Kodi" });
   await expect(control).toBeVisible();
-  await expect(control).toHaveValue("0");
-  await control.selectOption("On");
+  await expect(control).not.toBeChecked();
+  await control.check();
   await expect
     .poll(async () => {
       const res = await page.request.get("/api/v1/settings");
