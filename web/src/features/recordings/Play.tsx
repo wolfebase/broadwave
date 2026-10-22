@@ -73,6 +73,14 @@ export function Play({
   const seekToRef = useRef<(value: number) => void>(() => {});
   // The spot a reload is already fetching. Time updates must not start it again.
   const relocating = useRef<number | null>(null);
+  // Saves go out one after another. A reload reads the saved spot, so two
+  // quick jumps that saved at once could land on the first one.
+  const saves = useRef<Promise<unknown>>(Promise.resolve());
+  const saveInOrder = (id: number, at: number) => {
+    const next = saves.current.catch(() => undefined).then(() => saveProgress(id, at));
+    saves.current = next;
+    return next;
+  };
   const scan = useSyncExternalStore(
     breakScans.subscribe,
     () => breakScans.get(recording.id),
@@ -137,7 +145,7 @@ export function Play({
       if (at != null) {
         whereRef.current = at;
         try {
-          await saveProgress(recording.id, at);
+          await saveInOrder(recording.id, at);
         } catch {
           // Play still reads whatever progress was saved.
         }
@@ -228,7 +236,7 @@ export function Play({
       hls?.destroy();
       track.remove();
       releaseFileVideo(video);
-      if (at != null) void saveProgress(recording.id, at);
+      if (at != null) void saveInOrder(recording.id, at);
     };
   }, [recording.id, pictureMode]);
 
@@ -245,7 +253,7 @@ export function Play({
         const timer = window.setTimeout(() => {
           if (saveTimer.current === timer) saveTimer.current = 0;
           const at = storedPlayhead(whereRef.current, resumeGate.current, viewerSought.current);
-          if (at != null) void saveProgress(recording.id, at);
+          if (at != null) void saveInOrder(recording.id, at);
         }, 4000);
         saveTimer.current = timer;
       }
@@ -265,6 +273,21 @@ export function Play({
       saveTimer.current = 0;
     };
   }, [shown, skipMode, recording.id, autoplay, dismissed, onNext]);
+
+  // A seek that did not come through seekTo (media keys, the lock screen, the
+  // browser's own controls) can land before this encode started or past what it
+  // wrote. The player would slide to the nearest picture; start the encode there.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const seeking = () => {
+      if (relocating.current != null || !resumeGate.current.known) return;
+      const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : 0;
+      if (planRecordingSeek(video.currentTime, encodedStart.current, end).action === "reload") seekToRef.current(video.currentTime);
+    };
+    video.addEventListener("seeking", seeking);
+    return () => video.removeEventListener("seeking", seeking);
+  }, [recording.id]);
 
   function chooseZoom(next: Zoom) {
     saveZoom(next);
@@ -349,7 +372,7 @@ export function Play({
     }
     whereRef.current = 0;
     setWhere(0);
-    await saveProgress(recording.id, 0);
+    await saveInOrder(recording.id, 0);
   }
 
   function togglePlay() {

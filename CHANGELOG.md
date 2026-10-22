@@ -78,6 +78,9 @@
 - Web: a switch or choice in Settings moves the moment you press it instead of after the server answers.
 - Web: a show's page puts All recordings at the start of the line, not centered.
 - Multiview: opening a mosaic of channels whose tiles were still running no longer lets their tuners go and tunes them again; on a slow server that retune could find every tuner busy.
+- Web: two quick Forward 30 presses in a recording land where the second one says; the spots they saved could arrive out of order.
+- Web: a seek in a recording from media keys, the lock screen, or the browser's own controls plays from that spot, instead of sliding to where the current encode starts.
+- Web: "New … found" and game notices sit under the update and time zone notices instead of covering their words.
 
 ## 0.15.1 — 2026-10-21
 
