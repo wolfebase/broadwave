@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,10 @@ const (
 	// SweepStaleAfter is how long a swept still is shown. A pass over a big
 	// lineup takes longer than FrameStaleAfter.
 	SweepStaleAfter = 45 * time.Minute
+	// sweepRefresh is the age at which a still is swept again: inside
+	// SweepStaleAfter, so a swept still is replaced before it stops being
+	// listed, and long enough that an idle server is not tuning all day.
+	sweepRefresh = 30 * time.Minute
 	// sweepFreeTuners is the free tuners a device needs before the sweep
 	// takes one: it never takes the last, or one another app holds.
 	sweepFreeTuners = 2
@@ -172,7 +177,7 @@ func (h *Hub) sweepDue(ctx context.Context, t sweepTarget) bool {
 	now := time.Now()
 	for _, id := range t.channels {
 		info, err := os.Stat(FramePath(h.Dir, id, 0))
-		if err != nil || FrameStale(info.ModTime(), now) {
+		if err != nil || now.Sub(info.ModTime()) > sweepRefresh {
 			return true
 		}
 	}
@@ -262,6 +267,28 @@ func (h *Hub) sweepOne(ctx context.Context, t sweepTarget) {
 	state.feed = f
 	h.mu.Unlock()
 	h.waitStills(ctx, t.channels, began)
+	// Every program on the tune got a still, not only the target's, and
+	// the tables say each one's captions and sound.
+	ids := t.channels
+	h.mu.Lock()
+	m := muxOf(h, f)
+	program := f.program
+	h.mu.Unlock()
+	if m != nil {
+		data := m.pictureBytes()
+		for _, job := range h.frameJobs(m) {
+			if !slices.Contains(ids, job.ChannelID) {
+				ids = append(ids, job.ChannelID)
+			}
+			p := job.Program
+			if p == 0 {
+				p = program
+			}
+			if tracks := AudioTracks(data, p); len(tracks) > 0 {
+				_ = h.Store.SetChannelStreamInfo(ctx, job.ChannelID, HasCaptions(data, p), AudioLayout(tracks))
+			}
+		}
+	}
 	h.mu.Lock()
 	if state.feed == f {
 		state.feed = nil
@@ -270,13 +297,13 @@ func (h *Hub) sweepOne(ctx context.Context, t sweepTarget) {
 	}
 	h.mu.Unlock()
 	n := 0
-	for _, id := range t.channels {
+	for _, id := range ids {
 		if at, ok := frameTime(h.Dir, id); ok && !at.Before(began) {
 			h.noteSwept(id, at)
 			n++
 		}
 	}
-	slog.Debug(fmt.Sprintf("stills: %s: %d of %d channels in %s", t.first.GuideNumber, n, len(t.channels), time.Since(began).Round(100*time.Millisecond)))
+	slog.Debug(fmt.Sprintf("stills: %s: %d of %d channels in %s", t.first.GuideNumber, n, len(ids), time.Since(began).Round(100*time.Millisecond)))
 }
 
 // waitStills waits until every channel has a still written since began, the
