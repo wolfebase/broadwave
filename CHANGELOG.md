@@ -42,6 +42,7 @@
 - Web: Settings › Devices says which device this browser is signed in as instead of offering to pair it again, and warns before you revoke this browser or the only admin device.
 - Privacy policy: says what the secure name sends to the Wolfe Up service (the server's key, its random id, and its home network addresses; nothing you watch) and what Sign in with Cloudflare does in your own Cloudflare account. The web app's About, Check for updates, and Cloudflare card say the same in a line.
 - Docs: README and Support say how to get the apps (App Store soon, the web app now) and put Sign in with Cloudflare first and Tailscale second for away from home; Away from home lists its three ways and uses the Settings section's real name; First run matches the setup screens.
+- Multiview and the channel picker name every channel holding a tuner the same way, by number and name ("4.1 KBWV and 5.1 WTST are on"), instead of mixing names and numbers.
 
 ### Fixed
 

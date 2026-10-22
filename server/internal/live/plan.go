@@ -19,13 +19,25 @@ type PlanChannel struct {
 }
 
 func (c PlanChannel) label() string {
-	if c.Number != "" {
-		return c.Number
-	}
-	if c.Name != "" {
-		return c.Name
+	if label := ChannelLabel(c.Number, c.Name); label != "" {
+		return label
 	}
 	return strconv.FormatInt(c.ID, 10)
+}
+
+// ChannelLabel is how a plan names a channel, the same way for every
+// channel, ours or another app's: number and name ("4.1 KBWV"), or whichever
+// of them is known.
+func ChannelLabel(number, name string) string {
+	number, name = strings.TrimSpace(number), strings.TrimSpace(name)
+	switch {
+	case number != "" && name != "" && name != number:
+		return number + " " + name
+	case number != "":
+		return number
+	default:
+		return name
+	}
 }
 
 // TunedFreq is a frequency this server already holds, with the channels on it.
