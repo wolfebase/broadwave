@@ -51,7 +51,9 @@ export default defineConfig({
     reducedMotion: "reduce",
     colorScheme: "dark",
     locale: "en-US",
-    timezoneId: "UTC",
+    // The browser shares the server's zone, so the time zone notice shows only
+    // in the spec that tests it. The image runs on America/Chicago (serve.mjs).
+    timezoneId: process.env.E2E_IMAGE ? "America/Chicago" : process.env.E2E_SERVER_TZ || "UTC",
     screenshot: "only-on-failure",
     video: "off",
     trace: "off",
