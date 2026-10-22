@@ -21,6 +21,7 @@ import (
 	"broadwave/internal/cloudflare"
 	"broadwave/internal/discovery"
 	"broadwave/internal/dvr"
+	"broadwave/internal/guide"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
 	"broadwave/internal/network"
