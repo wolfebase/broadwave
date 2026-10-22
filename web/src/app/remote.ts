@@ -17,6 +17,18 @@ const mark = () => {
 window.addEventListener("keydown", mark, true);
 window.addEventListener("pointerdown", mark, true);
 
+// Where the page wants the remote to start, from useTvStartFocus. A notice that
+// closes hands the ring there, not to whatever button comes first.
+let pageStart: (() => HTMLElement | null | undefined) | null = null;
+
+/** The page's starting control, while that page is shown. Returns the unregister. */
+export function setPageStart(find: () => HTMLElement | null | undefined) {
+  pageStart = find;
+  return () => {
+    if (pageStart === find) pageStart = null;
+  };
+}
+
 /** The person has pressed a key or touched the screen on this page. */
 export function inputOnThisPage() {
   return inputPath === window.location.pathname;
@@ -123,9 +135,13 @@ export function focusPastNotice(event: { detail: number; currentTarget: EventTar
   window.setTimeout(() => {
     const active = document.activeElement;
     if (active && active !== document.body && document.contains(active)) return;
-    const next = [...document.querySelectorAll<HTMLElement>("main button:not([disabled]), main a[href]")].find(
-      (el) => !el.closest(".banner-update, .banner-home, [inert]") && el.getBoundingClientRect().height > 1,
-    );
+    const next =
+      pageStart?.() ??
+      // The shell's own start on the guide and Home (App.tsx), then the first control.
+      document.querySelector<HTMLElement>("main .guide-canvas, main .hero-actions .btn") ??
+      [...document.querySelectorAll<HTMLElement>("main button:not([disabled]), main a[href]")].find(
+        (el) => !el.closest(".banner-update, .banner-home, [inert]") && el.getBoundingClientRect().height > 1,
+      );
     focusRing(next);
   }, 0);
 }

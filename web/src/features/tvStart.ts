@@ -1,6 +1,6 @@
 import { useEffect, type RefObject } from "react";
 import { useLayout } from "../app/layout";
-import { focusRing, inputOnThisPage } from "../app/remote";
+import { focusRing, inputOnThisPage, setPageStart } from "../app/remote";
 
 /**
  * On a TV the remote starts on the page's content, not on the tab it came from
@@ -26,6 +26,10 @@ export function useTvStartFocus(root: RefObject<HTMLElement | null>, selector: s
       if (target !== active) focusRing(target);
     };
     timer = window.setTimeout(place, 16);
-    return () => window.clearTimeout(timer);
+    const unregister = setPageStart(() => root.current?.querySelector<HTMLElement>(selector));
+    return () => {
+      window.clearTimeout(timer);
+      unregister();
+    };
   }, [layout, root, selector, key]);
 }
