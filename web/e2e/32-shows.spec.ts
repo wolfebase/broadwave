@@ -95,7 +95,8 @@ test("two recordings of one show are one row", async ({ page }) => {
       await link.scrollIntoViewIfNeeded();
       await expect(link).toBeVisible();
       await expect(link).toHaveAttribute("href", `/recordings?show=${encodeURIComponent(row?.title ?? title)}`);
-      await expect(space.getByText(`${row?.count} recording${row?.count === 1 ? "" : "s"}`, { exact: true })).toBeVisible();
+      // Another show can have the same count; read this show's own row.
+      await expect(space.locator(".set-row", { has: link }).getByText(`${row?.count} recording${row?.count === 1 ? "" : "s"}`, { exact: true })).toBeVisible();
       await space.screenshot({ path: path.join(evidence, `settings-${size.name}.jpg`), type: "jpeg", quality: 70, animations: "disabled" });
     }
 
