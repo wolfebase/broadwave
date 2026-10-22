@@ -2,6 +2,7 @@ import { useState } from "react";
 import { shellMessages } from "../i18n/messages/shell";
 import { zoneMessages } from "../i18n/messages/zone";
 import { bind } from "../i18n/runtime";
+import { focusPastNotice } from "./remote";
 import { browserZone, zoneProblem, zoneProblemKey, type ServerZone } from "../lib/serverZone";
 
 const shell = bind(shellMessages);
@@ -40,7 +41,16 @@ export default function ZoneBanner({ server }: { server: ServerZone | null }) {
   return (
     <div className="banner-update banner-zone" role="status">
       <p>{text}</p>
-      <button type="button" className="btn small ghost" onClick={dismiss}>{shell("shell.notNow")}</button>
+      <button
+        type="button"
+        className="btn small ghost"
+        onClick={(event) => {
+          focusPastNotice(event);
+          dismiss();
+        }}
+      >
+        {shell("shell.notNow")}
+      </button>
     </div>
   );
 }

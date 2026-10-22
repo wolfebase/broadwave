@@ -11,7 +11,7 @@ import { useLayout } from "./layout";
 import { Nav, routeTitle } from "./Nav";
 import { NotFound } from "./NotFound";
 import { PlayerProvider, usePlayer } from "./player";
-import { focusRing, installTvRemote } from "./remote";
+import { focusPastNotice, focusRing, installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
 import { isSearchShortcut } from "./searchKey";
 import { installKind, updateHint, updateSteps, type UpdateInstall } from "../lib/updateHow";
@@ -234,7 +234,10 @@ function Shell() {
               <a className="btn small" href={notesHref(notice.notesUrl)} target="_blank" rel="noreferrer">{shell("shell.releaseNotes")}</a>
             ) : null}
             <button type="button" className="btn small" aria-expanded={updateHowOpen} aria-controls="update-how" onClick={() => setUpdateHowOpen((open) => !open)}>{shell("shell.howToUpdate")}</button>
-            <button type="button" className="btn small ghost" onClick={() => setHiddenUpdate(notice.message)}>{shell("shell.notNow")}</button>
+            <button type="button" className="btn small ghost" onClick={(event) => {
+                focusPastNotice(event);
+                setHiddenUpdate(notice.message);
+              }}>{shell("shell.notNow")}</button>
             {updateHowOpen ? <UpdateHow update={notice} /> : null}
           </div>
         ) : null}
@@ -299,7 +302,16 @@ function HomeNotice({ message, onDismiss }: { message: string; onDismiss: () => 
       >
         {shell("shell.yourHome")}
       </button>
-      <button type="button" className="btn small ghost" onClick={onDismiss}>{shell("shell.notNow")}</button>
+      <button
+        type="button"
+        className="btn small ghost"
+        onClick={(event) => {
+          focusPastNotice(event);
+          onDismiss();
+        }}
+      >
+        {shell("shell.notNow")}
+      </button>
     </div>
   );
 }

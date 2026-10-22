@@ -29,6 +29,21 @@ test("arrows walk to the nearest control in that direction", () => {
   assert.equal(nearest(tabs[0], items, "left"), null);
 });
 
+test("Up from the page lands on a notice across the top, even with its button at the far right", () => {
+  // The tab bar, a notice line with Not now at the right end, and the hero's Watch.
+  const brand = box(1, 140, 30, 180, 70);
+  const gear = box(2, 1730, 40, 60, 60);
+  const notNow = { ...box(3, 1655, 140, 110, 36), rowLeft: 140, rowRight: 1780 };
+  const watch = box(4, 180, 695, 185, 54);
+  const items = [brand, gear, notNow, watch];
+  assert.equal(nearest(watch, items, "up"), 3);
+  assert.equal(nearest(notNow, items, "down"), 4);
+  assert.equal(nearest(notNow, items, "up"), 2);
+  // Without the notice row, Up skips the far button for the tab bar.
+  const plain = box(3, 1655, 140, 110, 36);
+  assert.equal(nearest(watch, [brand, gear, plain, watch], "up"), 1);
+});
+
 test("51 is channel 5.1 after the pause, and a lone 5 tunes at once", () => {
   const channels = [{ displayNumber: "4.1" }, { displayNumber: "4.2" }, { displayNumber: "5.1" }, { displayNumber: "5.2" }];
   assert.equal(typedChannel(channels, "5", false), null);

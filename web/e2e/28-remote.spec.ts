@@ -147,11 +147,16 @@ test("a remote reaches home, the guide, the player, multiview, settings, and rec
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto("/");
   await expect(page.locator("main[data-ready='1']")).toBeVisible();
+  // A notice above the page (a new release, a server time zone that is not this
+  // browser's) loads a moment after the page. The remote starts on the hero's
+  // Watch, below it, so Up reaches it. Dismiss each one the way a viewer would.
   const notNow = page.getByRole("button", { name: "Not now" });
-  if ((await notNow.count()) > 0) {
-    await until(page, "ArrowDown", async () => notNow.evaluate((el) => el === document.activeElement).catch(() => false), 16);
+  await notNow.first().waitFor({ timeout: 3_000 }).catch(() => undefined);
+  for (let left = await notNow.count(); left > 0; left = await notNow.count()) {
+    const first = notNow.first();
+    await until(page, "ArrowUp", async () => first.evaluate((el) => el === document.activeElement).catch(() => false), 8);
     await press(page, "Enter");
-    await expect(notNow).toHaveCount(0);
+    await expect(notNow).toHaveCount(left - 1);
   }
   await expect(page.locator("html")).toHaveAttribute("data-layout", "tv");
   await expectRing(page);

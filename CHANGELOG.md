@@ -62,6 +62,7 @@
 - Web: an iPad (or any touch screen) gets the regular layout, not the TV one; the TV layout is for TV browsers, or `?layout=tv`, which this browser then remembers (`?layout=auto` forgets it).
 - Web: the sync pill in the player says Waiting or Syncing until it is in sync, and Sync on when this is the only screen.
 - Web and server: Settings › Integrations opened at localhost shows the server's home network address for other apps, not localhost.
+- Web on a TV: Up from the page reaches a notice across the top (a new release, the server's time zone), and closing it with the remote puts the ring on the page instead of nowhere.
 
 ## 0.15.1 — 2026-10-21
 

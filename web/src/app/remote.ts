@@ -85,9 +85,31 @@ function boxes(scope: ParentNode) {
     if (node.matches("section.mv") && node.querySelector("button:not([disabled]), [tabindex='0']")) continue;
     const rect = node.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
-    out.push({ el: node, box: { id: out.length, ...onScreen(node, rect) } });
+    // A notice across the top keeps its buttons at the far right. Up from the page
+    // has to land on it, not skip past it to the tab bar.
+    const notice = node.closest<HTMLElement>(".banner-update, .banner-home");
+    const row = notice ? notice.getBoundingClientRect() : null;
+    out.push({ el: node, box: { id: out.length, ...onScreen(node, rect), ...(row ? { rowLeft: row.left, rowRight: row.right } : {}) } });
   }
   return out;
+}
+
+/**
+ * A notice closed from the keyboard or a remote takes its focused button with it,
+ * and the keys would land nowhere. The ring moves to the page's first control.
+ * A mouse click (detail > 0) leaves focus to the pointer.
+ */
+export function focusPastNotice(event: { detail: number; currentTarget: EventTarget | null }) {
+  const notice = event.currentTarget instanceof HTMLElement ? event.currentTarget.closest(".banner-update, .banner-home") : null;
+  if (event.detail !== 0 || !notice) return;
+  window.setTimeout(() => {
+    const active = document.activeElement;
+    if (active && active !== document.body && document.contains(active)) return;
+    const next = [...document.querySelectorAll<HTMLElement>("main button:not([disabled]), main a[href]")].find(
+      (el) => !el.closest(".banner-update, .banner-home, [inert]") && el.getBoundingClientRect().height > 1,
+    );
+    focusRing(next);
+  }, 0);
 }
 
 /** A plain focus() does not match :focus-visible, so the ring would not draw. */

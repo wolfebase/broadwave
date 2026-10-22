@@ -3,6 +3,7 @@ import { sportsMessages } from "../../i18n/messages/sports.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
+import { focusPastNotice } from "../../app/remote";
 import { events } from "../../lib/events";
 import type { GameAlert } from "../../types";
 
@@ -97,7 +98,14 @@ function GameNotice({ alert, onDismiss }: { alert: Seen; onDismiss: () => void }
           {t("sports.watchChannel", { channel: alert.channel })}
         </button>
       ) : null}
-      <button type="button" className="btn small ghost" onClick={onDismiss}>
+      <button
+        type="button"
+        className="btn small ghost"
+        onClick={(event) => {
+          focusPastNotice(event);
+          onDismiss();
+        }}
+      >
         {t("sports.notNow")}
       </button>
     </div>

@@ -1,4 +1,8 @@
-export type Box = { id: number; left: number; top: number; right: number; bottom: number };
+/**
+ * rowLeft and rowRight: a control in a notice that spans the page (the update or
+ * time zone line) lines up, for Up and Down, with anything under that notice.
+ */
+export type Box = { id: number; left: number; top: number; right: number; bottom: number; rowLeft?: number; rowRight?: number };
 
 export type Direction = "up" | "down" | "left" | "right";
 
@@ -38,7 +42,7 @@ export function nearest(from: Box, items: Box[], dir: Direction, loose = false):
     const primary = dir === "left" ? -dx : dir === "right" ? dx : dir === "up" ? -dy : dy;
     if (primary <= 1) continue;
     const cross = vertical
-      ? spanGap(from.left, from.right, item.left, item.right)
+      ? spanGap(from.rowLeft ?? from.left, from.rowRight ?? from.right, item.rowLeft ?? item.left, item.rowRight ?? item.right)
       : spanGap(from.top, from.bottom, item.top, item.bottom);
     if (!loose && cross > primary * 2) continue;
     const score = primary + cross * 2;
