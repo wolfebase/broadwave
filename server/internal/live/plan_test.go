@@ -292,3 +292,18 @@ func TestPlanNamesEveryHolderTheSameWay(t *testing.T) {
 		t.Fatalf("reason: %q", plan.Blocked[0].Reason)
 	}
 }
+
+// A channel already in the grid is on, even when another channel shares its
+// tune: another screen's 4.3 is not what the picker should name for it.
+func TestPickerShowsAChannelInTheGridAsOn(t *testing.T) {
+	now := time.Date(2026, 9, 25, 14, 40, 0, 0, time.Local)
+	current := []PlanChannel{ch(29, 593000000, "4.1"), ch(32, 533000000, "5.1")}
+	ours := []TunedFreq{{FrequencyHz: 593000000, Labels: []string{"4.1", "4.3 Rewind"}}, {FrequencyHz: 533000000, Labels: []string{"5.1"}}}
+	offers, _ := Picker(current, []PlanChannel{ch(29, 593000000, "4.1"), ch(31, 593000000, "4.3")}, 2, ours, nil, nil, now)
+	if offers[0].Cost != "on" || offers[0].Label != "" {
+		t.Fatalf("the channel in the grid: %+v", offers[0])
+	}
+	if offers[1].Cost != "same" || offers[1].Label != "Same tune as 4.1" {
+		t.Fatalf("its sibling: %+v", offers[1])
+	}
+}

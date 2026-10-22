@@ -444,13 +444,14 @@ func offerFor(c PlanChannel, onAir []PlanChannel, ours []TunedFreq, reserved []R
 	if c.Direct {
 		return Offer{ChannelID: c.ID, Cost: "on"}
 	}
-	if label, ok := partnerLabel(c, onAir, ours, reserved); ok {
-		return Offer{ChannelID: c.ID, Cost: "same", Label: "Same tune as " + label}
-	}
+	// A channel already on screen is on, whatever shares its tune.
 	for _, cur := range onAir {
 		if cur.ID == c.ID {
 			return Offer{ChannelID: c.ID, Cost: "on"}
 		}
+	}
+	if label, ok := partnerLabel(c, onAir, ours, reserved); ok {
+		return Offer{ChannelID: c.ID, Cost: "same", Label: "Same tune as " + label}
 	}
 	// Another screen tuned this channel. Its frequency holds nothing else, so
 	// partnerLabel has no other channel to name.

@@ -897,7 +897,13 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 			// open segment has at least half a second. Closing on a frame
 			// that is not a keyframe would start the next segment mid-GOP,
 			// and a copy and a transcode would no longer share the cut.
-			if sync && ptsDiff(pts, open[0].pts) >= int64(partTicks) {
+			// A split encode's keyframe also closes it after a short part:
+			// only a segment's last part may be under 85% of PART-TARGET.
+			// gather judged the keyframe by its own time, and a picture after
+			// it that is shown first (HEVC's mid-group keyframes) starts this
+			// part before it, so the half second here can fall short.
+			short := split && open[len(open)-1].dur < splitMinTicks
+			if sync && (short || ptsDiff(pts, open[0].pts) >= int64(partTicks)) {
 				if err := closeSeg(pts); err != nil {
 					return err
 				}

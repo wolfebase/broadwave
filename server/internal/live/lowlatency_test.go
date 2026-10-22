@@ -140,6 +140,55 @@ func TestSplitEncodeKeepsPartsLegalOnUnevenGroups(t *testing.T) {
 	}
 }
 
+// reorderedAt is one picture of a split encode with B-frames: decoded at dec,
+// shown cto later.
+func reorderedAt(dec int64, dur, flags, cto uint32) []byte {
+	tfhd := make([]byte, 8)
+	binary.BigEndian.PutUint32(tfhd[4:8], 1)
+	tfdt := make([]byte, 12)
+	tfdt[0] = 1
+	binary.BigEndian.PutUint64(tfdt[4:12], uint64(dec))
+	const trFlags = 0x904 // first-sample flags, sample duration, composition offset
+	trun := make([]byte, 20)
+	binary.BigEndian.PutUint32(trun[0:4], trFlags)
+	binary.BigEndian.PutUint32(trun[4:8], 1)
+	binary.BigEndian.PutUint32(trun[8:12], flags)
+	binary.BigEndian.PutUint32(trun[12:16], dur)
+	binary.BigEndian.PutUint32(trun[16:20], cto)
+	traf := append(append(mp4Box("tfhd", tfhd), mp4Box("tfdt", tfdt)...), mp4Box("trun", trun)...)
+	moof := mp4Box("moof", append(mp4Box("mfhd", make([]byte, 8)), mp4Box("traf", traf)...))
+	return append(moof, mp4Box("mdat", nil)...)
+}
+
+// A 3.0 station (HEVC, 60 fps, two-second groups) sends a second keyframe
+// half a second into a group now and then, with a picture after it that is
+// shown before it. The keyframe is half a second in, the picture before it is
+// not: the short part before the keyframe must still end its segment, or
+// AVPlayer drops the playlist.
+func TestSplitEncodeKeyframeAfterItsLeadingPicture(t *testing.T) {
+	const frame = 1500
+	var frags [][]byte
+	dec := int64(900000)
+	for g := range 3 {
+		for i := range 120 {
+			flags, cto := uint32(0x10000), uint32(frame)
+			switch {
+			case i == 0:
+				flags = 0
+			case g == 1 && i == 29:
+				// Shown after the next picture.
+				flags, cto = 0, 2*frame
+			case g == 1 && i == 30:
+				cto = 0
+			}
+			frags = append(frags, reorderedAt(dec, frame, flags, cto))
+			dec += frame
+		}
+	}
+	frags = append(frags, reorderedAt(dec, frame, 0, frame))
+	assertParts(t, packSplit(t, t.TempDir(), frags...))
+}
+
 func TestLiveEncodesSplitTheirFragments(t *testing.T) {
 	src := Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}
 	if !splitFragments(RenditionArgs(0, src, Rendition{Video: "copy", Audio: "copy"}, "libx264", "")) {
