@@ -543,6 +543,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/guide/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Each listing source (silicondust, schedules-direct, xmltv), whether it is set up, its last good pull,
+         *     its next one, and the last failure since then. Each source keeps its own schedule: SiliconDust every
+         *     20 to 28 hours, the others daily, and after a failure 30 minutes, doubling up to 6 hours.
+         */
+        get: operations["guideSources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/guide/sd/lineups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Signs in to Schedules Direct and lists the lineups for a US ZIP or Canadian postal code, antenna
+         *     first, with the lineups already on the account and its limit. A username and password left out
+         *     are the saved ones.
+         */
+        post: operations["findSDLineups"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/guide/sd": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Puts the lineup on the Schedules Direct account (unless it is there; an account at its lineup limit
+         *     is refused), saves the account and lineup as the guide source, and pulls its listings now. A lineup
+         *     that brings no listings is not kept and the answer says why (502, guide_source_failed).
+         */
+        post: operations["useSDLineup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/guide/xmltv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Saves an XMLTV link as the guide source and pulls it now. A link that brings no listings is not kept
+         *     and the answer says why (502, guide_source_failed).
+         */
+        post: operations["useXMLTV"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/search": {
         parameters: {
             query?: never;
@@ -2055,7 +2138,7 @@ export interface components {
         Error: {
             /**
              * @description Stable machine code. An unknown code is still a failure.
-             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, rate_limited, recording_soon, recordings_missing, recordings_unwritable, remove_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
+             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_failed, guide_rate_limited, guide_source_failed, guide_url, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, postal_code, rate_limited, recording_soon, recordings_missing, recordings_unwritable, remove_failed, sd_account, sd_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
              */
             code: string;
             /** @description Short text safe to show a user. */
@@ -2876,6 +2959,42 @@ export interface components {
             /** Format: date-time */
             end: string;
         };
+        GuideSource: {
+            /** @enum {string} */
+            source: "silicondust" | "schedules-direct" | "xmltv";
+            /** @description Set up. SiliconDust is always on; it needs an HDHomeRun tuner. */
+            on: boolean;
+            /** Format: date-time */
+            lastOk?: string;
+            /** Format: date-time */
+            next?: string;
+            /** @description The last failure since the last good pull. */
+            error?: string;
+            /** @description Failures in a row. */
+            fails?: number;
+            /** @description Listings the last good pull brought. */
+            listings?: number;
+        };
+        GuideSourcePull: {
+            /** @description Listings in the guide after the pull. */
+            airings: number;
+            /** @description Channels with listings. */
+            channels: number;
+            sources: components["schemas"]["GuideSource"][];
+        };
+        SDLineup: {
+            /** @description Such as USA-OTA80000. */
+            id: string;
+            name: string;
+            /** @description Antenna, Cable, Satellite, or a streaming provider's kind. */
+            transport: string;
+            location?: string;
+        };
+        SDAccount: {
+            lineups: string[];
+            maxLineups: number;
+            expires?: string;
+        };
         SetupStep: {
             id: string;
             title: string;
@@ -2896,6 +3015,12 @@ export interface components {
              */
             channelId?: number;
             steps: components["schemas"]["SetupStep"][];
+            /** @description Setup ended with no listings. Offer Schedules Direct or an XMLTV link. */
+            needsGuide?: boolean;
+            /** @description The server's time zone (an IANA name when TZ is set), which listing days and recording times are read in. */
+            timeZone?: string;
+            /** @description The server's offset from UTC in seconds, now. */
+            utcOffset?: number;
         };
         /** @description What the storage rules would do right now. Nothing is deleted. */
         StoragePlan: {
@@ -4161,7 +4286,10 @@ export interface operations {
                     };
                 };
             };
-            /** @description Manual refresh is limited to once an hour */
+            /**
+             * @description Nothing would be pulled: SiliconDust is pulled at most once an hour, and Schedules Direct and an
+             *     XMLTV link once an hour unless their settings changed.
+             */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4171,6 +4299,131 @@ export interface operations {
                 };
             };
             500: components["responses"]["Error"];
+            /** @description Every source that was pulled failed and the guide is empty (code guide_failed, with the reason in plain words) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    guideSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Listing sources */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        sources: components["schemas"]["GuideSource"][];
+                    };
+                };
+            };
+        };
+    };
+    findSDLineups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    username?: string;
+                    password?: string;
+                    postalCode: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Lineups for that place */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        country: "USA" | "CAN";
+                        postalCode: string;
+                        lineups: components["schemas"]["SDLineup"][];
+                        account: components["schemas"]["SDAccount"];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            502: components["responses"]["Error"];
+        };
+    };
+    useSDLineup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    username?: string;
+                    password?: string;
+                    lineup: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The source is saved and its listings loaded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuideSourcePull"];
+                };
+            };
+            400: components["responses"]["Error"];
+            502: components["responses"]["Error"];
+        };
+    };
+    useXMLTV: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    url: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The source is saved and its listings loaded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuideSourcePull"];
+                };
+            };
+            400: components["responses"]["Error"];
+            502: components["responses"]["Error"];
         };
     };
     search: {

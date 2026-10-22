@@ -19,7 +19,6 @@ import (
 
 	"broadwave/internal/disk"
 	"broadwave/internal/dvr"
-	"broadwave/internal/guide"
 	"broadwave/internal/live"
 	"broadwave/internal/realtime"
 	"broadwave/internal/store"
@@ -583,48 +582,41 @@ func parseGuideTime(raw string) (time.Time, error) {
 	return time.Parse(time.RFC3339Nano, raw)
 }
 
+// refreshGuide pulls listings now. SiliconDust is pulled at most once an
+// hour, as it asks; Schedules Direct and an XMLTV link are pulled when their
+// settings changed or an hour has passed since their last pull.
 func (s *Server) refreshGuide(w http.ResponseWriter, r *http.Request) {
-	_, _, lastManual, err := s.Store.GuideSchedule(r.Context())
+	now := time.Now()
+	force, retry, err := s.manualGuidePlan(r.Context(), now)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	if ok, retry := guide.ManualAllowed(lastManual, time.Now()); !ok {
-		mins := int(time.Until(retry).Minutes()) + 1
-		if mins < 1 {
-			mins = 1
-		}
+	if len(force) == 0 {
+		mins := max(int(retry.Sub(now).Minutes())+1, 1)
 		apiError(w, http.StatusTooManyRequests, "guide_rate_limited", fmt.Sprintf("Listings were just refreshed. Try again in %d minutes.", mins), map[string]any{"retryAt": retry.UTC()})
 		return
 	}
-	if err := s.Store.SetManualGuidePull(r.Context(), time.Now()); err != nil {
-		writeError(w, err)
+	if force[sourceSilicon] {
+		if err := s.Store.SetManualGuidePull(r.Context(), now); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
+	var n int
+	if s.GuidePull != nil {
+		n, err = s.GuidePull(r.Context())
+	} else {
+		n, err = s.pullGuide(r.Context(), force)
+	}
+	if err != nil && manualGuideFailed(w, err) {
 		return
 	}
-	pull := s.RefreshGuide
-	if s.GuidePull != nil {
-		pull = s.GuidePull
-	}
-	n, err := pull(r.Context())
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"airings": n})
-}
-
-// GuideDelay is how long the automatic refresh should wait. Zero means pull now.
-func (s *Server) GuideDelay(now time.Time) time.Duration {
-	_, next, _, err := s.Store.GuideSchedule(context.Background())
-	if err != nil {
-		return 0
-	}
-	return guide.Delay(next, now)
-}
-
-// DeferGuide schedules another attempt after a failed pull without counting it as a success.
-func (s *Server) DeferGuide(ctx context.Context, after time.Duration) {
-	_ = s.Store.SetNextGuidePull(ctx, time.Now().Add(after))
 }
 
 // schedule plans once per minute and per change to what the plan reads,

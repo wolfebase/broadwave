@@ -237,11 +237,13 @@ func main() {
 	// five minutes: each one sent every app to refetch its tuners.
 	found := foundOnce(st)
 
-	go func() {
+	go bootGuide(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		n, err := source.Auto(ctx, st, nil, *hdhrHost)
 		if err != nil {
+			// A tuner that is off at boot (a power cut) is found again later;
+			// the guide keeps its own schedule meanwhile.
 			slog.Error(fmt.Sprintf("discovery: %v", err))
 			return
 		}
@@ -249,16 +251,19 @@ func main() {
 		if found(n) {
 			bus.Publish("sources.found", map[string]int{"found": n})
 		}
-		// SiliconDust asks for a random 20-28 h gap after each successful pull.
-		// A restart waits out whatever nextGuidePull was already stored.
+	}, func() {
+		// Each listing source keeps its own schedule (SiliconDust asks for a
+		// random 20-28 h gap). A restart waits out what was already stored.
+		// The loop looks again at least every guideWake, so a source set up
+		// while it slept is not left waiting a day.
 		for !*staging {
 			if wait := api.GuideDelay(time.Now()); wait > 0 {
-				time.Sleep(wait)
+				time.Sleep(min(wait, guideWake))
 				continue
 			}
-			refreshGuide(api)
+			time.Sleep(refreshGuide(api))
 		}
-	}()
+	})
 	go func() {
 		tick := time.NewTicker(time.Hour)
 		defer tick.Stop()
@@ -442,17 +447,40 @@ func encoderLine(encoder, broadcast, smooth string) string {
 	return line
 }
 
-func refreshGuide(api *httpapi.Server) {
+// bootGuide looks for tuners once, then runs the guide loop whatever the
+// look found: a tuner unreachable at boot must not stop listings for good.
+func bootGuide(discover, loop func()) {
+	discover()
+	loop()
+}
+
+// guideWake is the longest the guide loop sleeps before it looks again.
+const guideWake = 10 * time.Minute
+
+// refreshGuide pulls the sources that are due and returns how long to wait
+// before looking again. A source that failed has its own next try already;
+// a pull that could not start at all (no tuner yet, a catalog error) waits
+// half an hour.
+func refreshGuide(api *httpapi.Server) time.Duration {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	if _, err := api.RefreshGuide(ctx); err != nil {
-		if errors.Is(err, httpapi.ErrNoTuner) {
-			slog.Info("guide: no tuner yet; listings load once one is added")
-		} else {
-			slog.Error(fmt.Sprintf("guide: %v", err))
-		}
+	_, err := api.RefreshGuide(ctx)
+	var sourceErr *httpapi.GuideSourceError
+	switch {
+	case err == nil:
+	case errors.As(err, &sourceErr):
+		slog.Error(fmt.Sprintf("guide: %v", err))
+	case errors.Is(err, httpapi.ErrNoTuner):
+		slog.Info("guide: no tuner yet; listings load once one is added")
 		api.DeferGuide(ctx, guide.RetryAfterError)
+		return guide.RetryAfterError
+	default:
+		slog.Error(fmt.Sprintf("guide: %v", err))
+		api.DeferGuide(ctx, guide.RetryAfterError)
+		return guide.RetryAfterError
 	}
+	// Never twice in one minute, whatever the schedule says.
+	return time.Minute
 }
 
 func checkHealth(base string) int {

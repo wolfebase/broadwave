@@ -71,7 +71,7 @@ export function starNetworks() {
 }
 
 export type SetupStep = { id: string; title: string; state: string; detail?: string };
-export type SetupFinish = { running: boolean; ready?: string; channelId?: number; steps: SetupStep[] };
+export type SetupFinish = { running: boolean; ready?: string; channelId?: number; steps: SetupStep[]; needsGuide?: boolean; timeZone?: string; utcOffset?: number };
 
 export function startSetupFinish() {
   return request<SetupFinish>("/api/v1/setup/finish", { method: "POST", body: "{}" });
@@ -540,4 +540,26 @@ export function fixSchedule(body: { passId: number; channelId: number; start: st
 
 export function getEvents() {
   return request<{ events: { id: number; at: string; kind: string; message: string }[] }>("/api/v1/events");
+}
+
+export type GuideSourceState = { source: string; on: boolean; lastOk?: string; next?: string; error?: string; fails?: number; listings?: number };
+export type SDLineupChoice = { id: string; name: string; transport: string; location?: string };
+export type SDLineupList = { country: string; postalCode: string; lineups: SDLineupChoice[]; account: { lineups: string[]; maxLineups: number; expires?: string } };
+export type GuideSourcePullResult = { airings: number; channels: number; sources: GuideSourceState[] };
+
+export function getGuideSources() {
+  return request<{ sources: GuideSourceState[] }>("/api/v1/guide/sources");
+}
+
+/** A username or password left empty is the saved one. */
+export function findSDLineups(username: string, password: string, postalCode: string) {
+  return request<SDLineupList>("/api/v1/guide/sd/lineups", { method: "POST", body: JSON.stringify({ username, password, postalCode }) });
+}
+
+export function chooseSDLineup(username: string, password: string, lineup: string) {
+  return request<GuideSourcePullResult>("/api/v1/guide/sd", { method: "POST", body: JSON.stringify({ username, password, lineup }) });
+}
+
+export function loadXMLTV(url: string) {
+  return request<GuideSourcePullResult>("/api/v1/guide/xmltv", { method: "POST", body: JSON.stringify({ url }) });
 }

@@ -21,6 +21,7 @@ import (
 	"broadwave/internal/cloudflare"
 	"broadwave/internal/discovery"
 	"broadwave/internal/dvr"
+	"broadwave/internal/guide"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
 	"broadwave/internal/network"
@@ -75,6 +76,8 @@ type Server struct {
 	// GuidePull replaces the listings pull in tests. Nil calls RefreshGuide.
 	// The public XMLTV host is not deterministic, and a failed pull can echo DeviceAuth.
 	GuidePull func(ctx context.Context) (int, error)
+	// SD replaces the Schedules Direct client in tests. Nil uses the public API.
+	SD func(user, pass string) *guide.SD
 	// CountFeeds replaces the hub's feed stats in tests. Nil reads the hub.
 	CountFeeds func() []live.FeedStat
 	// Updates is the daily release check. Nil leaves the server info without an update field.
@@ -93,6 +96,12 @@ type Server struct {
 	alertMu   sync.Mutex
 	alertPrev map[string]sports.Game
 	alertSent map[string]bool
+
+	// guideMu lets one guide pull run at a time; guideKick is the pull
+	// waiting after a listing source's settings changed.
+	guideMu     sync.Mutex
+	guideKickMu sync.Mutex
+	guideKick   *time.Timer
 
 	homeMu    sync.Mutex
 	finishMu  sync.Mutex
@@ -234,6 +243,10 @@ func (s *Server) Handler() http.Handler {
 	api("POST /schedule/fix", s.fixSchedule)
 	api("GET /events", s.events)
 	api("POST /guide/refresh", s.refreshGuide)
+	api("GET /guide/sources", s.getGuideSources)
+	api("POST /guide/sd/lineups", s.sdLineups)
+	api("POST /guide/sd", s.useSDLineup)
+	api("POST /guide/xmltv", s.useXMLTV)
 	api("GET /search", s.search)
 	api("GET /sports/scoreboard", s.scoreboard)
 	api("GET /teams", s.teams)
@@ -661,6 +674,7 @@ func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
 		values["layout"] = "auto"
 	}
 	delete(values, "recordingsPath")
+	delete(values, store.SettingGuideSources)
 	if values["profile"] != "transparent" && values["profile"] != "balanced" && values["profile"] != "saver" {
 		values["profile"] = "transparent"
 	}
@@ -830,6 +844,13 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		s.forgetRemote()
 		s.applyTunnel(r.Context())
 		s.RemoteChanged()
+	}
+	// A listing source that was set up or changed is pulled now, not tomorrow.
+	for _, key := range []string{"sdUser", "sdPassword", "sdLineup", "guideUrl"} {
+		if _, ok := body[key]; ok {
+			s.kickGuide()
+			break
+		}
 	}
 	// Turning the check back on looks now. A check that already ran today is reused.
 	if body["checkUpdates"] == "1" && s.Updates != nil {

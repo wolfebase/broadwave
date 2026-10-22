@@ -220,6 +220,22 @@ export type GameAlert = {
   detail?: string;
 };
 
+export type GuideSource = {
+  source: string;
+  on: boolean;
+  lastOk?: string;
+  next?: string;
+  error?: string;
+  fails?: number;
+  listings?: number;
+};
+
+export type GuideSourcePull = {
+  airings: number;
+  channels: number;
+  sources: GuideSource[];
+};
+
 export type Invite = {
   id: string;
   name: string;
@@ -490,6 +506,19 @@ export type RoomState = {
   people?: Person[];
 };
 
+export type SDAccount = {
+  lineups: string[];
+  maxLineups: number;
+  expires?: string;
+};
+
+export type SDLineup = {
+  id: string;
+  name: string;
+  transport: string;
+  location?: string;
+};
+
 export type Screen = {
   id: string;
   name: string;
@@ -603,6 +632,9 @@ export type SetupFinish = {
   ready?: string;
   channelId?: number;
   steps: SetupStep[];
+  needsGuide?: boolean;
+  timeZone?: string;
+  utcOffset?: number;
 };
 
 export type SetupStep = {
