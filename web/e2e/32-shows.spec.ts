@@ -87,7 +87,8 @@ test("two recordings of one show are one row", async ({ page }) => {
       { name: "1440", width: 1440, height: 900 },
     ] as const) {
       await page.setViewportSize({ width: size.width, height: size.height });
-      await page.goto("/settings");
+      // Settings is a list of sections; Space by show is under Recording and storage.
+      await page.goto("/settings/recording");
       await settle(page);
       await expect(space.getByRole("heading", { name: "Space by show" })).toBeVisible();
       const link = space.getByRole("link", { name: row?.title ?? title });
@@ -102,7 +103,8 @@ test("two recordings of one show are one row", async ({ page }) => {
     await space.getByRole("link", { name: row?.title ?? title }).click();
     await expect(page).toHaveURL(/\/recordings\?show=/);
     await settle(page);
-    await expect(page.getByRole("heading", { name: title, level: 3 })).toBeVisible();
+    // A show's own page is headed by the show's name.
+    await expect(page.getByRole("heading", { name: title, level: 2 })).toBeVisible();
     await expect(page.locator(`img.poster[src="/media/poster/${first.id}"]`)).toBeVisible();
     await expect(page.locator(`img.poster[src="/media/poster/${second.id}"]`)).toBeVisible();
   } finally {
