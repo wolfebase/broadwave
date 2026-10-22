@@ -63,6 +63,7 @@
 - Web: the sync pill in the player says Waiting or Syncing until it is in sync, and Sync on when this is the only screen.
 - Web and server: Settings › Integrations opened at localhost shows the server's home network address for other apps, not localhost.
 - Web on a TV: Up from the page reaches a notice across the top (a new release, the server's time zone), and closing it with the remote puts the ring on the page instead of nowhere.
+- Web on a TV: Recordings starts the remote on the newest recording, not on the All filter above it.
 - Web on a TV: a key pressed while a page is still loading keeps its place; the page no longer pulls the ring back to its first button when its list arrives.
 - Web on a TV: Down from the tabs goes into the page, not to the far end of a notice above it; Up from the page reaches the notice. Closing a notice with a pointer remote also keeps the ring on the page.
 
