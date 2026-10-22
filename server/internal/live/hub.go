@@ -142,6 +142,8 @@ type Hub struct {
 	// RecordingSoon reports a recording due within d. The still sweep stays
 	// off the tuners while it does. Nil means none is.
 	RecordingSoon func(ctx context.Context, d time.Duration) bool
+	// signalWait replaces tuneSignalWait in tests; set before any tune.
+	signalWait time.Duration
 	// NoAC4 is set when ffmpeg cannot decode AC-4: an ATSC 3.0 channel then
 	// plays its picture without sound instead of not at all.
 	NoAC4 bool
@@ -972,7 +974,7 @@ func (h *Hub) streamMuxLocked(ch store.SourceChannel, body io.ReadCloser, host s
 }
 
 // tuneSignalWait lets a new tune's lock settle before its signal is read.
-var tuneSignalWait = 1500 * time.Millisecond
+const tuneSignalWait = 1500 * time.Millisecond
 
 // noteTuneSignal stores a tune's signal, read once from the device's status
 // a moment after it locked, as the channel's last reading. A 1.0 tune is
@@ -982,7 +984,11 @@ func (h *Hub) noteTuneSignal(ch store.SourceChannel, base string, tuner, freq in
 	if h.Store == nil || base == "" {
 		return
 	}
-	time.Sleep(tuneSignalWait)
+	wait := tuneSignalWait
+	if h.signalWait > 0 {
+		wait = h.signalWait
+	}
+	time.Sleep(wait)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	raw, err := fetchTunerStatus(ctx, base)

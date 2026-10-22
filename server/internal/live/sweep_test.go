@@ -326,12 +326,11 @@ func waitFor(t *testing.T, ok func() bool, msg string) {
 
 // A tune stores the tuner's signal as the channel's last reading.
 func TestATuneNotesItsSignal(t *testing.T) {
-	tuneSignalWait = 0
-	t.Cleanup(func() { tuneSignalWait = 1500 * time.Millisecond })
 	srv := &fake.Server{Profile: fake.ProfileConnectDuo, TunerCount: 2}
 	st, _ := tuneStore(t, srv)
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
 	t.Cleanup(h.Shutdown)
+	h.signalWait = time.Millisecond
 	id := idOf(t, st, "5.1")
 	if _, err := h.Watch(context.Background(), id, Rendition{Video: "copy", Audio: "aac2"}, false); err != nil {
 		t.Fatal(err)
