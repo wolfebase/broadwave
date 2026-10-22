@@ -460,8 +460,11 @@ export interface paths {
         };
         /**
          * Channels that already have a fresh preview, and channels with no signal.
-         * @description A channel is listed when its preview JPEG exists and is newer than 10 minutes.
-         *     Nothing is tuned to make one. Cards ask for `/channels/{id}/frame` only for these ids.
+         * @description A channel is listed when its preview JPEG exists and is newer than 10 minutes, or
+         *     45 minutes for a still the idle sweep made (`sweep: true`). The sweep tunes, one
+         *     frequency at a time, only tuners nobody uses (two at least free on the device, nothing
+         *     watched, recorded, or warm there, no recording within 3 minutes); the `stillSweep`
+         *     setting or BROADWAVE_STILL_SWEEP=0 turns it off. Cards ask for `/channels/{id}/frame` only for these ids.
          *     `noSignal` lists the channels a tune found off the air in the last 10 minutes.
          */
         get: operations["listFrames"];
@@ -2414,7 +2417,7 @@ export interface components {
              */
             twinChoice?: "atsc3" | "atsc1" | "both";
         };
-        /** @description Channel ids whose preview JPEG exists and is newer than 10 minutes. */
+        /** @description Channel ids whose preview JPEG exists and is newer than 10 minutes (45 for a swept still). */
         FrameList: {
             channels: number[];
             /** @description The same channels, each with when its stills were written. Adding `at` to the still's address makes it cacheable. */
@@ -2426,6 +2429,8 @@ export interface components {
                  * @description Unix seconds the grab was written.
                  */
                 at: number;
+                /** @description The idle still sweep made this still; nobody is tuned to the channel. Omitted otherwise. */
+                sweep?: boolean;
             }[];
             /**
              * @description Channels whose last tune in the past 10 minutes found no signal. A watch of
@@ -3245,6 +3250,11 @@ export interface components {
              * @enum {string}
              */
             checkUpdates?: "0" | "1";
+            /**
+             * @description 1 lets idle tuners keep a recent still for every channel (one tuner, only while two are free and nothing is watched or recorded on the device). 0 turns it off. Missing means on.
+             * @enum {string}
+             */
+            stillSweep?: "0" | "1";
             sdUser?: string;
             sdPassword?: string;
             sdLineup?: string;

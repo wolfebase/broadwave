@@ -872,6 +872,7 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		"hideScores":          true,
 		"liveScores":          true,
 		"checkUpdates":        true,
+		"stillSweep":          true,
 		"setupComplete":       true,
 		"sdUser":              true,
 		"sdPassword":          true,
@@ -968,6 +969,9 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		}
 		if k == "checkUpdates" && v != "0" && v != "1" {
 			return nil, fmt.Errorf("checkUpdates must be 0 or 1")
+		}
+		if k == "stillSweep" && v != "0" && v != "1" {
+			return nil, fmt.Errorf("stillSweep must be 0 or 1")
 		}
 		if k == "guideUrl" {
 			v = strings.TrimSpace(v)

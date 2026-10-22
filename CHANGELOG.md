@@ -25,6 +25,7 @@
 - Web: Settings › Recording and storage › Find recordings in the folder adds recordings already in the recordings folder back to the list, and says how many it found.
 - Web: the Pair screen tells an owner who is locked out how to get back in (`BROADWAVE_RESET_SIGNIN=1`), with a link to the steps.
 - Docs: a short Set up a server page, for people who installed an app first.
+- Server: idle tuners keep a recent picture of every channel for the guide. One tuner at a time tunes each frequency nobody is on (favorites first, then guide order, 20 s apart), grabs every channel on it, and lets go at once. It runs only while nothing on that tuner is watched, recorded, or warm, no recording starts within 3 minutes, and the tuner reports two free; a watch, recording, or guess stops it before it tunes. Settings › Playback › Fresh channel pictures (or `BROADWAVE_STILL_SWEEP=0`) turns it off. `/frames` marks these stills `sweep: true` and lists them for 45 minutes.
 
 ### Changed
 

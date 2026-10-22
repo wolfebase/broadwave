@@ -157,6 +157,7 @@ func mosaicArgs(inputs []mosaicInput, encoder string) []string {
 // WatchMosaic starts or joins the mosaic of these channels. Each channel
 // rides its own shared tune, so a channel already on costs no tuner.
 func (h *Hub) WatchMosaic(ctx context.Context, ids []int64) (MosaicSession, error) {
+	h.StopSweep(0)
 	key, err := MosaicKey(ids)
 	if err != nil {
 		return MosaicSession{}, err

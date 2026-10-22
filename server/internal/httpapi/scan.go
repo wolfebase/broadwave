@@ -81,6 +81,12 @@ func (s *Server) nextUnlisted(ctx context.Context, seen map[int]bool, tried map[
 }
 
 func (s *Server) recordingSoon(ctx context.Context) bool {
+	return s.RecordingWithin(ctx, 30*time.Minute)
+}
+
+// RecordingWithin reports a recording running, or one the passes plan to
+// start within d. A catalog that cannot be read counts as one.
+func (s *Server) RecordingWithin(ctx context.Context, d time.Duration) bool {
 	recs, err := s.Store.Recordings(ctx)
 	if err != nil {
 		return true
@@ -90,15 +96,15 @@ func (s *Server) recordingSoon(ctx context.Context) bool {
 		if rec.Status == "recording" {
 			return true
 		}
-		if rec.Status == "planned" && rec.StartedAt.Before(now.Add(30*time.Minute)) && rec.StartedAt.After(now.Add(-time.Minute)) {
+		if rec.Status == "planned" && rec.StartedAt.Before(now.Add(d)) && rec.StartedAt.After(now.Add(-time.Minute)) {
 			return true
 		}
 	}
 	passes, _ := s.Store.Passes(ctx)
-	airings, err := s.Store.RecordingAirings(ctx, now, now.Add(30*time.Minute))
+	airings, err := s.Store.RecordingAirings(ctx, now, now.Add(d))
 	if err != nil {
 		return true
 	}
-	items := dvr.Plan(passes, airings, 2, now, now.Add(30*time.Minute))
+	items := dvr.Plan(passes, airings, 2, now, now.Add(d))
 	return len(items) > 0
 }

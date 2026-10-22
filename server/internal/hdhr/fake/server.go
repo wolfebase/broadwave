@@ -243,6 +243,21 @@ func (s *Server) HoldAll() {
 	}
 }
 
+// Hold marks the first n tuners in use, as another app on the network would.
+func (s *Server) Hold(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := 0; i < n && i < len(s.tuners); i++ {
+		ch := Channel{}
+		if len(s.Channels) > 0 {
+			ch = s.Channels[i%len(s.Channels)]
+		}
+		s.tuners[i].held = true
+		s.tuners[i].guide = ch.Number
+		s.tuners[i].freq = ch.Freq
+	}
+}
+
 // FreeAll releases every tuner HoldAll took.
 func (s *Server) FreeAll() {
 	s.mu.Lock()

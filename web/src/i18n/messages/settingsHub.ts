@@ -181,6 +181,8 @@ export const settingsHubMessages = {
   "playback.delay": "Live delay",
   "playback.bufferLabel": "Pause and rewind live TV",
   "playback.bufferHint": "How far back live TV keeps, so a recording can start from the beginning.",
+  "playback.stillSweep": "Fresh channel pictures",
+  "playback.stillSweepHint": "Idle tuners tune each channel now and then for a picture in the guide. One tuner at a time, only while two are free and nothing is watched or recorded.",
   "playback.recordings": "Recordings",
   "playback.autoplayHint": "When an episode ends, the next one starts.",
 

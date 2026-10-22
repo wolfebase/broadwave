@@ -36,6 +36,7 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	h.StopSweep(ch.FrequencyHz)
 	var res *http.Response
 	if ch.TunerCount == 0 && ch.StreamURL != "" {
 		h.mu.Lock()

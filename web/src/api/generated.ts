@@ -184,6 +184,7 @@ export type Event = {
 export type FrameListFrames = {
   at: number;
   id: number;
+  sweep?: boolean;
 };
 
 export type FrameList = {
@@ -626,6 +627,7 @@ export type Settings = {
   hideScores?: string;
   liveScores?: string;
   checkUpdates?: string;
+  stillSweep?: string;
   sdUser?: string;
   sdPassword?: string;
   sdLineup?: string;

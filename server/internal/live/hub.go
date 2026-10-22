@@ -139,6 +139,9 @@ type Hub struct {
 	// NoLead starts an AC-4 channel's picture with its sound, without the
 	// silent lead (BROADWAVE_SOUND_LEAD=0).
 	NoLead bool
+	// RecordingSoon reports a recording due within d. The still sweep stays
+	// off the tuners while it does. Nil means none is.
+	RecordingSoon func(ctx context.Context, d time.Duration) bool
 	// NoAC4 is set when ffmpeg cannot decode AC-4: an ATSC 3.0 channel then
 	// plays its picture without sound instead of not at all.
 	NoAC4 bool
@@ -247,6 +250,12 @@ type Hub struct {
 	grabbers sync.WaitGroup
 	// failures are recent renditions given up on, by channel and key.
 	failures map[string]startFailure
+	// sweep is the still sweep's tune, while it runs; sweepDark is when a
+	// sweep target found no signal; swept is when the sweep wrote each
+	// channel's still.
+	sweep     *sweepState
+	sweepDark map[string]time.Time
+	swept     map[int64]time.Time
 	// guessTunes are the tunes guesses opened without a picture, oldest first.
 	guessTunes []*feed
 	// warmMu runs one guessed tune at a time: two at once would each count
@@ -570,8 +579,10 @@ func (h *Hub) WatchAt(ctx context.Context, channelID int64, want Rendition, alte
 	want = want.normalized()
 	ch, err := h.Store.SourceChannel(ctx, channelID)
 	if err != nil {
+		h.StopSweep(0)
 		return Session{}, err
 	}
+	h.StopSweep(ch.FrequencyHz)
 	candidates := []store.SourceChannel{ch}
 	if ids, err := h.Store.AlternateChannels(ctx, ch.GuideNumber, ch.ID); err == nil {
 		for _, id := range ids {
@@ -2406,6 +2417,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if err != nil {
 		return store.Recording{}, err
 	}
+	h.StopSweep(ch.FrequencyHz)
 	// Room is made for a channel that exists, and before a tuner is taken or
 	// a viewer is stopped for a recording the disk would refuse.
 	if err := h.ensureSpace(ctx); err != nil {

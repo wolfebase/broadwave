@@ -327,6 +327,14 @@ func main() {
 			api.BroadcastScan(context.Background())
 		}
 	}()
+	// Idle tuners keep every channel's still recent (BROADWAVE_STILL_SWEEP=0, or the stillSweep setting, turns it off).
+	if !*staging && os.Getenv("BROADWAVE_E2E") != "1" {
+		hub.RecordingSoon = api.RecordingWithin
+		go func() {
+			time.Sleep(2 * time.Minute)
+			hub.RunStillSweep(context.Background())
+		}()
+	}
 	go func() {
 		tick := time.NewTicker(20 * time.Second)
 		defer tick.Stop()

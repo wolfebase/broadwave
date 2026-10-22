@@ -71,6 +71,7 @@ export function PlaybackSection({ settings, onChange }: { settings: Settings; on
           ]}
           onChange={(bufferMinutes) => onChange({ bufferMinutes: bufferMinutes as Settings["bufferMinutes"] })}
         />
+        <SwitchRow label={h("playback.stillSweep")} hint={h("playback.stillSweepHint")} checked={onOff(settings.stillSweep, "1")} onChange={(on) => onChange({ stillSweep: on ? "1" : "0" })} />
       </Group>
       <Group title={h("playback.recordings")}>
         <SwitchRow label={t("settings.autoplay")} hint={h("playback.autoplayHint")} checked={onOff(settings.autoplay, "1")} onChange={(on) => onChange({ autoplay: on ? "1" : "0" })} />

@@ -45,6 +45,9 @@ type frameList struct {
 type frameStamp struct {
 	ID int64 `json:"id"`
 	At int64 `json:"at"`
+	// Sweep is a still the idle sweep made, not a tune someone is on. It is
+	// listed for longer, since a pass over the lineup takes a while.
+	Sweep bool `json:"sweep,omitempty"`
 }
 
 func (s *Server) freshFrames(now time.Time) []frameStamp {
@@ -62,10 +65,14 @@ func (s *Server) freshFrames(now time.Time) []frameStamp {
 			continue
 		}
 		info, err := os.Stat(live.FramePath(s.Hub.Dir, id, 480))
-		if err != nil || !info.Mode().IsRegular() || live.FrameStale(info.ModTime(), now) {
+		if err != nil || !info.Mode().IsRegular() {
 			continue
 		}
-		out = append(out, frameStamp{ID: id, At: info.ModTime().Unix()})
+		_, swept := s.Hub.SweptAt(id)
+		if live.FrameStale(info.ModTime(), now) && (!swept || now.Sub(info.ModTime()) > live.SweepStaleAfter) {
+			continue
+		}
+		out = append(out, frameStamp{ID: id, At: info.ModTime().Unix(), Sweep: swept})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out

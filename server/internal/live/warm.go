@@ -25,6 +25,8 @@ func (h *Hub) Warm(ctx context.Context, channelID int64, want Rendition, alterna
 	if err != nil {
 		return false, err
 	}
+	// A guess is someone looking at the guide: the sweep makes way.
+	h.StopSweep(ch.FrequencyHz)
 	h.mu.Lock()
 	f := h.channels[ch.ID]
 	untuned := f == nil && (ch.FrequencyHz <= 0 || h.muxes[ch.FrequencyHz] == nil)
