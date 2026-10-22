@@ -24,6 +24,9 @@ export type Airing = {
   cast?: string;
   gameId?: string;
   guideSource?: string;
+  cc?: boolean;
+  video?: string;
+  audio?: string;
   guideNumber?: string;
   channelName?: string;
   start: string;
@@ -46,6 +49,12 @@ export type CatalogBackup = {
   bytes: number;
 };
 
+export type ChannelSignal = {
+  at: string;
+  strength: number;
+  quality: number;
+};
+
 export type Channel = {
   id: number;
   deviceId: string;
@@ -66,6 +75,9 @@ export type Channel = {
   artHeight?: number;
   network?: string;
   protected?: boolean;
+  captions?: boolean;
+  audio?: string;
+  signal?: ChannelSignal;
   standard?: string;
   twinId?: number;
   twinChoice?: string;
@@ -528,8 +540,10 @@ export type Screen = {
 };
 
 export type SearchAiring = {
+  audio?: string;
   cast?: string;
   category?: string;
+  cc?: boolean;
   channelId: number;
   channelName?: string;
   description?: string;
@@ -555,6 +569,7 @@ export type SearchAiring = {
   start: string;
   subtitle?: string;
   title: string;
+  video?: string;
 };
 
 export type SearchChannel = {

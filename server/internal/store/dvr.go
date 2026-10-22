@@ -38,31 +38,37 @@ type SourceChannel struct {
 }
 
 type Airing struct {
-	ID           int64     `json:"id"`
-	ChannelID    int64     `json:"channelId"`
-	Title        string    `json:"title"`
-	Subtitle     string    `json:"subtitle,omitempty"`
-	Description  string    `json:"description,omitempty"`
-	Category     string    `json:"category,omitempty"`
-	ProgramID    string    `json:"programId,omitempty"`
-	New          bool      `json:"new,omitempty"`
-	ImageURL     string    `json:"imageUrl,omitempty"`
-	ImageWidth   int       `json:"imageWidth,omitempty"`
-	ImageHeight  int       `json:"imageHeight,omitempty"`
-	Season       int       `json:"season,omitempty"`
-	Episode      int       `json:"episode,omitempty"`
-	EpisodeLabel string    `json:"episodeLabel,omitempty"`
-	OriginalAir  string    `json:"originalAir,omitempty"`
-	SeriesID     string    `json:"seriesId,omitempty"`
-	Live         bool      `json:"live,omitempty"`
-	Premiere     bool      `json:"premiere,omitempty"`
-	Finale       bool      `json:"finale,omitempty"`
-	Rating       string    `json:"rating,omitempty"`
-	Cast         string    `json:"cast,omitempty"`
-	GameID       string    `json:"gameId,omitempty"`
-	GuideSource  string    `json:"guideSource,omitempty"`
-	Start        time.Time `json:"start"`
-	End          time.Time `json:"end"`
+	ID           int64  `json:"id"`
+	ChannelID    int64  `json:"channelId"`
+	Title        string `json:"title"`
+	Subtitle     string `json:"subtitle,omitempty"`
+	Description  string `json:"description,omitempty"`
+	Category     string `json:"category,omitempty"`
+	ProgramID    string `json:"programId,omitempty"`
+	New          bool   `json:"new,omitempty"`
+	ImageURL     string `json:"imageUrl,omitempty"`
+	ImageWidth   int    `json:"imageWidth,omitempty"`
+	ImageHeight  int    `json:"imageHeight,omitempty"`
+	Season       int    `json:"season,omitempty"`
+	Episode      int    `json:"episode,omitempty"`
+	EpisodeLabel string `json:"episodeLabel,omitempty"`
+	OriginalAir  string `json:"originalAir,omitempty"`
+	SeriesID     string `json:"seriesId,omitempty"`
+	Live         bool   `json:"live,omitempty"`
+	Premiere     bool   `json:"premiere,omitempty"`
+	Finale       bool   `json:"finale,omitempty"`
+	Rating       string `json:"rating,omitempty"`
+	Cast         string `json:"cast,omitempty"`
+	GameID       string `json:"gameId,omitempty"`
+	GuideSource  string `json:"guideSource,omitempty"`
+	// CC is set when the listing says it has closed captions. Video is sd,
+	// hd, or uhd and Audio mono, stereo, or surround when the listing says;
+	// empty when it does not.
+	CC    bool      `json:"cc,omitempty"`
+	Video string    `json:"video,omitempty"`
+	Audio string    `json:"audio,omitempty"`
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
 	// Simulcast is the channel that records this broadcast when it also airs
 	// there (an ATSC 1.0 and 3.0 pair). Only RecordingAirings sets it.
 	Simulcast int64 `json:"-"`
@@ -429,12 +435,14 @@ func insertAiring(ctx context.Context, tx *sql.Tx, row Airing) error {
 	}
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url,
-	image_width, image_height, season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id, guide_source)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	image_width, image_height, season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id, guide_source,
+	cc, video, audio)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		row.ChannelID, row.Title, row.Subtitle, row.Description, row.Category,
 		row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, bit(row.New), row.ImageURL,
 		row.ImageWidth, row.ImageHeight,
-		row.Season, row.Episode, row.EpisodeLabel, row.OriginalAir, row.SeriesID, bit(row.Live), bit(row.Premiere), bit(row.Finale), row.Rating, row.Cast, row.GameID, row.GuideSource)
+		row.Season, row.Episode, row.EpisodeLabel, row.OriginalAir, row.SeriesID, bit(row.Live), bit(row.Premiere), bit(row.Finale), row.Rating, row.Cast, row.GameID, row.GuideSource,
+		bit(row.CC), row.Video, row.Audio)
 	return err
 }
 
@@ -473,12 +481,14 @@ func scanAiringRows(rows *sql.Rows) ([]Airing, error) {
 	for rows.Next() {
 		var row Airing
 		var start, end string
-		var isNew, isLive, isPremiere, isFinale int
+		var isNew, isLive, isPremiere, isFinale, cc int
 		if err := rows.Scan(&row.ID, &row.ChannelID, &row.Title, &row.Subtitle, &row.Description, &row.Category, &start, &end, &row.ProgramID, &isNew, &row.ImageURL,
 			&row.ImageWidth, &row.ImageHeight,
-			&row.Season, &row.Episode, &row.EpisodeLabel, &row.OriginalAir, &row.SeriesID, &isLive, &isPremiere, &isFinale, &row.Rating, &row.Cast, &row.GameID, &row.GuideSource); err != nil {
+			&row.Season, &row.Episode, &row.EpisodeLabel, &row.OriginalAir, &row.SeriesID, &isLive, &isPremiere, &isFinale, &row.Rating, &row.Cast, &row.GameID, &row.GuideSource,
+			&cc, &row.Video, &row.Audio); err != nil {
 			return nil, err
 		}
+		row.CC = cc != 0
 		row.New = isNew != 0
 		row.Live = isLive != 0
 		row.Premiere = isPremiere != 0
@@ -491,7 +501,8 @@ func scanAiringRows(rows *sql.Rows) ([]Airing, error) {
 }
 
 const airingColumns = `a.id, a.channel_id, a.title, a.subtitle, a.description, a.category, a.starts_at, a.ends_at, a.program_id, a.is_new, a.image_url,
-	a.image_width, a.image_height, a.season, a.episode, a.episode_label, a.original_air, a.series_id, a.is_live, a.is_premiere, a.is_finale, a.rating, a.cast_list, a.game_id, a.guide_source`
+	a.image_width, a.image_height, a.season, a.episode, a.episode_label, a.original_air, a.series_id, a.is_live, a.is_premiere, a.is_finale, a.rating, a.cast_list, a.game_id, a.guide_source,
+	a.cc, a.video, a.audio`
 
 // airingSelect builds the guide query. ok is false when every team name was
 // too short to search: that must not fall through to the whole window.

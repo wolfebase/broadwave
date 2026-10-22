@@ -66,6 +66,34 @@ type programme struct {
 	Live     *struct{} `xml:"live"`
 	Premiere *struct{} `xml:"premiere"`
 	Finale   *struct{} `xml:"finale"`
+	Video    *struct {
+		Quality string `xml:"quality"`
+	} `xml:"video"`
+	Audio *struct {
+		Stereo string `xml:"stereo"`
+	} `xml:"audio"`
+	Subtitles []struct {
+		Type string `xml:"type,attr"`
+	} `xml:"subtitles"`
+}
+
+// features reads a programme's picture, sound, and closed captions. Captions
+// are subtitles of type teletext, or of no type; onscreen subtitles are part
+// of the picture, and deaf-signed is sign language.
+func (p programme) features() (video, audio string, cc bool) {
+	if p.Video != nil {
+		video = VideoQuality(p.Video.Quality)
+	}
+	if p.Audio != nil {
+		audio = AudioLayout(p.Audio.Stereo)
+	}
+	for _, sub := range p.Subtitles {
+		switch strings.ToLower(strings.TrimSpace(sub.Type)) {
+		case "", "teletext":
+			cc = true
+		}
+	}
+	return video, audio, cc
 }
 
 // PullURL reads an XMLTV document from an http address the user supplied.
@@ -286,7 +314,9 @@ func Parse(data []byte, channels []store.Channel) ([]store.Airing, map[int64]str
 		}
 		programID, label, season, episode := episodeDetail(p.EpNums)
 		imageURL, imageW, imageH := PickIcon(p.Icons)
+		video, audio, cc := p.features()
 		out = append(out, store.Airing{
+			Video: video, Audio: audio, CC: cc,
 			ChannelID: channelID, Title: strings.TrimSpace(p.Title), Subtitle: strings.TrimSpace(p.Sub),
 			Description: strings.TrimSpace(p.Desc), Category: joinCats(p.Cats), ProgramID: programID,
 			ImageURL: imageURL, ImageWidth: imageW, ImageHeight: imageH, Season: season, Episode: episode, EpisodeLabel: label,

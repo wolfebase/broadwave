@@ -45,6 +45,14 @@ type Device struct {
 	Retired bool `json:"retired,omitempty"`
 }
 
+// SignalReading is a channel's last signal: quality and strength in percent,
+// and when it was read.
+type SignalReading struct {
+	Quality  int       `json:"quality"`
+	Strength int       `json:"strength"`
+	At       time.Time `json:"at"`
+}
+
 type Channel struct {
 	ID            int64  `json:"id"`
 	DeviceID      string `json:"deviceId"`
@@ -67,6 +75,13 @@ type Channel struct {
 	Network string `json:"network,omitempty"`
 	// Protected is a channel the tuner marks DRM or copy protected. It stays hidden.
 	Protected bool `json:"protected,omitempty"`
+	// Captions is set when the last tune's stream named a caption service.
+	// Audio is the main sound's layout it read: mono, stereo, or surround.
+	// A listing's own cc and audio say more; these fill in when it is silent.
+	Captions bool   `json:"captions,omitempty"`
+	Audio    string `json:"audio,omitempty"`
+	// Signal is the last tune's (or signal check's) reading; nil before one.
+	Signal *SignalReading `json:"signal,omitempty"`
 	// Standard is "atsc3" for an ATSC 3.0 broadcast and empty for everything else.
 	Standard string `json:"standard,omitempty"`
 	// TwinID pairs an ATSC 3.0 channel with the 1.0 channel of the same station.
@@ -632,7 +647,8 @@ WHERE id=?`, g.favorite, g.customName, g.customNumber, next); err != nil {
 func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error) {
 	q := `SELECT id, device_id, guide_number, guide_name, custom_number, custom_name,
 		video_codec, audio_codec, hd, favorite, enabled, hidden, present, guide_key, art_url, art_width, art_height, network,
-		protected, twin_choice FROM channels`
+		protected, twin_choice, captions, audio_layout, sig.quality, sig.strength, sig.checked_at
+		FROM channels LEFT JOIN channel_signals sig ON sig.channel_id = channels.id`
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, err
@@ -643,11 +659,19 @@ func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error)
 	for rows.Next() {
 		var ch Channel
 		var customNumber, customName, choice string
-		var hd, fav, en, hidden, present, protected int
+		var hd, fav, en, hidden, present, protected, captions int
+		var quality, strength *int
+		var checked *string
 		if err := rows.Scan(&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
 			&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &ch.GuideKey, &ch.ArtURL, &ch.ArtWidth, &ch.ArtHeight, &ch.Network,
-			&protected, &choice); err != nil {
+			&protected, &choice, &captions, &ch.Audio, &quality, &strength, &checked); err != nil {
 			return nil, err
+		}
+		ch.Captions = captions != 0
+		if quality != nil && strength != nil && checked != nil {
+			if at, err := time.Parse(time.RFC3339, *checked); err == nil {
+				ch.Signal = &SignalReading{Quality: *quality, Strength: *strength, At: at}
+			}
 		}
 		ch.Protected = protected != 0
 		if choice != "" {

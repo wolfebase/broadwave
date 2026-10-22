@@ -38,6 +38,8 @@ type Event struct {
 	Start    time.Time
 	End      time.Time
 	Genres   []string
+	// Captions is set when the event names a caption service (descriptor 0x86).
+	Captions bool
 }
 
 // Text is one extended description, keyed by source and event.
@@ -283,6 +285,7 @@ func parseEIT(b []byte, offset uint8) []Event {
 			break
 		}
 		genres := genresIn(b[pos : pos+descLen])
+		captions := hasDescriptor(b[pos:pos+descLen], tagCaptionService)
 		pos += descLen
 		start := gpsEpoch.Add(time.Duration(startGPS) * time.Second).Add(-time.Duration(offset) * time.Second)
 		out = append(out, Event{
@@ -292,6 +295,7 @@ func parseEIT(b []byte, offset uint8) []Event {
 			Start:    start,
 			End:      start.Add(time.Duration(length) * time.Second),
 			Genres:   genres,
+			Captions: captions,
 		})
 	}
 	return out
@@ -311,6 +315,24 @@ func parseETT(b []byte) (Text, bool) {
 		return Text{}, false
 	}
 	return Text{SourceID: source, EventID: event, Body: body}, true
+}
+
+// tagCaptionService is the ATSC caption_service_descriptor (A/65).
+const tagCaptionService = 0x86
+
+func hasDescriptor(desc []byte, tag byte) bool {
+	for len(desc) >= 2 {
+		t, n := desc[0], int(desc[1])
+		desc = desc[2:]
+		if n > len(desc) {
+			return false
+		}
+		if t == tag {
+			return true
+		}
+		desc = desc[n:]
+	}
+	return false
 }
 
 func genresIn(desc []byte) []string {

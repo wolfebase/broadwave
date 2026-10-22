@@ -918,6 +918,7 @@ func (h *Hub) beginMuxLocked(ch store.SourceChannel, host, base string, tuner, f
 	h.openRingLocked(m)
 	go h.readLoop(runCtx, m)
 	h.startFrames(runCtx, m)
+	go h.noteTuneSignal(ch, base, tuner, freq)
 	return h.addFeedLocked(m, ch)
 }
 
@@ -964,7 +965,42 @@ func (h *Hub) streamMuxLocked(ch store.SourceChannel, body io.ReadCloser, host s
 	h.openRingLocked(m)
 	go h.readLoop(runCtx, m)
 	h.startFrames(runCtx, m)
+	if ch.TunerCount > 0 && ch.BaseURL != "" {
+		go h.noteTuneSignal(ch, ch.BaseURL, -1, 0)
+	}
 	return m
+}
+
+// tuneSignalWait lets a new tune's lock settle before its signal is read.
+var tuneSignalWait = 1500 * time.Millisecond
+
+// noteTuneSignal stores a tune's signal, read once from the device's status
+// a moment after it locked, as the channel's last reading. A 1.0 tune is
+// known by its tuner and writes every channel on the frequency; a stream the
+// device tuned itself is known by the channel it reads.
+func (h *Hub) noteTuneSignal(ch store.SourceChannel, base string, tuner, freq int) {
+	if h.Store == nil || base == "" {
+		return
+	}
+	time.Sleep(tuneSignalWait)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	raw, err := fetchTunerStatus(ctx, base)
+	if err != nil {
+		return
+	}
+	for i, row := range raw {
+		mine := (tuner >= 0 && i == tuner) || (tuner < 0 && row.VctNumber != "" && row.VctNumber == ch.GuideNumber)
+		if !mine || row.TargetIP == "" || (row.SignalQualityPercent == 0 && row.SignalStrengthPercent == 0) {
+			continue
+		}
+		if freq > 0 {
+			_ = h.Store.SaveFrequencySignal(ctx, freq, true, row.SignalStrengthPercent, row.SignalQualityPercent, row.SymbolQualityPercent, time.Now())
+		} else {
+			_ = h.Store.SaveChannelSignal(ctx, ch.ID, row.SignalStrengthPercent, row.SignalQualityPercent, row.SymbolQualityPercent, time.Now())
+		}
+		return
+	}
 }
 
 func (h *Hub) hlsMuxLocked(ch store.SourceChannel) *mux {

@@ -63,9 +63,12 @@ func (h *Hub) RunStillSweep(ctx context.Context) {
 		return
 	}
 	next := 0
+	// A pass ends when no target is due; its length is logged.
+	var passStart time.Time
+	passTunes := 0
 	for ctx.Err() == nil {
 		targets := h.sweepTargets(ctx)
-		swept := false
+		swept, blocked := false, false
 		for range targets {
 			if ctx.Err() != nil {
 				return
@@ -76,14 +79,23 @@ func (h *Hub) RunStillSweep(ctx context.Context) {
 				continue
 			}
 			if !h.sweepAllowed(ctx, t.first) {
+				blocked = true
 				break
 			}
+			if passStart.IsZero() {
+				passStart = time.Now()
+			}
 			h.sweepOne(ctx, t)
+			passTunes++
 			swept = true
 			break
 		}
 		if len(targets) > 0 {
 			next %= len(targets)
+		}
+		if !swept && !blocked && passTunes > 0 {
+			slog.Info(fmt.Sprintf("stills: swept %d tunes in %s", passTunes, time.Since(passStart).Round(time.Second)))
+			passStart, passTunes = time.Time{}, 0
 		}
 		wait := sweepIdle
 		if swept {

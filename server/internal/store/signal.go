@@ -93,3 +93,32 @@ WHERE c.present = 1`)
 	})
 	return out, nil
 }
+
+// SaveChannelSignal writes one channel's reading, for a stream the device
+// tuned on its own (ATSC 3.0), whose frequency is not one row's alone.
+func (s *Store) SaveChannelSignal(ctx context.Context, channelID int64, strength, quality, symbol int, when time.Time) error {
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO channel_signals (channel_id, strength, quality, symbol, locked, checked_at) VALUES (?, ?, ?, ?, 1, ?)
+ON CONFLICT(channel_id) DO UPDATE SET
+	strength = excluded.strength,
+	quality = excluded.quality,
+	symbol = excluded.symbol,
+	locked = 1,
+	checked_at = excluded.checked_at`,
+		channelID, strength, quality, symbol, when.UTC().Format(time.RFC3339))
+	return err
+}
+
+// SetChannelStreamInfo stores what a tune read of a channel's stream: a
+// caption service, and the main sound's layout. An empty layout keeps the
+// one stored.
+func (s *Store) SetChannelStreamInfo(ctx context.Context, channelID int64, captions bool, audio string) error {
+	c := 0
+	if captions {
+		c = 1
+	}
+	_, err := s.db.ExecContext(ctx, `
+UPDATE channels SET captions = ?, audio_layout = CASE WHEN ? != '' THEN ? ELSE audio_layout END WHERE id = ?`,
+		c, audio, audio, channelID)
+	return err
+}

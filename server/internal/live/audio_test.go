@@ -399,3 +399,29 @@ func audioDesc(a esAudio) []byte {
 	}
 	return d
 }
+
+// A caption service descriptor on the video stream marks the channel as
+// captioned; the main sound's width names its layout.
+func TestPMTCaptionsAndAudioLayout(t *testing.T) {
+	const pmtPID = 0x1000
+	audios := []esAudio{{pid: 0x101, lang: "eng", audioType: 0, bsmod: 0, channels: 7}}
+	plain := audioTS(1, audios)
+	if HasCaptions(plain, 1) {
+		t.Fatal("no caption descriptor, but captions")
+	}
+	body := audioPMT(1, audios)
+	cc := []byte{descCaptionService, 3, 0xc1, 'e', 'n'}
+	withCC := append(append(append([]byte{}, body[:12]...), 0xf0, byte(len(cc))), cc...)
+	withCC = append(withCC, body[14:]...)
+	pat := psiSection(0x00, append([]byte{0x00, 0x01, 0xc1, 0x00, 0x00}, progPID(1, pmtPID)...))
+	raw := append(tsPacket(0, true, pat), tsPacket(pmtPID, true, psiSection(0x02, withCC))...)
+	if !HasCaptions(raw, 1) || HasCaptions(raw, 2) {
+		t.Fatal("caption descriptor not read")
+	}
+	if got := AudioLayout(AudioTracks(raw, 1)); got != "surround" {
+		t.Fatalf("layout %q", got)
+	}
+	if AudioLayout([]AudioTrack{{Role: "main", Channels: 2}}) != "stereo" || AudioLayout(nil) != "" {
+		t.Fatal("layouts")
+	}
+}

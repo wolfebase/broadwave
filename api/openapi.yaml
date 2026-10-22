@@ -3493,6 +3493,16 @@ components:
         artHeight: { type: integer, description: "Native logo height in pixels. Omitted until the picture has been measured." }
         network: { type: string, description: "The broadcast network when the server can tell, for voice and search: ABC, CBS, FOX, NBC, PBS, CW, MyNetworkTV, ION, Univision, Telemundo, UniMás, CBC, Radio-Canada, CTV, CTV 2, Global, Citytv, TVO, Télé-Québec, TVA, or Noovo. Read from the guide, then the name on the air (FOX 5, NBC4, UNIVSN), then the call sign. Empty otherwise." }
         protected: { type: boolean, description: "The tuner marks this channel DRM or copy protected (for example ATSC 3.0 DRM). It stays hidden; one with a clear 1.0 twin plays as that channel (playsAs)." }
+        captions: { type: boolean, description: "The last tune's stream named a caption service (PMT caption_service_descriptor). Omitted otherwise or before a tune." }
+        audio: { type: string, enum: [mono, stereo, surround], description: "The main sound's layout the last tune read (AC-3 or AC-4 channel count). Omitted before a tune." }
+        signal:
+          type: object
+          required: [quality, strength, at]
+          description: "The last signal reading: from a tune of this channel (read from the tuner a moment after it locks) or a signal check. Omitted before either."
+          properties:
+            quality: { type: integer, description: "Signal quality, percent." }
+            strength: { type: integer, description: "Signal strength, percent." }
+            at: { type: string, format: date-time }
         standard: { type: string, enum: [atsc3], description: "atsc3 for an ATSC 3.0 broadcast. Omitted for everything else." }
         twinId: { type: integer, format: int64, description: "The other channel of an ATSC 1.0 and 3.0 pair of the same station. Its listings are shared." }
         twinChoice: { type: string, enum: [atsc3, atsc1, both], description: "Which channel of the pair shows in the guide." }
@@ -3563,6 +3573,9 @@ components:
         cast: { type: string }
         gameId: { type: string, description: "Scoreboard game this listing is. Empty when it is not a matched game." }
         guideSource: { type: string, description: "Where this listing came from: silicondust, schedules-direct, xmltv, playlist, or broadcast." }
+        cc: { type: boolean, description: "The listing says it has closed captions (XMLTV teletext subtitles, a Schedules Direct cc property, or a broadcast guide's caption service). Omitted when it does not say; the channel's `captions` can fill in." }
+        video: { type: string, enum: [sd, hd, uhd], description: "The picture the listing names. Omitted when it does not say." }
+        audio: { type: string, enum: [mono, stereo, surround], description: "The sound the listing names; Dolby and 5.1 are surround. Omitted when it does not say; the channel's `audio` can fill in." }
         guideNumber: { type: string }
         channelName: { type: string }
         start: { type: string, format: date-time }

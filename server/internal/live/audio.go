@@ -75,6 +75,73 @@ func AudioTracks(data []byte, program int) []AudioTrack {
 	return nil
 }
 
+// descCaptionService is the ATSC caption_service_descriptor (A/65): a
+// program that carries closed captions names them in its PMT.
+const descCaptionService = 0x86
+
+// HasCaptions reports a caption service descriptor in a program's PMT, in
+// its program loop or on any of its streams.
+func HasCaptions(data []byte, program int) bool {
+	pmtPID := 0
+	for _, sec := range sections(data, 0) {
+		if len(sec) < 12 || sec[0] != 0x00 {
+			continue
+		}
+		if pmtPID = patPMT(sec, program); pmtPID != 0 {
+			break
+		}
+	}
+	if pmtPID == 0 {
+		return false
+	}
+	for _, sec := range sections(data, pmtPID) {
+		if len(sec) < 12 || sec[0] != 0x02 {
+			continue
+		}
+		info := int(sec[10]&0x0f)<<8 | int(sec[11])
+		end := sectionEnd(sec)
+		if 12+info > end {
+			return false
+		}
+		if hasDesc(sec[12:12+info], descCaptionService) {
+			return true
+		}
+		off := 12 + info
+		for off+5 <= end {
+			esLen := int(sec[off+3]&0x0f)<<8 | int(sec[off+4])
+			es := off + 5
+			if es+esLen > end {
+				break
+			}
+			if hasDesc(sec[es:es+esLen], descCaptionService) {
+				return true
+			}
+			off = es + esLen
+		}
+		return false
+	}
+	return false
+}
+
+// AudioLayout is the main sound's layout: surround (four channels or more:
+// an AC-3 descriptor's 3/2 counts five, its LFE unsaid), stereo, mono, or
+// empty when its width is unknown.
+func AudioLayout(tracks []AudioTrack) string {
+	main, ok := PickTrack(tracks, "main")
+	if !ok {
+		return ""
+	}
+	switch {
+	case main.Channels >= 4:
+		return "surround"
+	case main.Channels >= 2:
+		return "stereo"
+	case main.Channels == 1:
+		return "mono"
+	}
+	return ""
+}
+
 type rawAudio struct {
 	pid       int
 	codec     string
@@ -824,6 +891,9 @@ func (h *Hub) saveTracks(m *mux, f *feed, window time.Duration) {
 				tracks[i].Measured = true
 			}
 		}
+	}
+	if err := h.Store.SetChannelStreamInfo(context.Background(), id, HasCaptions(m.pictureBytes(), f.program), AudioLayout(tracks)); err != nil {
+		slog.Warn(fmt.Sprintf("store stream info for %s: %v", f.channel.GuideNumber, err))
 	}
 	raw := encodeTracks(tracks)
 	h.mu.Lock()

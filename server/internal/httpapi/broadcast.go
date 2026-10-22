@@ -58,6 +58,7 @@ func (s *Server) ApplyBroadcast(ctx context.Context, g psip.Guide) (int, error) 
 			Description: text[fmt.Sprintf("%d:%d", ev.SourceID, ev.EventID)],
 			Category:    strings.Join(ev.Genres, ", "),
 			GuideSource: "broadcast",
+			CC:          ev.Captions,
 			Start:       ev.Start,
 			End:         ev.End,
 		}

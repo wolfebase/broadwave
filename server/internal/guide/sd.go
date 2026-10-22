@@ -428,6 +428,10 @@ type sdScheduled struct {
 		Body string `json:"body"`
 		Code string `json:"code"`
 	} `json:"ratings"`
+	// VideoProperties and AudioProperties describe this airing: "hdtv",
+	// "uhdtv"; "cc", "stereo", "dd 5.1", "Dolby", "dvs", "sap".
+	VideoProperties []string `json:"videoProperties"`
+	AudioProperties []string `json:"audioProperties"`
 }
 
 type sdBlock struct {
@@ -612,6 +616,16 @@ func sdAiring(s sdScheduled, p sdProgram) store.Airing {
 	}
 	row.Rating = sdRating(ratings)
 	row.Cast = sdCast(p)
+	for _, v := range s.VideoProperties {
+		row.Video = richerVideo(row.Video, VideoQuality(v))
+	}
+	for _, a := range s.AudioProperties {
+		if strings.EqualFold(strings.TrimSpace(a), "cc") {
+			row.CC = true
+			continue
+		}
+		row.Audio = richerAudio(row.Audio, AudioLayout(a))
+	}
 	return row
 }
 

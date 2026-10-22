@@ -378,3 +378,19 @@ func ettSection(text []byte) []byte {
 	copy(sec[13:], text)
 	return sec
 }
+
+// An event that names a caption service has captions; one that does not, not.
+func TestEITCaptionService(t *testing.T) {
+	plain := eitSection([]byte{0})
+	if evs := parseEIT(plain, 0); len(evs) != 1 || evs[0].Captions {
+		t.Fatalf("plain %+v", evs)
+	}
+	// descriptors_length 5, then 0x86 with a 3-byte body, before the CRC.
+	withCC := make([]byte, 0, len(plain)+5)
+	withCC = append(withCC, plain[:len(plain)-6]...)
+	withCC = append(withCC, 0x00, 0x05, 0x86, 0x03, 0xc1, 0x65, 0x6e)
+	withCC = append(withCC, 0, 0, 0, 0)
+	if evs := parseEIT(withCC, 0); len(evs) != 1 || !evs[0].Captions {
+		t.Fatalf("captioned %+v", evs)
+	}
+}

@@ -26,6 +26,8 @@
 - Web: the Pair screen tells an owner who is locked out how to get back in (`BROADWAVE_RESET_SIGNIN=1`), with a link to the steps.
 - Docs: a short Set up a server page, for people who installed an app first.
 - Server: idle tuners keep a recent picture of every channel for the guide. One tuner at a time tunes each frequency nobody is on (favorites first, then guide order, 20 s apart), grabs every channel on it, and lets go at once. It runs only while nothing on that tuner is watched, recorded, or warm, no recording starts within 3 minutes, and the tuner reports two free; a watch, recording, or guess stops it before it tunes. Settings › Playback › Fresh channel pictures (or `BROADWAVE_STILL_SWEEP=0`) turns it off. `/frames` marks these stills `sweep: true` and lists them for 45 minutes.
+- API: listings carry `cc` (closed captions), `video` (sd, hd, uhd), and `audio` (mono, stereo, surround) when the guide says so: from XMLTV and SiliconDust (`<video><quality>`, `<audio><stereo>`, teletext `<subtitles>`), Schedules Direct's per-airing video and audio properties, and the broadcast guide's caption service. In `/airings` (also `?fields=grid`) and `/now`.
+- API: `/channels` carries what the last tune read: `captions` (the stream names a caption service), `audio` (the main sound's layout), and `signal` (quality and strength in percent, and when).
 
 ### Changed
 

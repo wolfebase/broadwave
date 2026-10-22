@@ -2378,6 +2378,22 @@ export interface components {
             network?: string;
             /** @description The tuner marks this channel DRM or copy protected (for example ATSC 3.0 DRM). It stays hidden; one with a clear 1.0 twin plays as that channel (playsAs). */
             protected?: boolean;
+            /** @description The last tune's stream named a caption service (PMT caption_service_descriptor). Omitted otherwise or before a tune. */
+            captions?: boolean;
+            /**
+             * @description The main sound's layout the last tune read (AC-3 or AC-4 channel count). Omitted before a tune.
+             * @enum {string}
+             */
+            audio?: "mono" | "stereo" | "surround";
+            /** @description The last signal reading: from a tune of this channel (read from the tuner a moment after it locks) or a signal check. Omitted before either. */
+            signal?: {
+                /** @description Signal quality, percent. */
+                quality: number;
+                /** @description Signal strength, percent. */
+                strength: number;
+                /** Format: date-time */
+                at: string;
+            };
             /**
              * @description atsc3 for an ATSC 3.0 broadcast. Omitted for everything else.
              * @enum {string}
@@ -2473,6 +2489,18 @@ export interface components {
             gameId?: string;
             /** @description Where this listing came from: silicondust, schedules-direct, xmltv, playlist, or broadcast. */
             guideSource?: string;
+            /** @description The listing says it has closed captions (XMLTV teletext subtitles, a Schedules Direct cc property, or a broadcast guide's caption service). Omitted when it does not say; the channel's `captions` can fill in. */
+            cc?: boolean;
+            /**
+             * @description The picture the listing names. Omitted when it does not say.
+             * @enum {string}
+             */
+            video?: "sd" | "hd" | "uhd";
+            /**
+             * @description The sound the listing names; Dolby and 5.1 are surround. Omitted when it does not say; the channel's `audio` can fill in.
+             * @enum {string}
+             */
+            audio?: "mono" | "stereo" | "surround";
             guideNumber?: string;
             channelName?: string;
             /** Format: date-time */
