@@ -6,6 +6,22 @@ import { inAppDepth } from "./router";
 
 const selector = "button, a[href], input, select, textarea, [tabindex]";
 
+// The page the last key press or touch happened on. The press that opens a page
+// happens on the page before it. This loads with the shell, so a press made
+// before a page's own code arrives still counts, and the page does not take
+// the focus back when its list lands.
+let inputPath = "";
+const mark = () => {
+  inputPath = window.location.pathname;
+};
+window.addEventListener("keydown", mark, true);
+window.addEventListener("pointerdown", mark, true);
+
+/** The person has pressed a key or touched the screen on this page. */
+export function inputOnThisPage() {
+  return inputPath === window.location.pathname;
+}
+
 // Rows and lists the remote should walk in order. A tile on the multiview is
 // also role=group, and trapping arrows inside it would skip the next tile.
 // A game card wraps its buttons, so it is not a row: Down has to reach the next line.
@@ -97,11 +113,13 @@ function boxes(scope: ParentNode) {
 /**
  * A notice closed from the keyboard or a remote takes its focused button with it,
  * and the keys would land nowhere. The ring moves to the page's first control.
- * A mouse click (detail > 0) leaves focus to the pointer.
+ * A mouse click (detail > 0) leaves focus to the pointer, except on a TV,
+ * where a pointer remote still needs a ring for the arrows that follow.
  */
 export function focusPastNotice(event: { detail: number; currentTarget: EventTarget | null }) {
   const notice = event.currentTarget instanceof HTMLElement ? event.currentTarget.closest(".banner-update, .banner-home") : null;
-  if (event.detail !== 0 || !notice) return;
+  const tv = document.documentElement.dataset.layout === "tv";
+  if (!notice || (event.detail !== 0 && !tv)) return;
   window.setTimeout(() => {
     const active = document.activeElement;
     if (active && active !== document.body && document.contains(active)) return;
@@ -244,7 +262,11 @@ export function installTvRemote(): () => void {
     // over Delete would otherwise skip Play.
     let nextId: number | null = null;
     if (dir === "down" && inBar) {
-      const page = items.filter((item) => item.el.closest("main")).map((item) => item.box);
+      // A notice across the top is not the page. Its Not now sits at the far end,
+      // and landing there throws the ring across the screen; Up from the page reaches it.
+      const inMain = items.filter((item) => item.el.closest("main"));
+      const content = inMain.filter((item) => !item.el.closest(".banner-update, .banner-home"));
+      const page = (content.length > 0 ? content : inMain).map((item) => item.box);
       nextId = firstBelow(from, page);
     } else {
       nextId = nearest(from, all, dir);
