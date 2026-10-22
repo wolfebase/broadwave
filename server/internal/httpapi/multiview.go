@@ -38,13 +38,12 @@ func (s *Server) multiviewPlan(w http.ResponseWriter, r *http.Request) {
 	tunerCount := 0
 	if s.Hub != nil {
 		for _, feed := range s.Hub.Status() {
-			label := feed.GuideNumber
-			if label == "" {
-				label = feed.Name
-			}
+			label := live.ChannelLabel(feed.GuideNumber, feed.Name)
 			direct := false
 			if ch, err := s.Store.SourceChannel(r.Context(), feed.ChannelID); err == nil {
-				direct = planChannel(ch).Direct
+				plan := planChannel(ch)
+				direct = plan.Direct
+				label = live.ChannelLabel(plan.Number, plan.Name)
 			}
 			ours = append(ours, live.TunedFreq{FrequencyHz: feed.FrequencyHz, Labels: []string{label}, ChannelIDs: []int64{feed.ChannelID}, Direct: direct})
 		}
@@ -54,11 +53,7 @@ func (s *Server) multiviewPlan(w http.ResponseWriter, r *http.Request) {
 				if tuner.Ours || (tuner.Guide == "" && tuner.Target == "") {
 					continue
 				}
-				label := tuner.Name
-				if label == "" {
-					label = tuner.Guide
-				}
-				foreign = append(foreign, label)
+				foreign = append(foreign, live.ChannelLabel(tuner.Guide, tuner.Name))
 			}
 		}
 	}

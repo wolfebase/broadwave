@@ -28,6 +28,22 @@ type Graph struct {
 	// Start is an input seek, in seconds. A recording resume begins here so
 	// the encode does not play the file from the beginning.
 	Start float64
+	// SD is a source the last tune read as 576 lines or shorter. Its frames
+	// are decoded on the processor so sdCaptionCrop can run on them.
+	SD bool
+}
+
+// sdCaptionCrop drops the top four rows of a picture 576 lines or shorter.
+// SD broadcasts carry closed caption data (line 21) in the first rows, and it
+// shows as white dashes along the top on every screen the encode reaches:
+// AirPlay, Cast, and the web. Four rows are two lines of each field, so the
+// field order stays. A taller picture passes whole. ih is read once, when
+// the filter starts.
+const sdCaptionCrop = "crop=w=iw:h='ih-if(lte(ih,576),4,0)':x=0:y='if(lte(ih,576),4,0)'"
+
+// SDHeight reports a picture height as standard definition.
+func SDHeight(height int) bool {
+	return height > 0 && height <= 576
 }
 
 func NormalizeMode(mode string) string {
@@ -227,7 +243,7 @@ func OutputEncoder(base, codec string) string {
 // only drops frames and runs on GPU frames: decoding a 1080i tile there took
 // a seventh of the CPU time.
 func gpuDecode(g Graph, interlaced bool, vaapiDeint string) bool {
-	if !vaapiFamily(g.Encoder) || g.Mode == "film" {
+	if !vaapiFamily(g.Encoder) || g.Mode == "film" || g.SD {
 		return false
 	}
 	if interlaced && vaapiDeint == "" {
@@ -271,13 +287,13 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 		if rate == "" {
 			rate = "24000/1001"
 		}
-		return fmt.Sprintf("pullup,fps=%s,format=nv12,hwupload,scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:format=nv12", rate, width, height)
+		return fmt.Sprintf(sdCaptionCrop+",pullup,fps=%s,format=nv12,hwupload,scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:format=nv12", rate, width, height)
 	}
 	if vaapiFamily(g.Encoder) && g.Mode != "film" && (vaapiDeint != "" || !interlaced) {
 		// Frames already on the GPU skip the upload.
 		vf := ""
 		if !gpuDecode(g, interlaced, vaapiDeint) {
-			vf = "format=nv12,hwupload"
+			vf = sdCaptionCrop + ",format=nv12,hwupload"
 		}
 		if vaapiDeint != "" {
 			fieldRate := "frame"
@@ -304,7 +320,7 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 		return vf
 	}
 	scale := fmt.Sprintf("scale='min(%d,iw)':'min(%d,ih)':force_original_aspect_ratio=decrease,setsar=1%s", width, height, rate)
-	var pre []string
+	pre := []string{sdCaptionCrop}
 	switch {
 	case g.Mode == "film":
 		pre = append(pre, "pullup")
@@ -440,7 +456,7 @@ func streamFacts(src Source, fieldOrder string, spec Rendition, encoder, deint s
 		enc = OutputEncoder("libx264", spec.Codec)
 	}
 	out.Encoder = enc
-	g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(spec.Video), Encoder: enc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: spec.FullRate}
+	g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(spec.Video), Encoder: enc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: spec.FullRate, SD: SDHeight(src.Height)}
 	interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
 	field := interlaced && !smallPicture(g)
 	capW, capH, rate := outputSize(g, field)

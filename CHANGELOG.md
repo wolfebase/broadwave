@@ -42,6 +42,8 @@
 - Web: Settings › Devices says which device this browser is signed in as instead of offering to pair it again, and warns before you revoke this browser or the only admin device.
 - Privacy policy: says what the secure name sends to the Wolfe Up service (the server's key, its random id, and its home network addresses; nothing you watch) and what Sign in with Cloudflare does in your own Cloudflare account. The web app's About, Check for updates, and Cloudflare card say the same in a line.
 - Docs: README and Support say how to get the apps (App Store soon, the web app now) and put Sign in with Cloudflare first and Tailscale second for away from home; Away from home lists its three ways and uses the Settings section's real name; First run matches the setup screens.
+- Multiview and the channel picker name every channel holding a tuner the same way, by number and name ("4.1 KBWV and 5.1 WTST are on"), instead of mixing names and numbers.
+- Channel up and channel down are both ready ahead: the server keeps two guesses at the next channel instead of one (a picture on a frequency already tuned, or a tune while a tuner stays free after it). The oldest guess is the first to go, for a new guess or for a watch or recording that needs its tuner. The web player warms both.
 
 ### Fixed
 
@@ -66,6 +68,8 @@
 - Web on a TV: Recordings starts the remote on the newest recording, not on the All filter above it.
 - Web on a TV: a key pressed while a page is still loading keeps its place; the page no longer pulls the ring back to its first button when its list arrives.
 - Web on a TV: Down from the tabs goes into the page, not to the far end of a notice above it; Up from the page reaches the notice. Closing a notice with a pointer remote also keeps the ring on the page.
+- Web: a channel that is slow to start says "Almost ready" instead of "Lining up with live" unless Line up automatically is on, as on the Apple apps.
+- SD channels no longer show white dashes (closed caption data) along the top of the picture on the web, AirPlay, Cast, and multiview: an encode of a picture 576 lines or shorter drops its top four rows. A picture sent as broadcast is unchanged.
 
 ## 0.15.1 — 2026-10-21
 

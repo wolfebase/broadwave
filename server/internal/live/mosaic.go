@@ -123,7 +123,7 @@ func mosaicArgs(inputs []mosaicInput, encoder string) []string {
 	var graph []string
 	var stack string
 	for i := range inputs {
-		graph = append(graph, fmt.Sprintf("[%s]yadif=mode=send_field:deint=interlaced,fps=60000/1001,"+
+		graph = append(graph, fmt.Sprintf("[%s]"+sdCaptionCrop+",yadif=mode=send_field:deint=interlaced,fps=60000/1001,"+
 			"scale=960:540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2,setsar=1[t%d]", pick(i, "v"), i))
 		stack += fmt.Sprintf("[t%d]", i)
 	}

@@ -539,7 +539,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		if src.Film && NormalizeMode(mode) == "broadcast" {
 			mode = "film"
 		}
-		probe := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate}
+		probe := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate, SD: SDHeight(src.Height)}
 		inter := fieldDoubled(src.VideoCodec, probe.Mode, src.Progressive, src.Lace)
 		gpu = gpuDecode(probe, inter, vaapiDeintMode(probe, inter))
 	}
@@ -595,7 +595,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		if src.Film && NormalizeMode(mode) == "broadcast" {
 			mode = "film"
 		}
-		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate}
+		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate, SD: SDHeight(src.Height)}
 		interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
 		field := interlaced && !smallPicture(g)
 		width, height, rate := outputSize(g, field)

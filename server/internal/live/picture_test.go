@@ -2,6 +2,9 @@ package live
 
 import (
 	"bytes"
+	"fmt"
+	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -306,5 +309,41 @@ func TestLowPowerVAAPIDropsBFrames(t *testing.T) {
 	UseLowPower()
 	if !strings.Contains(hevc, "-bf 2 -low_power 0") {
 		t.Fatalf("hevc without its own low-power encoder stays on the normal one: %s", hevc)
+	}
+}
+
+// An SD picture loses the caption-data rows at its top in every encode; a
+// copy is left alone, and an HD picture keeps every row.
+func TestSDCaptionRowsAreCropped(t *testing.T) {
+	sw := strings.Join(PictureArgs(Graph{VideoCodec: "MPEG2", Profile: "transparent", Encoder: "libx264", SD: true}), " ")
+	if !strings.Contains(sw, "-vf "+sdCaptionCrop+",bwdif") {
+		t.Fatalf("software: %s", sw)
+	}
+	va := PictureArgs(Graph{VideoCodec: "H264", Profile: "transparent", Encoder: "h264_vaapi", Progressive: true, SD: true})
+	if slices.Contains(va, "-hwaccel") || !strings.Contains(strings.Join(va, " "), sdCaptionCrop+",format=nv12,hwupload") {
+		t.Fatalf("vaapi SD decodes on the GPU or skips the crop: %v", va)
+	}
+	hd := PictureArgs(Graph{VideoCodec: "H264", Profile: "transparent", Encoder: "h264_vaapi", Progressive: true})
+	if !slices.Contains(hd, "-hwaccel") {
+		t.Fatal("an HD picture left the GPU decode")
+	}
+	if !SDHeight(480) || !SDHeight(576) || SDHeight(720) || SDHeight(0) {
+		t.Fatal("SD heights")
+	}
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	// The filter itself: 480 rows lose four, 720 keep all.
+	for _, c := range []struct{ size, want string }{{"704x480", "704x476"}, {"1280x720", "1280x720"}} {
+		out, err := exec.Command("ffmpeg", "-hide_banner", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size="+c.size+":rate=30",
+			"-frames:v", "1", "-vf", sdCaptionCrop, "-f", "rawvideo", "-pix_fmt", "gray", "-").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var w, h int
+		fmt.Sscanf(c.want, "%dx%d", &w, &h)
+		if len(out) != w*h {
+			t.Fatalf("%s: %d bytes, want %s", c.size, len(out), c.want)
+		}
 	}
 }

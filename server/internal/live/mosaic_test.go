@@ -41,8 +41,8 @@ func TestMosaicArgs(t *testing.T) {
 	two := strings.Join(mosaicArgs([]mosaicInput{{program: 3, input: "pipe:3"}, {input: "pipe:4"}}, "libx264"), " ")
 	for _, want := range []string{
 		"-i pipe:3", "-i pipe:4",
-		"[0:p:3:v:0]yadif=mode=send_field:deint=interlaced,fps=60000/1001",
-		"[1:v:0]yadif",
+		"[0:p:3:v:0]" + sdCaptionCrop + ",yadif=mode=send_field:deint=interlaced,fps=60000/1001",
+		"[1:v:0]" + sdCaptionCrop + ",yadif",
 		"xstack=inputs=2:layout=0_0|w0_0:fill=black,pad=1920:1080:0:270,format=yuv420p[v]",
 		"-map [v] -map 0:p:3:a:0?",
 		"-c:v libx264", "-c:a aac",

@@ -247,8 +247,11 @@ type Hub struct {
 	grabbers sync.WaitGroup
 	// failures are recent renditions given up on, by channel and key.
 	failures map[string]startFailure
-	// guessTune is the tune a guess opened without a picture.
-	guessTune *feed
+	// guessTunes are the tunes guesses opened without a picture, oldest first.
+	guessTunes []*feed
+	// warmMu runs one guessed tune at a time: two at once would each count
+	// the same free tuners.
+	warmMu sync.Mutex
 	// mutes are channels whose main sound sent no frame, until when their
 	// encodes start without it.
 	mutes map[int64]time.Time
@@ -361,8 +364,10 @@ type rendition struct {
 	viewers int
 	seen    time.Time
 	idle    *time.Timer
-	// guess is set on a picture Warm started that no watch has joined yet.
+	// guess is set on a picture Warm started that no watch has joined yet;
+	// guessAt is when, so the oldest guess is the first to go.
 	guess   bool
+	guessAt time.Time
 	stamper playlistStamper
 	// clock maps this encode onto wall time. A transcode's fMP4 timestamps
 	// start at zero, so each encode has its own; seedClockLocked lines it up

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
 	"time"
 
 	"broadwave/internal/store"
@@ -12,7 +13,8 @@ import (
 // Warm starts a channel's picture before anyone asks to watch it, so a
 // channel change that follows starts on segments that already exist. It is a
 // guess: it uses a frequency this server already has open, never frees
-// another picture to fit the budget, and keeps one guess at a time. An ATSC
+// another picture to fit the budget, and keeps two guesses at a time, so
+// channel up and channel down are both warm. An ATSC
 // 3.0 channel always needs its own tune and takes 5-7 s cold, so a guess may
 // tune one for a player that takes it as sent, when a second tuner that can
 // carry it stays free. The picture stops after RenditionIdle unless a watch
@@ -121,28 +123,57 @@ func (h *Hub) Warm(ctx context.Context, channelID int64, want Rendition, alterna
 	// A guess is the first picture a real watch frees, and it does not make
 	// its tuner look watched.
 	r.guess = true
+	r.guessAt = time.Now()
 	r.seen = time.Time{}
 	h.idleLocked(channelID, key, r)
 	h.changed()
 	return true, nil
 }
 
-// dropGuessesLocked stops every guessed picture nobody joined, except the one
-// named, so browsing a list never runs more than one.
+// maxGuesses is how many guesses run at once: channel up and channel down.
+// Guessed pictures and guessed tunes are counted apart.
+const maxGuesses = 2
+
+// dropGuessesLocked stops the guessed pictures nobody joined, except the one
+// named and the newest other one, so browsing a list never runs more than
+// maxGuesses. The other one is kept only on another channel, and not when
+// both would hold a device-tuned (ATSC 3.0) tuner of their own.
 func (h *Hub) dropGuessesLocked(keep *feed, keepKey string) {
+	type guessed struct {
+		f   *feed
+		key string
+		at  time.Time
+	}
+	var others []guessed
 	for _, f := range h.feedsLocked() {
 		for key, r := range f.renditions {
-			if r.ladderChild {
+			if r.ladderChild || !r.guess || r.viewers > 0 || (f == keep && key == keepKey) {
 				continue
 			}
-			if r.guess && r.viewers == 0 && (f != keep || key != keepKey) {
-				h.stopRenditionLocked(f, key)
-			}
+			others = append(others, guessed{f, key, r.guessAt})
 		}
+	}
+	slices.SortFunc(others, func(a, b guessed) int { return b.at.Compare(a.at) })
+	kept := 1
+	for _, g := range others {
+		if kept < maxGuesses && g.f != keep && !(h.deviceTunedLocked(g.f) && h.deviceTunedLocked(keep)) {
+			kept++
+			continue
+		}
+		h.stopRenditionLocked(g.f, g.key)
+	}
+	for _, f := range h.feedsLocked() {
 		if f != keep {
 			h.dropIfUnusedLocked(f)
 		}
 	}
+}
+
+// deviceTunedLocked is a feed on a stream the device tuned (ATSC 3.0): it
+// holds a tuner of its own.
+func (h *Hub) deviceTunedLocked(f *feed) bool {
+	m := muxOf(h, f)
+	return m != nil && m.tuner < 0 && m.input == "" && len(m.feeds) == 1
 }
 
 func (h *Hub) idleLocked(channelID int64, key string, r *rendition) {
@@ -279,13 +310,17 @@ func (h *Hub) claimWarm3Locked(host string, tuners []Tuner, held map[int]bool) i
 }
 
 // warmTune tunes a 1.0 channel for a guess without starting its picture, so
-// a watch that follows skips the lock and finds its buffer filling. It tunes
-// only while two tuners are free (one stays free after it) and no recording
-// is about to start, and keeps one such tune at a time, for guessLinger.
+// a watch that follows skips the lock and finds its buffer filling. It keeps
+// up to maxGuesses such tunes (channel up and channel down), each for
+// guessLinger, and tunes only while a tuner stays free after it and no
+// recording is about to start. The oldest guess's tune is the first to go,
+// for a new guess and for a watch or recording that needs its tuner.
 func (h *Hub) warmTune(ctx context.Context, ch store.SourceChannel) {
 	if h.TunerLinger <= 0 || ch.TunerCount == 0 || ch.BaseURL == "" || hlsStream(ch) {
 		return
 	}
+	h.warmMu.Lock()
+	defer h.warmMu.Unlock()
 	raw, err := fetchTunerStatus(ctx, ch.BaseURL)
 	if err != nil {
 		return
@@ -299,21 +334,51 @@ func (h *Hub) warmTune(ctx context.Context, ch store.SourceChannel) {
 		h.mu.Unlock()
 		return
 	}
-	// The last guess's tune is the first to go.
-	if g := h.guessTune; g != nil && h.channels[g.channel.ID] == g && len(g.renditions) == 0 && g.recording == nil && !g.tuneHeld() && !g.heldOutside() {
-		h.stopFeedLocked(g)
-	}
-	h.guessTune = nil
-	used := h.usedTunersLocked(hostOf(ch.BaseURL))
-	held := h.heldLocked(hostOf(ch.BaseURL), tuners)
-	free := 0
-	for _, t := range tuners {
-		if !used[t.Index] && !held[t.Index] && t.Target == "" && t.Guide == "" {
-			free++
+	host := hostOf(ch.BaseURL)
+	// A guess a watch joined, or a recording took, is no longer one.
+	guesses := h.guessTunes[:0]
+	for _, g := range h.guessTunes {
+		if h.channels[g.channel.ID] == g && len(g.renditions) == 0 && g.recording == nil {
+			guesses = append(guesses, g)
 		}
 	}
+	// A tuner a stopped guess held reads busy in the status fetched before.
+	freed := map[int]bool{}
+	// drop stops the oldest guess that nothing else is reading.
+	drop := func() bool {
+		for i, g := range guesses {
+			if g.tuneHeld() || g.heldOutside() {
+				continue
+			}
+			if m := muxOf(h, g); m != nil && m.tuner >= 0 && hostOf(m.host) == host {
+				freed[m.tuner] = true
+			}
+			h.stopFeedLocked(g)
+			guesses = slices.Delete(guesses, i, i+1)
+			return true
+		}
+		return false
+	}
+	free := func() int {
+		used := h.usedTunersLocked(host)
+		held := h.heldLocked(host, tuners)
+		n := 0
+		for _, t := range tuners {
+			// A stopped guess's tuner is set to none as it is released.
+			if freed[t.Index] || (!used[t.Index] && !held[t.Index] && t.Target == "" && t.Guide == "") {
+				n++
+			}
+		}
+		return n
+	}
+	for len(guesses) >= maxGuesses && drop() {
+	}
+	for free() < 2 && drop() {
+	}
+	enough := free() >= 2 && len(guesses) < maxGuesses
+	h.guessTunes = guesses
 	h.mu.Unlock()
-	if free < 2 {
+	if !enough {
 		return
 	}
 	f, err := h.tuneFeed(ctx, ch, nil)
@@ -323,7 +388,7 @@ func (h *Hub) warmTune(ctx context.Context, ch store.SourceChannel) {
 	}
 	if len(f.renditions) == 0 {
 		h.lingerLocked(f, guessLinger)
-		h.guessTune = f
+		h.guessTunes = append(h.guessTunes, f)
 		slog.Info("live: tuned " + ch.GuideNumber + " ahead of a channel change")
 	}
 }

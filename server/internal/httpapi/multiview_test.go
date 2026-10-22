@@ -56,7 +56,7 @@ func TestPickerNamesTheCostAndTheRecording(t *testing.T) {
 	for _, o := range one.Offers {
 		got[o.ChannelID] = o
 	}
-	if got[id["4.2"]].Label != "Same tune as 4.1" || got[id["5.1"]].Label != "Uses a tuner" {
+	if got[id["4.2"]].Label != "Same tune as 4.1 KBWV" || got[id["5.1"]].Label != "Uses a tuner" {
 		t.Fatalf("%+v", one.Offers)
 	}
 	if len(one.Stops) != 0 {
@@ -76,14 +76,14 @@ func TestPickerNamesTheCostAndTheRecording(t *testing.T) {
 	if len(both.Stops) != 1 || both.Stops[0].ChannelID != id["9.1"] {
 		t.Fatalf("%+v", both.Stops)
 	}
-	if both.Stops[0].Reason != "9.1 stops at 3:00 PM. Jeopardy is recording." {
+	if both.Stops[0].Reason != "9.1 KRVR stops at 3:00 PM. Jeopardy is recording." {
 		t.Fatalf("reason %q", both.Stops[0].Reason)
 	}
 	got = map[int64]live.Offer{}
 	for _, o := range both.Offers {
 		got[o.ChannelID] = o
 	}
-	if got[id["4.2"]].Label != "Same tune as 4.1" {
+	if got[id["4.2"]].Label != "Same tune as 4.1 KBWV" {
 		t.Fatalf("share %+v", got[id["4.2"]])
 	}
 	if got[id["5.1"]].Cost != "tuner" || got[id["5.1"]].Label != "Uses a tuner" {

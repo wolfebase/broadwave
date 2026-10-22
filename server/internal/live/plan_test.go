@@ -275,3 +275,20 @@ func TestPlanKeepsAChannelAlreadyPlayingBesideALink(t *testing.T) {
 		t.Fatalf("holders %v", plan.Blocked[0].Holders)
 	}
 }
+
+// Every channel on the busy line is named one way: number and name, ours
+// and another app's alike, not a call sign beside a number.
+func TestPlanNamesEveryHolderTheSameWay(t *testing.T) {
+	if got := ChannelLabel("4.1", "KBWV"); got != "4.1 KBWV" {
+		t.Fatalf("label %q", got)
+	}
+	if ChannelLabel("4.1", "") != "4.1" || ChannelLabel("", "News") != "News" || ChannelLabel("4.1", "4.1") != "4.1" {
+		t.Fatal("a label with one part")
+	}
+	mine := ch(1, 100, "4.1")
+	mine.Name = "KBWV"
+	plan := PlanMultiview([]PlanChannel{mine, ch(2, 200, "9.1")}, 2, nil, []string{ChannelLabel("5.1", "WTST")})
+	if plan.Blocked[0].Reason != "Both tuners are busy. 5.1 WTST and 4.1 KBWV are on." {
+		t.Fatalf("reason: %q", plan.Blocked[0].Reason)
+	}
+}
