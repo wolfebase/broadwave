@@ -52,8 +52,10 @@ var (
 // of darkProbe (or the 10 s a FLEX takes to refuse an open of the frequency).
 const noSignalFor = 10 * time.Minute
 
-// NoSignal is true when this channel's tuner has sent nothing and reports no
-// lock. A tuner that does not answer, and a feed with no tuner, are not.
+// NoSignal is true when this channel's tuner is silent and reports no lock. A
+// tuner that does not answer, and a feed with no tuner, are not. Silent means
+// nothing in the last quietFor: a feed warmed or watched before the station
+// went off the air has sent bytes, and still has no signal now.
 func (h *Hub) NoSignal(channelID int64) bool {
 	h.mu.Lock()
 	var m *mux
@@ -64,11 +66,21 @@ func (h *Hub) NoSignal(channelID int64) bool {
 		}
 	}
 	h.mu.Unlock()
-	if m == nil || host == "" || tuner < 0 || m.got.Load() {
+	if m == nil || host == "" || tuner < 0 || heardWithin(m, quietFor) {
 		return false
 	}
 	status, err := (hdhr.Control{Addr: controlAddr(host)}).Get("/tuner" + strconv.Itoa(tuner) + "/status")
 	return err == nil && !hdhr.ParseStatus(status).Locked
+}
+
+// quietFor is how long a tuner has to send nothing before its "no lock" counts.
+const quietFor = 2 * time.Second
+
+func heardWithin(m *mux, d time.Duration) bool {
+	if !m.got.Load() {
+		return false
+	}
+	return time.Since(time.Unix(0, m.heard.Load())) < d
 }
 
 // DropDark gives back the tuner under a channel that never locked, without

@@ -66,6 +66,9 @@
 - Web on a TV: Recordings starts the remote on the newest recording, not on the All filter above it.
 - Web on a TV: a key pressed while a page is still loading keeps its place; the page no longer pulls the ring back to its first button when its list arrives.
 - Web on a TV: Down from the tabs goes into the page, not to the far end of a notice above it; Up from the page reaches the notice. Closing a notice with a pointer remote also keeps the ring on the page.
+- Server: a channel that was playing or warmed a moment ago and is now off the air says "This channel isn't coming in" instead of "didn't start".
+- Web: a switch or choice in Settings moves the moment you press it instead of after the server answers.
+- Web: a show's page puts All recordings at the start of the line, not centered.
 
 ## 0.15.1 — 2026-10-21
 
