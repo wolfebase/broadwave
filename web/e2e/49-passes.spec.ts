@@ -132,7 +132,8 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
 
   // Fits a phone.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/schedule");
+  // ?layout=tv above is remembered by this browser; auto goes back to the window's own layout.
+  await page.goto("/schedule?layout=auto");
   await settle(page);
   await rows.filter({ hasText: "late local" }).getByRole("button", { name: /^Edit / }).click();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

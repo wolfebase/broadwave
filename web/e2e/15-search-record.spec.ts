@@ -53,7 +53,8 @@ test("a search result opens, and records just that airing", async ({ page }) => 
 
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "Schedule", exact: true }).click();
-  await expect(page.getByText(/^Late Local News · .+ only$/)).toBeVisible();
+  // The rule's name follows its kind badge (One time) in the same line.
+  await expect(page.locator(".pass-title", { hasText: /Late Local News · .+ only$/ })).toBeVisible();
   // One airing takes pads, not series rules.
   await page.getByRole("listitem").filter({ hasText: /Late Local News · .+ only/ }).getByRole("button", { name: "Edit Late Local News" }).click();
   const editor = page.getByRole("form", { name: "Edit Late Local News" });
