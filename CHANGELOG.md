@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Web: two quick Forward 30 presses in a recording land where the second one says; the spots they saved could arrive out of order.
+- Web: a seek in a recording from media keys, the lock screen, or the browser's own controls plays from that spot, instead of sliding to where the current encode starts.
+
 ## 0.17.0 — 2026-10-31
 
 ### Added

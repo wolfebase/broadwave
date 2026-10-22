@@ -133,3 +133,25 @@ test("auto skips a sure break, and only a sure one", async ({ page }) => {
   await expect.poll(() => at(page)).toBeGreaterThan(44);
   await expect.poll(() => at(page)).toBeLessThan(46);
 });
+
+test("a seek from outside the player, before where the encode started, plays from there", async ({ page }) => {
+  test.setTimeout(90_000);
+  const id = add(minute("outside-seek"));
+  await page.addInitScript(() => localStorage.setItem("ota-skip", "manual"));
+  await page.goto(`/play?recording=${id}`);
+  await expect(page.getByRole("heading", { name: "Desk Breaks · The Quiet Hour" })).toBeVisible();
+  await page.locator("video").evaluate((v: HTMLVideoElement) => {
+    v.muted = true;
+  });
+  // Ask for a spot the encode has not reached: the server starts a new encode there.
+  await ready(page, 2);
+  await page.getByRole("button", { name: "Forward 30 seconds" }).evaluate((btn: HTMLButtonElement) => btn.click());
+  await expect.poll(() => at(page), { timeout: 30_000 }).toBeGreaterThan(25);
+  // Media keys or the browser's own controls set the element directly, before that encode.
+  await page.locator("video").evaluate((v: HTMLVideoElement) => {
+    v.currentTime = 5;
+    void v.play().catch(() => undefined);
+  });
+  await expect.poll(() => at(page), { timeout: 30_000 }).toBeGreaterThan(5);
+  expect(await at(page)).toBeLessThan(12);
+});
