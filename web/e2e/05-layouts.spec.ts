@@ -175,7 +175,8 @@ test("setup's main button stays on screen at phone and TV sizes", async ({ page 
   try {
     await put("0");
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
+    // A server with a recording or a pass skips setup on its own; /setup always shows it.
+    await page.goto("/setup");
     await expect(page.getByRole("heading", { name: "Let's set up your TV" })).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-layout", "phone");
     await page.getByRole("button", { name: "Sources" }).click();

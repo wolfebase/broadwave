@@ -44,6 +44,25 @@ async function pressCode(page: Page, keyCode: number) {
   }, keyCode);
 }
 
+type PassRow = { id: number; title: string };
+
+async function passIds(page: Page) {
+  const body = (await (await page.request.get("/api/v1/passes")).json()) as { passes?: PassRow[] };
+  return body.passes ?? [];
+}
+
+// The walk adds an Evening News series. Leave the passes as they were: a pass
+// makes the server a household that no longer needs setup.
+let passesBefore = new Set<number>();
+test.beforeEach(async ({ page }) => {
+  passesBefore = new Set((await passIds(page)).map((pass) => pass.id));
+});
+test.afterEach(async ({ page }) => {
+  for (const pass of await passIds(page)) {
+    if (!passesBefore.has(pass.id)) await page.request.delete(`/api/v1/passes/${pass.id}`);
+  }
+});
+
 test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   test.setTimeout(120_000);
   await tvRemote(page);
