@@ -343,7 +343,7 @@ func TestALeftChannelKeepsItsTunerAWhile(t *testing.T) {
 		h := New(st, t.TempDir(), "ffmpeg", "libx264")
 		t.Cleanup(h.Shutdown)
 		h.RenditionIdle = 100 * time.Millisecond
-		h.TunerLinger = 800 * time.Millisecond
+		h.TunerLinger = 2 * time.Second
 		h.SetHold(hold)
 		ctx := context.Background()
 		id := idOf(t, st, "4.1")
@@ -352,22 +352,34 @@ func TestALeftChannelKeepsItsTunerAWhile(t *testing.T) {
 			t.Fatal(err)
 		}
 		h.Release(id, s.Rendition)
-		time.Sleep(400 * time.Millisecond)
-		h.mu.Lock()
-		f := h.channels[id]
-		kept := f != nil && len(f.renditions) == 0
-		h.mu.Unlock()
-		if hold == 0 && !kept {
+		// state reads the tune: still there, and whether its encode stopped.
+		state := func() (tuned, encoding bool) {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			f := h.channels[id]
+			return f != nil, f != nil && len(f.renditions) > 0
+		}
+		// Polled, not slept: a slow runner stops the encode late.
+		deadline := time.Now().Add(20 * time.Second)
+		tuned, encoding := state()
+		for encoding && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+			tuned, encoding = state()
+		}
+		if encoding {
+			t.Fatal("the encode outlived RenditionIdle")
+		}
+		if hold == 0 && !tuned {
 			t.Fatal("the tune was not kept after its encode stopped")
 		}
-		if hold == 1 && f != nil {
+		if hold == 1 && tuned {
 			t.Fatal("a tune lingered with a recording about to start")
 		}
-		time.Sleep(700 * time.Millisecond)
-		h.mu.Lock()
-		gone := h.channels[id] == nil
-		h.mu.Unlock()
-		if !gone {
+		for tuned && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+			tuned, _ = state()
+		}
+		if tuned {
 			t.Fatal("the tune outlived TunerLinger")
 		}
 	}
