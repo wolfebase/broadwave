@@ -537,7 +537,11 @@ function launchServer() {
     // The browser runs in UTC (playwright.config.ts timezoneId). A server on this
     // computer's zone would show every admin page the time zone notice, so the
     // server matches the browser unless a run asks for another zone.
-    server = start(serverBin, serverArgs, { env: { ...serverEnv, TZ: process.env.E2E_SERVER_TZ || "UTC" } });
+    // A tuner stays the server's for 90 s after its last viewer, for a quick
+    // return. Between specs that only holds the next spec's channel; 5 s still
+    // covers a channel change inside one spec. E2E_TUNER_LINGER sets another.
+    const linger = process.env.E2E_TUNER_LINGER || "5";
+    server = start(serverBin, serverArgs, { env: { ...serverEnv, TZ: process.env.E2E_SERVER_TZ || "UTC", BROADWAVE_TUNER_LINGER: linger } });
     return server;
   }
   removeContainer();

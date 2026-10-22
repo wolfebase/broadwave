@@ -22,6 +22,9 @@ export const test = base.extend({
     await context.route("**/api/v1/channels/*/frame**", (route) => route.fulfill({ status: 404, body: "" }));
     await context.route("**/media/art/**", (route) => route.fulfill({ status: 404, body: "" }));
     await use(page);
+    // Leave the page the way a viewer closes a tab: pagehide sends the watch's
+    // stop, so the next test does not wait for the server to time the viewer out.
+    await page.goto("about:blank", { timeout: 5_000 }).catch(() => undefined);
   },
 });
 

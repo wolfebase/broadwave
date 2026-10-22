@@ -267,9 +267,10 @@ test("a multiview tile that does not start gives its sound away and can be remov
   const kbwv = channel("KBWV");
   const wtst = channel("WTST");
   // A picture of 5.1 still running from the test before would play a moment,
-  // and a tile that showed a picture keeps its sound.
+  // and a tile that showed a picture keeps its sound. A tuner kept on another
+  // channel after its last viewer (the linger) is harmless.
   await expect
-    .poll(async () => ((await (await fetch(`${base}/api/v1/tuners`)).json()) as { tuners?: { ours?: boolean }[] }).tuners?.some((t) => t.ours) ?? false, {
+    .poll(async () => ((await (await fetch(`${base}/api/v1/tuners`)).json()) as { tuners?: { ours?: boolean; guide?: string }[] }).tuners?.some((t) => t.ours && t.guide === wtst.number) ?? false, {
       timeout: 60_000,
       intervals: [500],
       message: "the previous watch let the tuners go",
@@ -318,11 +319,11 @@ test("a recordings folder that cannot be written works again without a reload", 
     await mark(page);
     await expect(page.getByRole("heading", { name: "NFL: Bears at Bills" })).toBeVisible();
     await page.locator(".hero-actions").getByRole("button", { name: "Record" }).click();
-    await expect(notice(page, "alert", "Broadwave can't save this recording. Check the recordings folder, then try again.")).toBeVisible();
+    await expect(notice(page, "alert", "Broadwave can't write to the recordings folder. Check PUID/PGID or the mount.")).toBeVisible();
     await shot(page, "l6-disk.jpg");
     chmodSync(dir, 0o755);
     await page.locator(".hero-actions").getByRole("button", { name: "Record" }).click();
-    await expect(notice(page, "alert", /can't save this recording/)).toHaveCount(0);
+    await expect(notice(page, "alert", /can't write to the recordings folder/)).toHaveCount(0);
     await expect
       .poll(async () => {
         const res = await fetch(`${base}/api/v1/recordings`);
