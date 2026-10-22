@@ -140,9 +140,9 @@ test("a tuned mux previews its other channel, and the pages do not 404", async (
   dropOtherFrames(keep);
   await page.goto("/multiview?add=1");
   await settle(page);
-  const picker = page.locator("button.mv-ch", { hasText: "4.2" }).locator("img.mv-frame");
+  const picker = page.locator("button.mv-ch", { hasText: /^4\.2/ }).locator("img.mv-frame");
   await expect(picker).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator("button.mv-ch", { hasText: "5.1" }).locator("img[src*='/frame']")).toHaveCount(0);
+  await expect(page.locator("button.mv-ch", { hasText: /^5\.1/ }).locator("img[src*='/frame']")).toHaveCount(0);
   expect(misses, misses.join("\n")).toEqual([]);
   await shot(page, "multiview.jpg");
 

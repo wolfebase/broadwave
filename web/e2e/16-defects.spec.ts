@@ -170,7 +170,8 @@ test("check for listings says when nothing came back", async ({ page }) => {
     const result = spawnSync("sqlite3", [db, `PRAGMA busy_timeout=5000; ${statement}`], { encoding: "utf8" });
     if (result.status !== 0) throw new Error(result.stderr || result.stdout || statement);
   };
-  sql(`DELETE FROM airings WHERE channel_id = ${wtst.id};`);
+  // Later specs read 5.1's listings (the basketball game): keep them to put back.
+  sql(`DROP TABLE IF EXISTS e2e_kept_airings; CREATE TABLE e2e_kept_airings AS SELECT * FROM airings WHERE channel_id = ${wtst.id}; DELETE FROM airings WHERE channel_id = ${wtst.id};`);
   try {
     await page.goto(`/watch?channel=${wtst.id}`);
     await settle(page);
@@ -182,13 +183,6 @@ test("check for listings says when nothing came back", async ({ page }) => {
     mkdirSync(evidence, { recursive: true });
     await page.screenshot({ path: path.join(evidence, "no-listing.jpg"), animations: "disabled" });
   } finally {
-    const now = Date.now();
-    const start = new Date(now - 5 * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
-    const end = new Date(now + 2 * 60 * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
-    sql(
-      `INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_live, guide_source)
-       SELECT ${wtst.id}, 'The Night Show', 'A guest and a band', 'Talk.', 'Series', '${start}', '${end}', 'e2e-restore', 0, 'e2e'
-       WHERE NOT EXISTS (SELECT 1 FROM airings WHERE channel_id = ${wtst.id});`,
-    );
+    sql(`INSERT OR IGNORE INTO airings SELECT * FROM e2e_kept_airings; DROP TABLE e2e_kept_airings;`);
   }
 });
