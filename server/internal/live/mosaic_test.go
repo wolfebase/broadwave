@@ -3,6 +3,7 @@ package live
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"os/exec"
 	"slices"
@@ -278,9 +279,25 @@ func TestIdleTilesMakeRoomForAMosaic(t *testing.T) {
 	if running != 2 {
 		t.Fatalf("%d encodes running, want the 2 idle tiles", running)
 	}
+	tunes := func() map[*mux]bool {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		out := map[*mux]bool{}
+		for _, m := range h.muxes {
+			out[m] = true
+		}
+		return out
+	}
+	before := tunes()
 	s, err := h.WatchMosaic(ctx, []int64{a, c})
 	if err != nil {
 		t.Fatalf("two idle tiles kept a mosaic out: %v", err)
+	}
+	// The tiles' pictures make room; their tunes carry the mosaic. Tuning
+	// the same channels again raced the device's release of them.
+	after := tunes()
+	if len(after) != 2 || !maps.Equal(before, after) {
+		t.Fatalf("the mosaic tuned again: %d tunes before, %d after", len(before), len(after))
 	}
 	h.ReleaseMosaic(s.Key)
 }
