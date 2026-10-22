@@ -51,6 +51,8 @@
 
 ### Fixed
 
+- Live: a channel that sends a second keyframe partway into a group (some ATSC 3.0 HEVC stations do, every minute or so) no longer puts a short part in the middle of a low-latency segment. Apple TV, iPhone, and iPad players failed on that playlist and lost the picture.
+- Multiview: the channel picker shows a channel already in the grid as on, instead of "Same tune as" another channel on its frequency.
 - Server: a mistyped `TZ` (`America/Denvr`) no longer runs on UTC silently: the log warns at start and Diagnostics names it.
 - Server: an ATSC 3.0 channel pairs with its 1.0 channel when the 1.0 channel is named by its brand ("FOX 5"), by a shared guide station, or by the tuner's 100-higher numbering, and never with a channel of another network.
 - Guide: when two stations share a channel number (a home between two markets), each gets its own listings, matched by call sign.

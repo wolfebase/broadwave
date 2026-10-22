@@ -298,6 +298,8 @@ func TestTheRealEncodeContinuesTheLeadWithoutABreak(t *testing.T) {
 	if bytes.Contains(playlist, []byte("DISCONTINUITY")) {
 		t.Fatalf("the takeover broke the playlist:\n%s", playlist)
 	}
+	// Every part on both sides of the takeover is one AVPlayer accepts.
+	assertParts(t, string(playlist))
 	init, err := os.ReadFile(filepath.Join(pack, "init.mp4"))
 	if err != nil {
 		t.Fatal(err)
