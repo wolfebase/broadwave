@@ -49,12 +49,6 @@ export type CatalogBackup = {
   bytes: number;
 };
 
-export type ChannelSignal = {
-  at: string;
-  strength: number;
-  quality: number;
-};
-
 export type Channel = {
   id: number;
   deviceId: string;
@@ -77,7 +71,7 @@ export type Channel = {
   protected?: boolean;
   captions?: boolean;
   audio?: string;
-  signal?: ChannelSignal;
+  signal?: SignalReading;
   standard?: string;
   twinId?: number;
   twinChoice?: string;
@@ -669,6 +663,12 @@ export type SetupStep = {
   title: string;
   state: string;
   detail?: string;
+};
+
+export type SignalReading = {
+  quality: number;
+  strength: number;
+  at: string;
 };
 
 export type Slot = {

@@ -2385,15 +2385,7 @@ export interface components {
              * @enum {string}
              */
             audio?: "mono" | "stereo" | "surround";
-            /** @description The last signal reading: from a tune of this channel (read from the tuner a moment after it locks) or a signal check. Omitted before either. */
-            signal?: {
-                /** @description Signal quality, percent. */
-                quality: number;
-                /** @description Signal strength, percent. */
-                strength: number;
-                /** Format: date-time */
-                at: string;
-            };
+            signal?: components["schemas"]["SignalReading"];
             /**
              * @description atsc3 for an ATSC 3.0 broadcast. Omitted for everything else.
              * @enum {string}
@@ -2432,6 +2424,15 @@ export interface components {
              * @enum {string}
              */
             twinChoice?: "atsc3" | "atsc1" | "both";
+        };
+        /** @description A channel's last signal reading: from a tune of it (read from the tuner a moment after it locks) or a signal check. Omitted before either. */
+        SignalReading: {
+            /** @description Signal quality, percent. */
+            quality: number;
+            /** @description Signal strength, percent. */
+            strength: number;
+            /** Format: date-time */
+            at: string;
         };
         /** @description Channel ids whose preview JPEG exists and is newer than 10 minutes (45 for a swept still). */
         FrameList: {
