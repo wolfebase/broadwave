@@ -492,7 +492,7 @@ function FinishStep({
       {(progress?.steps ?? []).length > 0 ? (
         <ul className="setup-checks" aria-label={t("setup.stepsAria")}>
           {(progress?.steps ?? []).map((item) => (
-            <li key={item.id} data-state={item.state}>
+            <li key={item.id} data-state={item.state} data-check={item.id}>
               <span className="setup-check-mark" aria-hidden="true">
                 {item.state === "done" ? <Check /> : item.state === "check" ? "!" : item.state === "running" ? <span className="setup-spinner" /> : "–"}
               </span>

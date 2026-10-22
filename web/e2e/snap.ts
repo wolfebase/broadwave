@@ -26,6 +26,8 @@ const quiet = `
   .ps-eyebrow, .sync-pill, .live-pill, .banner-update, .banner-home,
   .setup-finish .setup-list { visibility: hidden !important; }
   .now-flag, .now-line { display: none !important; }
+  /* Free disk, encode speed, and signal are this computer's, not the page's. */
+  .setup-checks :is([data-check="folder"], [data-check="encoder"], [data-check="signal"]) :is(.dim, .setup-check-mark, .setup-check-word) { display: none !important; }
 `;
 
 type RGBA = { data: Uint8Array; width: number; height: number };
