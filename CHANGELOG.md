@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.1 — 2026-10-25
+
+### Fixed
+
+- Live TV no longer switches to a channel's second-language sound (Spanish commentary on a game, for example): the server always plays the main track it picked, by its stream number, not the first sound ffmpeg happens to list.
+
 ## 0.16.0 — 2026-10-25
 
 ### Added

@@ -651,13 +651,18 @@ func (f *feed) soundPID(want Rendition) int {
 
 func (f *feed) sourceFor(want Rendition) Source {
 	src := f.source
-	if t, ok := PickTrack(f.tracks, trackRole(want)); ok {
-		// The encode that started before the PMT mapped the program's first
-		// audio stream. Keeping that map when the choice is the same stream
-		// avoids restarting it. A later stream still has to name its PID.
-		if len(f.tracks) > 0 && t.PID != f.tracks[0].PID {
-			src.AudioPID = t.PID
-		}
+	// Before this tune's PMT is read, the tracks stored from the last tune
+	// pick the stream, so the first encode already names the right PID and
+	// the PMT that agrees does not restart it.
+	tracks := f.tracks
+	if len(tracks) == 0 {
+		tracks = f.stored
+	}
+	if t, ok := PickTrack(tracks, trackRole(want)); ok {
+		// Always name the chosen stream's PID. ffmpeg's first audio stream
+		// (0:a:0) is not always the PMT's first track, so on a channel with a
+		// second-language track it could play the Spanish commentary.
+		src.AudioPID = t.PID
 		if t.Codec != "" {
 			src.AudioCodec = strings.ToUpper(t.Codec)
 		}

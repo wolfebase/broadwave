@@ -72,16 +72,23 @@ func settledCount(t *testing.T, mark string) int {
 	return markCount(t, mark)
 }
 
-func TestLaterTracksDoNotRestartTheEncode(t *testing.T) {
+func TestLaterTracksRebuildOnceOnTheMainsPID(t *testing.T) {
 	h, f, mark := holdFFmpeg(t)
 	startRendition(t, h, f, "1080.aac2.broadcast")
 	first := waitMark(t, mark, ".args.1")
 	if strings.Contains(first, "0:i:") {
 		t.Fatalf("no tracks are known yet:\n%s", first)
 	}
+	// A first tune with nothing stored learns the PMT late: the encode that
+	// guessed 0:a:0 restarts once on the main's PID, so it never plays the
+	// second language by accident.
 	h.applyDeferredAudio(f, 1, []AudioTrack{engMain, spaExtra})
-	if n := settledCount(t, mark); n != 1 {
-		t.Fatalf("a new sound track restarted the encode: %d starts", n)
+	args := waitMark(t, mark, ".args.2")
+	if !strings.Contains(args, "-map\n0:i:257\n") {
+		t.Fatalf("rebuild should name the main's pid:\n%s", args)
+	}
+	if n := settledCount(t, mark); n != 2 {
+		t.Fatalf("starts = %d, want the one rebuild", n)
 	}
 }
 
@@ -107,8 +114,8 @@ func TestStoredTracksGoInTheFirstEncode(t *testing.T) {
 	h.mu.Unlock()
 	startRendition(t, h, f, "1080.aac2.broadcast")
 	args := waitMark(t, mark, ".args.1")
-	if !strings.Contains(args, "-map\n0:a:0\n-map\n0:i:258\n") {
-		t.Fatalf("stored second track should follow the main:\n%s", args)
+	if !strings.Contains(args, "-map\n0:i:257\n-map\n0:i:258\n") {
+		t.Fatalf("stored tracks should name the main and then the second track:\n%s", args)
 	}
 	// The PMT agrees with what was stored, so nothing restarts.
 	h.applyDeferredAudio(f, 1, []AudioTrack{engMain, spaExtra})
@@ -191,8 +198,8 @@ func TestARenumberedTrackRebuildsOnThePMT(t *testing.T) {
 	eng.PID, spa.PID = 0x102, 0x101
 	h.applyDeferredAudio(f, 1, []AudioTrack{eng, spa})
 	args := waitMark(t, mark, ".args.2")
-	if !strings.Contains(args, "-map\n0:a:0\n-map\n0:i:257\n") {
-		t.Fatalf("rebuild should carry Spanish at its new pid:\n%s", args)
+	if !strings.Contains(args, "-map\n0:i:258\n-map\n0:i:257\n") {
+		t.Fatalf("rebuild should name English at its new pid, then Spanish:\n%s", args)
 	}
 	if n := settledCount(t, mark); n != 2 {
 		t.Fatalf("starts = %d", n)
@@ -206,7 +213,8 @@ func TestAlternatesOffKeepsOneSound(t *testing.T) {
 	f.stored = []AudioTrack{engMain, spaExtra}
 	h.mu.Unlock()
 	startRendition(t, h, f, "1080.aac2.broadcast")
-	if args := waitMark(t, mark, ".args.1"); strings.Contains(args, "0:i:") || strings.Contains(args, "max_interleave") {
+	// One sound: the main, named by its PID, and no second-language track.
+	if args := waitMark(t, mark, ".args.1"); !strings.Contains(args, "-map\n0:i:257\n") || strings.Contains(args, "0:i:258") || strings.Contains(args, "max_interleave") {
 		t.Fatalf("alternates are off:\n%s", args)
 	}
 }

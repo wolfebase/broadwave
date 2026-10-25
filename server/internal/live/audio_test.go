@@ -44,7 +44,7 @@ func TestAudioTracksPMT(t *testing.T) {
 	}
 }
 
-func TestFirstAudioKeepsTheProgramMap(t *testing.T) {
+func TestTheMainAudioIsNamedByItsPID(t *testing.T) {
 	f := &feed{
 		program: 1,
 		source:  Source{VideoCodec: "MPEG2", AudioCodec: "AC3"},
@@ -55,14 +55,15 @@ func TestFirstAudioKeepsTheProgramMap(t *testing.T) {
 		},
 	}
 	spec := Rendition{Video: "1080", Audio: "copy"}
-	before := RenditionArgs(f.program, f.source, spec, "libx264", "")
+	// ffmpeg's first audio stream is not always the PMT's first track, so the
+	// main is always named by its PID, never left to 0:a:0.
 	mainSrc := f.sourceFor(spec)
-	if mainSrc.AudioPID != 0 {
+	if mainSrc.AudioPID != 0x110 {
 		t.Fatalf("main pid %d", mainSrc.AudioPID)
 	}
 	after := RenditionArgs(f.program, mainSrc, spec, "libx264", "")
-	if strings.Join(before, " ") != strings.Join(after, " ") {
-		t.Fatalf("main map changed\n%s\n%s", strings.Join(before, " "), strings.Join(after, " "))
+	if !strings.Contains(strings.Join(after, " "), "-map 0:i:272") {
+		t.Fatalf("main not mapped by pid\n%s", strings.Join(after, " "))
 	}
 	lang := f.sourceFor(Rendition{Video: "1080", Audio: "copy", Track: "lang"})
 	if lang.AudioPID != 0x111 {
