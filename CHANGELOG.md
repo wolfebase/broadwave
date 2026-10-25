@@ -1,9 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 — 2026-10-25
 
 ### Added
 
+- Apple TV: a new guide. The top shows the show you're on in large: a live picture of the channel, the title, episode, description, time left, badges (NEW, LIVE, HD, 4K, 5.1, CC, 3.0), the score for a game, and what's next. After Back from the player, the channel keeps playing in that picture.
+- Apple TV and iPhone/iPad: record a channel at a set time, once or on chosen days.
+- Apple TV and iPhone/iPad: Search lists matching channels first; typing 5.1 or a network finds the channel even without listings.
+- Apple TV and iPhone/iPad: Record can be undone for a few seconds, and Stop asks first.
 - Search: a Channels row comes first when you type a channel number ("5.1", "5-1"), a name, a call sign, or a network ("pbs"), even before the guide has listings. It shows what is on now; choosing it starts watching. The guide's search field also finds a channel by "4-1", by its ATSC 3.0 twin's number, or by its network.
 - Server: channels name more networks from the name they broadcast ("FOX 5", "NBC4", "PBS", "UNIVSN", "TELEMUN") and from listings, including PBS, CW, MyNetworkTV, ION, Univision, Telemundo, UniMás, and in Canada CBC, Radio-Canada, CTV, CTV 2, Global, Citytv, TVO, Télé-Québec, TVA, and Noovo, so voice and search find them anywhere.
 - Server: `/server` reports the server's time zone, whether it is a real zone, its UTC offset, and its country (from `TZ`, or `BROADWAVE_COUNTRY=US|CA`).
@@ -31,6 +35,9 @@
 
 ### Changed
 
+- Apple TV and iPhone/iPad: the guide moves much faster (a press answers in about 25 ms on Apple TV; iPad scrolling no longer stutters), and opening the app reaches the guide sooner.
+- Apple TV: changing channel no longer brings up the control bar, shows the new channel at once, and channel up and down are kept ready, so they start in about a second.
+- Apple TV: Back in the guide first returns to now; the first screen offers the demo and a link to set up a server.
 - Setup stars Canada's main networks too, and says it couldn't tell which channels are ABC, CBS, FOX, or NBC instead of saying the lineup has none.
 - Web: Tonight and the day buttons start at 7 PM in the Central and Mountain time zones (8 PM elsewhere).
 - Recording a sports show that isn't matched to a live score keeps going 30 minutes (basketball, hockey, soccer), an hour (football, baseball), or 90 minutes (golf, racing, tennis) past the listing; talk shows end on time.
@@ -51,6 +58,8 @@
 
 ### Fixed
 
+- Apple TV and iPhone/iPad: banners no longer push the screen down; offline pages say they can't reach the server and offer Try again; the largest text sizes no longer cut off titles.
+- Apple TV: a channel picked as the player opened sometimes never started.
 - Live: a channel that sends a second keyframe partway into a group (some ATSC 3.0 HEVC stations do, every minute or so) no longer puts a short part in the middle of a low-latency segment. Apple TV, iPhone, and iPad players failed on that playlist and lost the picture.
 - Multiview: the channel picker shows a channel already in the grid as on, instead of "Same tune as" another channel on its frequency.
 - Server: a mistyped `TZ` (`America/Denvr`) no longer runs on UTC silently: the log warns at start and Diagnostics names it.
