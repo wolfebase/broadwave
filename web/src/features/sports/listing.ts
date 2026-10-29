@@ -21,11 +21,15 @@ export function isGame(a: Listing): boolean {
 }
 
 
+// "Crawford Collection at Western Historical Society, Cleveland, OH" is a show
+// visiting a place: team names don't carry a comma.
+const place = /,/;
+
 /** Splits "Bears at Bills" or "Lakers vs. Celtics" into a matchup. */
 export function matchup(a: { title: string; subtitle?: string }): [string, string] | null {
   const text = a.subtitle && / (at|vs\.?|@) /i.test(a.subtitle) ? a.subtitle : a.title;
   const m = text.match(/^(.*?)\s+(?:at|vs\.?|@)\s+(.*)$/i);
-  if (!m) return null;
+  if (!m || place.test(m[2])) return null;
   const clean = (s: string) => s.replace(/^.*?:\s*/, "").trim();
   return [clean(m[1]), clean(m[2])];
 }

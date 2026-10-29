@@ -111,7 +111,14 @@ export function Sports() {
     return team ? playsIn(matchup(airing), team) : true;
   };
   const items = games.filter((x) => inRange(x) && matches(x));
-  const shows = shownFilter === "all" ? all.filter((x) => !isGame(x.airing) && inRange(x)) : [];
+  // A show on two channels at once (sister stations share a feed) is one row.
+  const showKeys = new Set<string>();
+  const shows = (shownFilter === "all" ? all.filter((x) => !isGame(x.airing) && inRange(x)) : []).filter(({ airing }) => {
+    const key = `${airing.title}|${airing.start}`;
+    if (showKeys.has(key)) return false;
+    showKeys.add(key);
+    return true;
+  });
 
   // One game on two channels (a 3.0 station and its 1.0 twin, or a sister station) is one card.
   const cards: Card[] = [];

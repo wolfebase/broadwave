@@ -12,6 +12,7 @@ test("a game has two sides or a scoreboard match; a talk show does not", () => {
   assert.equal(isGame({ title: "In Depth With Graham Bensinger", category: "Series, Interview, Sports talk" }), false);
   assert.equal(isGame({ title: "Friday Night Highlights", category: "Sport, Football" }), false);
   assert.equal(isGame({ title: "Postgame Live at the Arena", category: "Sport, Basketball, Sports talk" }), false);
+  assert.equal(isGame({ title: "Car Show", subtitle: "Riverton Classics at the Riverton Museum, Riverton, OH", category: "Sport, Auto" }), false);
 });
 
 test("pro wrestling is entertainment, not a game, even with a versus", () => {
