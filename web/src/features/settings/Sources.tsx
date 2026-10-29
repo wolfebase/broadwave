@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
-import { addFree, addPlaylistFile, addSource, checkSignals, discover, findFree, getSignals, getTuners, lookHarder, request, sourceStatuses, startScan, type ChannelSignal, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
+import { addFree, addPlaylistFile, addSource, checkSignals, discover, findFree, getSignals, getTuners, lookHarder, retireDevice, sourceStatuses, startScan, type ChannelSignal, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
 import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
 import { settingsHubMessages } from "../../i18n/messages/settingsHub.ts";
 import { bind } from "../../i18n/runtime.ts";
@@ -24,10 +24,6 @@ const h = bind(settingsHubMessages);
 
 type Patch = { enabled?: boolean; hidden?: boolean; customName?: string; customNumber?: string; guideKey?: string; twinChoice?: string };
 
-/** A tuner taken away on purpose is retired: it stops counting as offline, and comes back by itself if it answers. */
-function retireDevice(deviceId: string, retired: boolean) {
-  return request<{ devices: Device[] }>(`/api/v1/devices/${encodeURIComponent(deviceId)}`, { method: "PATCH", body: JSON.stringify({ retired }) });
-}
 
 export function Sources({
   devices,

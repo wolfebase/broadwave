@@ -137,6 +137,11 @@ export function discover(ip?: string) {
   });
 }
 
+/** A tuner taken away on purpose is retired: it stops counting as offline, and comes back by itself if it answers. */
+export function retireDevice(deviceId: string, retired: boolean) {
+  return request<{ devices: Device[] }>(`/api/v1/devices/${encodeURIComponent(deviceId)}`, { method: "PATCH", body: JSON.stringify({ retired }) });
+}
+
 export function removeDevice(deviceId: string) {
   return request<{ devices: Device[] }>(`/api/v1/devices/${encodeURIComponent(deviceId)}`, { method: "DELETE" });
 }

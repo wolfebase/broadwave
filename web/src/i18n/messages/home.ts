@@ -12,6 +12,7 @@ export const homeMessages = {
   "home.tunerMissing": "{name} hasn't answered since {since}. Check that it is on and connected.",
   "home.tunersMissing": { one: "A tuner hasn't answered for more than a day.", other: "{count} tuners haven't answered for more than a day." },
   "home.checkTuners": "Check tuners",
+  "home.removeTuner": "Remove",
   "home.nextAt": "Next at {time} · {title}",
   "home.recordingTitle": "Recording {title}",
   "home.onNow": "On now",

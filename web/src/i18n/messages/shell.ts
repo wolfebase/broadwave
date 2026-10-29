@@ -3,7 +3,7 @@ import type { Message } from "../runtime";
 export const shellMessages = {
   "shell.brand": "Broadwave",
   "nav.primary": "Primary",
-  "nav.home": "Home",
+  "nav.home": "For You",
   "nav.homeAria": "Broadwave home",
   "nav.guide": "Guide",
   "nav.search": "Search",

@@ -112,7 +112,7 @@ test.describe("appearance", () => {
       await expectAccessible(page);
 
       await page.setViewportSize({ width: 1440, height: 900 });
-      await page.getByRole("link", { name: "Home", exact: true }).click();
+      await page.getByRole("link", { name: "For You", exact: true }).click();
       await expect(page.getByRole("heading", { name: "NFL: Bears at Bills" })).toBeVisible();
       await page.getByRole("button", { name: "Watch", exact: true }).first().click();
       await expect(page).toHaveURL(/\/watch\?channel=/);

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { homeMessages } from "../../i18n/messages/home.ts";
 import { bind } from "../../i18n/runtime.ts";
-import { getTeams } from "../../api";
+import { getTeams, retireDevice } from "../../api";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { navigate } from "../../app/router";
 import { actionName } from "../../lib/actionName";
+import { channelName } from "../../lib/channelName";
 import { airingAt, categoryLabel, categoryOf, dayLabel, minutesLeft, nextAfter, progress, timeLabel, type Category } from "../../lib/guide";
 import type { Airing, Channel, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
@@ -30,7 +31,7 @@ function mentions(text: string, name: string) {
 }
 
 export function Home() {
-  const { channels, index, now, recordings, ready, settled, record, stopRecord, devices } = useData();
+  const { channels, index, now, recordings, ready, settled, record, stopRecord, devices, admin, refresh } = useData();
   const player = usePlayer();
   const [teams, setTeams] = useState<TeamFollow[]>([]);
   useEffect(() => {
@@ -146,9 +147,12 @@ export function Home() {
             <ArtFrame src={`/api/v1/channels/${hero.channel.id}/frame?w=1280`} width={1280} height={720} />
           ) : null}
           <div className="hero-glow" aria-hidden="true" />
-          <div className="hero-num" aria-hidden="true">
-            {hero.channel.displayNumber}
-          </div>
+          {/* The outlined number fills a hero that has no picture; over art it is clutter. */}
+          {hero.airing?.imageUrl || heroFrame ? null : (
+            <div className="hero-num" aria-hidden="true">
+              {hero.channel.displayNumber}
+            </div>
+          )}
           <div className="hero-body">
             <div className="hero-meta">
               <LiveDot label={t("home.liveNow")} />
@@ -194,9 +198,16 @@ export function Home() {
       {missing.length > 0 ? (
         <div className="home-banner" role="status">
           <p>{missing.length === 1 ? t("home.tunerMissing", { name: missing[0].name, since: missing[0].since }) : t("home.tunersMissing", missing.length)}</p>
-          <button type="button" className="btn" onClick={() => navigate("/sources")}>
-            {t("home.checkTuners")}
-          </button>
+          <span className="home-banner-actions">
+            {admin && missing.length === 1 ? (
+              <button type="button" className="btn small ghost" aria-label={actionName(t("home.removeTuner"), missing[0].name)} onClick={() => void retireDevice(missing[0].id, true).then(() => refresh(["devices"]), () => navigate("/sources"))}>
+                {t("home.removeTuner")}
+              </button>
+            ) : null}
+            <button type="button" className="btn small" onClick={() => navigate("/sources")}>
+              {t("home.checkTuners")}
+            </button>
+          </span>
         </div>
       ) : null}
 
@@ -226,7 +237,7 @@ export function Home() {
             <span className="nc-top">
               <span className="nc-num">{l.channel.displayNumber}</span>
               {l.channel.standard === "atsc3" ? <Atsc3Tag /> : null}
-              <span className="nc-name">{l.channel.displayName}</span>
+              <span className="nc-name">{channelName(l.channel)}</span>
             </span>
             {l.airing ? (
               <>

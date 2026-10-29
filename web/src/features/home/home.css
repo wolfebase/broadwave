@@ -304,3 +304,8 @@ img.nc-art {
   margin: 0;
   flex: 1 1 240px;
 }
+
+.home-banner-actions {
+  display: flex;
+  gap: var(--space-2);
+}

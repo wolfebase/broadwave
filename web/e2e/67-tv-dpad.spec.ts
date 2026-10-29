@@ -242,7 +242,7 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(page).not.toHaveURL(/\/settings\/playback$/);
 
-  await page.locator(".topbar").getByRole("link", { name: "Home", exact: true }).click();
+  await page.locator(".topbar").getByRole("link", { name: "For You", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await settle(page);
   await page.getByRole("button", { name: "Watch", exact: true }).click();
