@@ -72,13 +72,16 @@
 # JS raised 2026-10-22: the guide's search field finds a channel by "4-1", its
 # 3.0 twin, or its network. The guide loads up front. Measured entry gzip
 # 105509, plus 300 bytes of slack.
+# JS raised 2026-10-29: the guide names stations by call sign without the feed
+# suffix and starts at this half-hour. The guide loads up front. Measured entry
+# gzip 105859, plus 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=105809
+JS_GZIP_MAX=106159
 CSS_GZIP_MAX=13823
 
 if [[ ! -f "$INDEX" ]]; then

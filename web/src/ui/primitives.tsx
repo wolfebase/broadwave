@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { uiMessages } from "../i18n/messages/ui.ts";
 import { bind } from "../i18n/runtime.ts";
+import { channelName } from "../lib/channelName";
 import type { Category } from "../lib/guide";
 import type { Channel } from "../types";
 
@@ -11,7 +12,7 @@ export function ChannelBadge({ channel, size = "md" }: { channel: Pick<Channel, 
     <span className={`ch-badge ch-badge-${size}`}>
       <span className="ch-badge-num">{channel.displayNumber}</span>
       <span className="ch-badge-name" title={channel.displayName}>
-        {channel.displayName}
+        {channelName(channel)}
       </span>
       {channel.standard === "atsc3" ? <Atsc3Tag /> : null}
     </span>

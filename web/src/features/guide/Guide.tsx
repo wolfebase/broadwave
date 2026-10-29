@@ -12,6 +12,7 @@ import {
   categoryOf,
   channelWatchName,
   emptyGuideLabel,
+  floorHalfHour,
   guideCellId,
   guideCellName,
   guideOrigin,
@@ -32,6 +33,7 @@ import {
 import { guideEnterAction, guidePageRow, isInfoKey, slotUnderNow } from "../../lib/guideKeys";
 import { scrollBehavior } from "../../lib/motion";
 import { markLogoTone } from "../../lib/logoTone";
+import { channelName } from "../../lib/channelName";
 import { canonicalKey } from "../../lib/tvKey";
 import type { Airing, Channel } from "../../types";
 import { SearchIcon, StarIcon } from "../../ui/icons";
@@ -98,7 +100,7 @@ export function Guide() {
   const antenna = devices.some((d) => d.tunerCount > 0);
   const rowH = tv ? 96 : 68;
   const pxPerMin = tv ? 9.6 : 6.4;
-  const channelW = tv ? 280 : 220;
+  const channelW = tv ? 280 : 236;
   const headH = 48;
   const origin = guideOrigin(now);
   const hours = useMemo(() => {
@@ -189,7 +191,7 @@ export function Guide() {
 
   useEffect(() => {
     if (!grid) return;
-    scrollToTime(now - 30 * MIN, "auto");
+    scrollToTime(floorHalfHour(now), "auto");
     // The scroller exists only while the grid is mounted. Layout still matters:
     // desktop and tv share the grid but use different pixels per minute.
   }, [layout, grid]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -211,10 +213,10 @@ export function Guide() {
     el.scrollTo({ left: Math.max(0, ((t - origin) / MIN) * pxPerMin), behavior: scrollBehavior(reduced, behavior) });
   }
 
-  // Now keeps half an hour of what just aired on the left and moves the cursor
-  // to the show on now. The jump is instant: the cursor effect would stop a smooth one short.
+  // Now starts the grid at this half-hour, so the screen goes to what is on and next,
+  // and moves the cursor to the show on now. The jump is instant: the cursor effect would stop a smooth one short.
   function jumpToNow() {
-    scrollToTime(now - 30 * MIN, "auto");
+    scrollToTime(floorHalfHour(now), "auto");
     move(focus.row, now);
   }
 
@@ -226,7 +228,7 @@ export function Guide() {
     const today = new Date(now);
     today.setHours(0, 0, 0, 0);
     if (midnight === today.getTime()) {
-      scrollToTime(now - 30 * MIN);
+      scrollToTime(floorHalfHour(now));
       return;
     }
     const lastEnds: number[] = [];
@@ -375,8 +377,7 @@ export function Guide() {
         handled();
         if (e.ctrlKey || e.metaKey) move(0, now);
         else {
-          scrollToTime(now - 30 * MIN, "auto");
-          move(focus.row, now);
+          jumpToNow();
         }
         break;
       case "End": {
@@ -632,7 +633,7 @@ export function Guide() {
                     <span className="gc-name">
                       {c.artUrl ? <img className="gc-logo" alt="" src={`/media/art/channel/${c.id}?w=72`} onLoad={(event) => markLogoTone(event.currentTarget)} /> : null}
                       <span className="gc-text" title={c.displayName}>
-                        {c.displayName}
+                        {channelName(c)}
                       </span>
                     </span>
                     {c.standard === "atsc3" ? (
