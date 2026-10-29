@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { activityRows, dayOf, isHouseNews, notRecording } from "./src/features/schedule/view.ts";
 
-test("activity leaves out device finds until asked", () => {
+test("activity leaves out device finds and guide updates until asked", () => {
   const events = [
     { id: 1, kind: "home", message: "New iPhone found: Kitchen." },
     { id: 2, kind: "recording", message: "Saved Cupertino on 5.1" },
@@ -11,8 +11,9 @@ test("activity leaves out device finds until asked", () => {
   ];
   assert.equal(isHouseNews(events[0]), true);
   assert.equal(isHouseNews(events[1]), false);
-  assert.deepEqual(activityRows(events, false).rows.map((e) => e.id), [2, 3]);
-  assert.equal(activityRows(events, false).hidden, 2);
+  assert.equal(isHouseNews(events[2]), true);
+  assert.deepEqual(activityRows(events, false).rows.map((e) => e.id), [2]);
+  assert.equal(activityRows(events, false).hidden, 3);
   assert.deepEqual(activityRows(events, true), { rows: events, hidden: 0 });
 });
 

@@ -1,6 +1,6 @@
-/** Device finds ("New iPhone found") are the house's news, not the recorder's. */
+/** Device finds ("New iPhone found") and routine guide updates are the house's news, not the recorder's. */
 export function isHouseNews(event: { kind: string }): boolean {
-  return event.kind === "home";
+  return event.kind === "home" || event.kind === "guide";
 }
 
 /** The recorder's own lines, or everything. hidden counts what a viewer can bring back. */

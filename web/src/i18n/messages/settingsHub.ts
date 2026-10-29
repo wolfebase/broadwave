@@ -51,7 +51,7 @@ export const settingsHubMessages = {
   "appearance.theme": "Theme",
   "appearance.themeHint": "System matches this device's light or dark setting.",
   "appearance.accentLabel": "Accent color",
-  "appearance.layoutGroup": "Layout",
+  "appearance.layoutGroup": "Screen",
   "appearance.layoutHint": "Auto picks from the window size. TV is the large layout you drive with arrow keys or a remote.",
   "appearance.thisDevice": "These choices are saved on this screen only.",
 
