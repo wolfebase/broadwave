@@ -4,6 +4,7 @@ import { useLayout } from "../../app/layout";
 import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
 import { actionName } from "../../lib/actionName";
+import { channelName } from "../../lib/channelName";
 import { isTextField } from "../../lib/dialogFocus";
 import { airingAt, categoryOf, minutesLeft, nextAfter, progress, timeLabel } from "../../lib/guide";
 import { channelNumberContinues, typedChannel } from "../../lib/remote";
@@ -665,7 +666,7 @@ export function LivePlayer({
   const eyebrow = useMemo(
     () => (
       <>
-        <span className="eyebrow-num">{channel.displayNumber}</span> {channel.displayName}
+        <span className="eyebrow-num">{channel.displayNumber}</span> {channelName(channel)}
         {airing ? <span className="eyebrow-dim">{t("player.sep")}{minutesLeft(airing, now)}</span> : null}
       </>
     ),
@@ -687,7 +688,7 @@ export function LivePlayer({
   }, [syncSpoken, syncHeard]);
   const syncBadge =
     syncing && sync.state !== "off" ? (
-      <button type="button" className={`sync-pill ${sync.state}`} onClick={() => setPanel((p) => (p === "sync" ? "none" : "sync"))} aria-label={`${t("player.wholeHome")}, ${syncSpoken}`}>
+      <button type="button" className={`sync-pill ${!together && sync.members <= 1 ? "locked" : sync.state}`} onClick={() => setPanel((p) => (p === "sync" ? "none" : "sync"))} aria-label={`${t("player.wholeHome")}, ${syncSpoken}`}>
         <SyncIcon />
         {syncLabel}
       </button>
@@ -711,7 +712,9 @@ export function LivePlayer({
       liveLabel={liveLabel}
       onLive={goLive}
       position={scrubAt ?? span.at}
-      duration={span.len}
+      // At live the playhead sits a few seconds short of the playlist's edge by design;
+      // the bar ends at the playhead so Live reads as the end of the bar.
+      duration={atLive && scrubAt === null ? Math.max(1, span.at) : span.len}
       onSeek={(value) => {
         const video = videoRef.current;
         if (!video || !video.seekable.length) return;
@@ -760,7 +763,7 @@ export function LivePlayer({
                   >
                     <span className="pb-num">{c.displayNumber}</span>
                     <span className="pb-body">
-                      <span className="pb-name">{c.displayName}</span>
+                      <span className="pb-name">{channelName(c)}</span>
                       <span className="pb-show">{a?.title ?? t("player.noListingShort")}</span>
                       <Progress value={progress(a, now)} category={categoryOf(a)} />
                     </span>

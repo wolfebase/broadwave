@@ -18,7 +18,10 @@ test("the sync pill says how many screens, and the live text says when it is sti
 });
 
 test("the pill never says synced while sync is waiting, catching up, or off", () => {
-  for (const members of [1, 2, 3]) {
+  assert.equal(syncPillText("syncing", false, 1), "Sync on");
+  assert.equal(syncPillText("waiting", false, 1), "Sync on");
+  assert.equal(syncPillText("syncing", true, 1), "Syncing");
+  for (const members of [2, 3]) {
     assert.equal(syncPillText("waiting", false, members), "Waiting");
     assert.equal(syncPillText("syncing", false, members), "Syncing");
     assert.equal(syncPillText("off", false, members), "Sync off");

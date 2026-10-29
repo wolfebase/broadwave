@@ -468,7 +468,8 @@ export function Stage({
               type="range"
               min={0}
               max={span}
-              step={1}
+              // A whole-second step rounds the value down, so the thumb sat short of a bar that ends at the playhead.
+              step="any"
               value={at}
               style={{ ["--at" as string]: `${(at / span) * 100}%` }}
               aria-label={t("player.position")}

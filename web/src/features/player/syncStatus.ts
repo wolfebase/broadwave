@@ -8,10 +8,12 @@ export type SyncPillState = "off" | "waiting" | "syncing" | "locked";
 /**
  * The words on the sync pill. They follow the state, so the pill never says
  * "Synced" while sync is still waiting or catching up. A screen alone in its
- * room has nothing to be in sync with, so it says sync is on.
+ * room has nothing to be in sync with, so it says sync is on, even while it
+ * settles: "Syncing" on every channel start read as something going wrong.
  */
 export function syncPillText(state: SyncPillState, together: boolean, members: number): string {
   if (state === "off") return t("player.sync.off");
+  if (!together && members <= 1) return t("player.sync.on");
   if (state === "waiting") return t("player.sync.waitingShort");
   if (state === "syncing") return t("player.sync.syncing");
   if (together) return members > 1 ? t("player.sync.togetherCount", { count: members }) : t("player.sync.together");
