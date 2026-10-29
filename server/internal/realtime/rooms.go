@@ -222,7 +222,8 @@ func (r *Rooms) stepBackLocked(room string, st *RoomState, now time.Time) RoomSt
 // "ahead": a screen that started more than aheadMin past a young room brings
 // the room to its frame less measureMargin, and keeps playing. "behind": a
 // screen that can't reach a measured room (its live edge is further back)
-// takes the room back to its own frame less the margin, so no screen is ever
+// takes the room back to its own frame less the margin (smaller for a room
+// one screen plays, see soloMargin), so no screen is ever
 // stranded behind; the others pause once for the step. Either way the room is
 // marked measured: Settle and the Apple floor no longer pull it back to the
 // latency target, and a viewer's Live delay choice clears the mark.
@@ -232,7 +233,11 @@ func (r *Rooms) measureLocked(room string, st *RoomState, action string, media f
 	}
 	nowMS := unixMS(now)
 	current := st.Target(nowMS)
-	to := min(media-float64(measureMargin/time.Millisecond), unixMS(now.Add(-latencies["lowest"])))
+	margin := measureMargin
+	if st.Members <= 1 {
+		margin = soloMargin
+	}
+	to := min(media-float64(margin/time.Millisecond), unixMS(now.Add(-latencies["lowest"])))
 	// Judge the screen's own gap; the margin only sets where the room lands.
 	switch action {
 	case "ahead":
@@ -277,6 +282,12 @@ const (
 // trims have room to work. Two simulated Apple TVs on one channel started
 // 2.1 s apart; at 1 s the second sat 1.08 s behind the room for 51 s.
 const measureMargin = 2500 * time.Millisecond
+
+// soloMargin is the margin for a room one screen plays. The full margin made
+// every Apple start pause 2.5 s for a second screen that usually never comes;
+// if one does and can't reach the room, "behind" steps the room back once.
+// It stays above behindMin so the screen's own trims have room.
+const soloMargin = 500 * time.Millisecond
 
 // Easing is a room that Settle slowed, and how long until it reaches its target.
 type Easing struct {

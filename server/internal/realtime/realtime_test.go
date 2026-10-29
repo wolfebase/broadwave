@@ -988,7 +988,7 @@ func TestAScreenWithSyncOffSaysWhatItWatches(t *testing.T) {
 
 // J0.114: AVPlayer starts a low-latency playlist about 8 s behind live, ahead
 // of a room at 16 s. The first Apple screen brings a young room to its frame
-// less measureMargin, and Settle and the Apple floor then leave it there.
+// less soloMargin, and Settle and the Apple floor then leave it there.
 func TestAheadMeasuresAYoungRoomAtTheScreen(t *testing.T) {
 	start := time.Date(2026, 10, 11, 17, 0, 0, 0, time.UTC)
 	r, now := fixedRooms(start)
@@ -1001,8 +1001,8 @@ func TestAheadMeasuresAYoungRoomAtTheScreen(t *testing.T) {
 	}
 	onScreen := nowMS - 8200
 	st, err := r.Apply("channel:33", Command{Action: "ahead", MediaTime: onScreen})
-	if err != nil || st.Version != before.Version+1 || math.Abs(st.Target(nowMS)-(onScreen-2500)) > 1 || st.Rate != 1 {
-		t.Fatalf("the room should sit 2.5 s behind the screen: %+v %v", st, err)
+	if err != nil || st.Version != before.Version+1 || math.Abs(st.Target(nowMS)-(onScreen-500)) > 1 || st.Rate != 1 {
+		t.Fatalf("a room one screen plays should sit 0.5 s behind it: %+v %v", st, err)
 	}
 	// Settle and the floor leave a measured room where it is.
 	*now = start.Add(40 * time.Second)
@@ -1087,17 +1087,34 @@ func TestBehindStepsAMeasuredRoomBackToTheScreen(t *testing.T) {
 		t.Fatalf("behind moved an unmeasured room: %+v", st)
 	}
 	r.Apply("channel:5", Command{Action: "ahead", MediaTime: nowMS - 8000})
+	r.Join("channel:5", 5, unixMS(start.Add(-60*time.Second)))
 	*now = start.Add(60 * time.Second)
 	nowMS = unixMS(*now)
 	onScreen := nowMS - 12500
 	st, _ := r.Apply("channel:5", Command{Action: "behind", MediaTime: onScreen})
 	if math.Abs(st.Target(nowMS)-(onScreen-2500)) > 1 {
-		t.Fatalf("the room should step back to 2.5 s behind the stranded screen: %v", nowMS-st.Target(nowMS))
+		t.Fatalf("with two screens the room should step back to 2.5 s behind the stranded one: %v", nowMS-st.Target(nowMS))
 	}
 	// A screen only a little behind leaves it to the trims.
 	same, _ := r.State("channel:5")
 	if st, _ := r.Apply("channel:5", Command{Action: "behind", MediaTime: same.Target(nowMS) - 200}); st.Version != same.Version {
 		t.Fatalf("a small gap moved the room: %+v", st)
+	}
+}
+
+// Two screens on a young room: the second one's start keeps the full margin,
+// so a third that starts a little further back still reaches it.
+func TestAheadKeepsTheFullMarginWithTwoScreens(t *testing.T) {
+	start := time.Date(2026, 10, 29, 17, 0, 0, 0, time.UTC)
+	r, now := fixedRooms(start)
+	r.Join("channel:33", 33, unixMS(start.Add(-60*time.Second)))
+	r.Join("channel:33", 33, unixMS(start.Add(-60*time.Second)))
+	*now = start.Add(6 * time.Second)
+	nowMS := unixMS(*now)
+	onScreen := nowMS - 8200
+	st, _ := r.Apply("channel:33", Command{Action: "ahead", MediaTime: onScreen})
+	if math.Abs(st.Target(nowMS)-(onScreen-2500)) > 1 {
+		t.Fatalf("a room two screens play should sit 2.5 s behind: %v", onScreen-st.Target(nowMS))
 	}
 }
 
