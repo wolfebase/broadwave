@@ -44,6 +44,11 @@ test("a control under the notice that takes focus wins", async ({ page }) => {
   const ws = await socket(page);
   await page.goto("/guide");
   await settle(page);
+  // A runner whose clock zone isn't the server's shows the time zone notice,
+  // which pushes this one down onto text with no control under it.
+  const zone = page.locator(".banner-zone");
+  if (await zone.isVisible()) await zone.getByRole("button", { name: "Not now" }).click();
+  await expect(zone).toHaveCount(0);
   await ws.announce();
   const notice = page.getByRole("status").filter({ hasText: message });
   await expect(notice).toBeVisible();
