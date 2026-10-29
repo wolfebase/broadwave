@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { currentTitle, formatBytes, formatClockPoint } from "./src/lib/format.ts";
+import { currentTitle, firstAiredDate, formatBytes, formatClockPoint } from "./src/lib/format.ts";
 import type { Airing } from "./src/types.ts";
 
 function airing(partial: Partial<Airing> & Pick<Airing, "channelId" | "start" | "end" | "title">): Airing {
@@ -43,4 +43,13 @@ test("an airing that ends at this exact moment is already over", () => {
     airing({ channelId: 4, title: "Just ended", start: new Date(now - 60_000).toISOString(), end: new Date(now).toISOString() }),
   ];
   assert.equal(currentTitle(list, 4), "");
+});
+
+test("a first-air date reads as a date, and is left out on the day it airs", () => {
+  const now = new Date(2026, 9, 29, 15).getTime();
+  const today = new Date(2026, 9, 29, 14).toISOString();
+  assert.equal(firstAiredDate("2026-10-29", today, now), "");
+  assert.equal(firstAiredDate("2026-09-30", today, now), new Date(2026, 8, 30).toLocaleDateString([], { month: "short", day: "numeric" }));
+  assert.equal(firstAiredDate("2011-05-16", today, now), new Date(2011, 4, 16).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }));
+  assert.equal(firstAiredDate("soon", today, now), "");
 });

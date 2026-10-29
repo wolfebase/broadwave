@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { guideUiMessages } from "../../i18n/messages/guideUi.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { useData } from "../../app/data";
@@ -7,6 +8,7 @@ import { useDialogFocus } from "../../ui/useDialogFocus";
 import { navigate } from "../../app/router";
 import { useLayout } from "../../app/layout";
 import { actionName } from "../../lib/actionName";
+import { firstAiredDate } from "../../lib/format";
 import { categoryLabel, categoryOf, isRecording, liveChannel, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
 import { CloseIcon, PlayIcon, RecordIcon, StarIcon } from "../../ui/icons";
@@ -82,7 +84,15 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
         ? t("guideUi.recordEvery")
         : t("guideUi.recordSeries");
 
-  return (
+  // The star is the channel's, not the show's, so it sits by the channel and its label says so.
+  const star = (
+    <button type="button" className="glass-icon ps-star" onClick={() => void favorite(shown)} aria-pressed={shown.favorite} aria-label={t("guideUi.favoriteChannel", { channel: shown.displayName })} title={t("guideUi.favoriteChannel", { channel: shown.displayName })}>
+      <StarIcon filled={shown.favorite} />
+    </button>
+  );
+
+  // On the body, so no page container's stacking puts the phone tab bar over the sheet.
+  return createPortal(
     <div className="sheet-layer" onClick={onClose}>
       <div ref={ref} className="program-sheet glass" data-cat={cat} role="dialog" aria-modal="true" aria-label={airing?.title ?? channel.displayName} onClick={(e) => e.stopPropagation()}>
         <div className="ps-art" data-cat={cat}>
@@ -95,6 +105,7 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
             <div className="ps-art-meta">
               <ChannelBadge channel={channel} size="lg" />
               {onNow && airing ? <LiveDot /> : null}
+              {star}
             </div>
           )}
         </div>
@@ -103,6 +114,7 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
             <div className="ps-channel">
               <ChannelBadge channel={channel} />
               {onNow ? <LiveDot /> : null}
+              {star}
             </div>
           ) : null}
           <p className="ps-eyebrow">
@@ -125,7 +137,7 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
             {airing?.episodeLabel ? <span className="tag">{airing.episodeLabel}</span> : null}
             {rec === "recording" ? <span className="tag rec">{t("guideUi.recording")}</span> : rec === "scheduled" ? <span className="tag rec">{t("guideUi.willRecord")}</span> : null}
           </div>
-          {airing?.originalAir ? <p className="ps-sub">{t("guideUi.firstAired", { date: airing.originalAir })}</p> : null}
+          {airing?.originalAir && firstAiredDate(airing.originalAir, airing.start) ? <p className="ps-sub">{t("guideUi.firstAired", { date: firstAiredDate(airing.originalAir, airing.start) })}</p> : null}
           {airing?.cast ? <p className="ps-sub">{airing.cast}</p> : null}
           {airing?.description && airing.description.trim() !== airing.subtitle?.trim() ? <p className="ps-desc">{airing.description}</p> : null}
           <div className="ps-actions">
@@ -195,25 +207,24 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
                 {seriesLabel}
               </button>
             ) : null}
-            {/* A set time on this channel, for channels the guide lists little or nothing for. */}
-            <button
-              type="button"
-              className="btn"
-              aria-label={t("guideUi.recordTimeOn", { channel: `${channel.displayNumber} ${channel.displayName}` })}
-              onClick={() => {
-                onClose();
-                navigate(timedLink(channel.id, airing && upcoming ? airing : undefined));
-              }}
-            >
-              <RecordIcon className="tally" /> {t("guideUi.recordTime")}
-            </button>
-            {/* The star is the channel's, not the show's, so it says so. */}
-            <button type="button" className="btn ghost" onClick={() => void favorite(shown)} aria-pressed={shown.favorite} aria-label={t("guideUi.favoriteChannel", { channel: shown.displayName })}>
-              <StarIcon filled={shown.favorite} /> {t("guideUi.favoriteChannel", { channel: shown.displayName })}
-            </button>
+            {/* A set time on this channel, for a stretch the guide lists nothing for. A listed show has Record. */}
+            {airing ? null : (
+              <button
+                type="button"
+                className="btn"
+                aria-label={t("guideUi.recordTimeOn", { channel: `${channel.displayNumber} ${channel.displayName}` })}
+                onClick={() => {
+                  onClose();
+                  navigate(timedLink(channel.id));
+                }}
+              >
+                <RecordIcon className="tally" /> {t("guideUi.recordTime")}
+              </button>
+            )}
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

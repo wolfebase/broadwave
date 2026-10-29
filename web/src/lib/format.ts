@@ -20,3 +20,16 @@ export function currentTitle(airings: Airing[], channelId: number) {
   const hit = airings.find((airing) => airing.channelId === channelId && new Date(airing.start).getTime() <= now && new Date(airing.end).getTime() > now);
   return hit?.title ?? "";
 }
+
+/**
+ * A first-air date ("2026-09-30") as a viewer reads it, or "" when it is the day
+ * of this airing: the New tag already says that.
+ */
+export function firstAiredDate(originalAir: string, airingStart: string, now = Date.now()): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(originalAir);
+  if (!m) return "";
+  const day = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (day.toDateString() === new Date(airingStart).toDateString()) return "";
+  const year = day.getFullYear() === new Date(now).getFullYear() ? undefined : "numeric";
+  return day.toLocaleDateString([], { month: "short", day: "numeric", year });
+}

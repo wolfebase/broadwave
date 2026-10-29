@@ -741,3 +741,16 @@ html[data-theme="dark"] .gc-logo[data-tone="dark"] {
   width: 100%;
   margin-inline: 0;
 }
+
+.ps-star {
+  margin-left: auto;
+}
+
+.ps-star[aria-pressed="true"] {
+  color: var(--color-warning);
+}
+
+/* Text sits on the sheet, so the guide under it must not show through. */
+.program-sheet.glass {
+  background: color-mix(in srgb, var(--color-surface1) 96%, transparent);
+}

@@ -28,7 +28,7 @@ export const guideUiMessages = {
   "guideUi.all": "All",
   "guideUi.favorites": "Favorites",
   "guideUi.recording": "Recording",
-  "guideUi.searchPlaceholder": "Search shows and channels",
+  "guideUi.searchPlaceholder": "Search the guide",
   "guideUi.searchLabel": "Search the guide",
   "guideUi.close": "Close",
   "guideUi.recordTime": "Record a time",
