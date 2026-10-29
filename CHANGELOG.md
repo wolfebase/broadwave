@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.16.2 — 2026-10-29
+
+### Changed
+
+- Web: the guide names a station by its call sign without the feed suffix ("KRVTDT1", "WRVT-DT", and "KRVT-HD" read "KRVT"), in a wider channel column, and Now starts the grid at the current half-hour.
+- Web: Home is called For You, as on Apple TV.
+- Web: a show's sheet sits above the phone tab bar and is solid. The channel's star sits by the channel, Record a time is offered where the guide lists nothing, and First aired reads as a date.
+- Web: the player's icon buttons show their names on hover and keyboard focus, the bar ends at Live when you're live, and a screen alone on a channel says Sync on instead of Syncing.
+- Web: Schedule's activity shows recordings; guide updates and devices found are behind a button.
+- Sync: a channel one screen is watching lines up 0.5 s behind it instead of 2.5 s, so an Apple TV or iPhone starts a channel without a 2.5 s pause. With two or more screens the room keeps 2.5 s.
+
+### Fixed
+
+- Web: a tuner that has stopped answering can be removed from the notice on Home.
+- Sports: a show visiting a place ("Collection at Historical Society, City, ST") is no longer listed as a game with two teams to follow; a show on two channels at once is one row; long names stay inside the game card.
+
 ## 0.16.1 — 2026-10-25
 
 ### Fixed
