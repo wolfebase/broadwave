@@ -350,6 +350,20 @@ func (s *Server) starved(target string) bool {
 	return false
 }
 
+// darkTunerLocked is true when the tuner's channel, or another channel on its
+// frequency, was Dark: a real tuner finds no lock for the whole frequency.
+func (s *Server) darkTunerLocked(t tuner) bool {
+	if s.dark[t.guide] {
+		return true
+	}
+	for _, ch := range s.Channels {
+		if t.freq != 0 && ch.Freq == t.freq && s.dark[ch.Number] {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) silentNow() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -581,7 +595,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 			target = "127.0.0.1"
 		}
 		strength, quality, symbol := 90, 88, 100
-		if s.dark[t.guide] {
+		if s.darkTunerLocked(t) {
 			strength, quality, symbol = 0, 0, 0
 		}
 		rows[i] = row{
@@ -1215,7 +1229,7 @@ func (s *Server) command(name, value string, set bool) (string, string) {
 		t.guide, t.freq, t.held = ch.Number, ch.Freq, true
 		return fmt.Sprintf("auto:%d", ch.Freq), ""
 	case "status":
-		if t.freq == 0 || s.dark[t.guide] {
+		if t.freq == 0 || s.darkTunerLocked(*t) {
 			if t.freq == 0 {
 				return "ch=none lock=none ss=0 snq=0 seq=0", ""
 			}
@@ -1226,7 +1240,7 @@ func (s *Server) command(name, value string, set bool) (string, string) {
 		return fmt.Sprintf("ch=%s:%d lock=%s ss=90 snq=88 seq=100", mod, t.freq, mod), ""
 	case "streaminfo":
 		var b strings.Builder
-		if s.NoVideoData && s.dark[t.guide] {
+		if s.NoVideoData && s.darkTunerLocked(*t) {
 			return "none\n", ""
 		}
 		for _, ch := range s.Channels {

@@ -695,7 +695,9 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 			if order, ok := scanType(data, program); ok {
 				h.mu.Lock()
 				if h.channels[id] == f && f.headerOrder == "" {
-					slog.Info(fmt.Sprintf("scan type %s for %s after the picture starts", order, guide))
+					// Every tune, the idle still sweep's included, learns this: debug, or
+					// it is most of the log.
+					slog.Debug(fmt.Sprintf("scan type %s for %s after the picture starts", order, guide))
 					f.headerOrder = order
 					h.applyScanLocked(f, order)
 				}

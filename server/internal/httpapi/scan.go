@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"broadwave/internal/dvr"
+	"broadwave/internal/live"
 	"broadwave/internal/store"
 )
 
@@ -22,6 +24,9 @@ func (s *Server) BroadcastScan(ctx context.Context) {
 	})
 }
 
+// scanDwell is how long a scan stays on a frequency to read its broadcast guide.
+var scanDwell = 40 * time.Second
+
 func (s *Server) scanMissing(ctx context.Context) {
 	seen := map[int]bool{}
 	tried := map[int64]bool{}
@@ -29,14 +34,23 @@ func (s *Server) scanMissing(ctx context.Context) {
 		if ctx.Err() != nil || !s.Hub.Idle() || s.recordingSoon(ctx) {
 			return
 		}
-		ch, ok := s.nextUnlisted(ctx, seen, tried)
+		ch, known, ok := s.nextUnlisted(ctx, seen, tried)
 		if !ok {
 			return
 		}
 		tried[ch.ID] = true
-		freq, err := s.Hub.Dwell(ctx, ch.ID, 40*time.Second)
+		freq, err := s.Hub.Dwell(ctx, ch.ID, scanDwell)
+		if errors.Is(err, live.ErrNoSignal) {
+			// A station off the air: its other channels share the frequency, so
+			// tuning each of them only finds the same nothing.
+			if known > 0 {
+				seen[known] = true
+			}
+			slog.Info(fmt.Sprintf("guide: scan %s: no signal", ch.GuideNumber))
+			continue
+		}
 		if err != nil {
-			slog.Error(fmt.Sprintf("guide: scan %s: %v", ch.GuideNumber, err))
+			slog.Warn(fmt.Sprintf("guide: scan %s: %v", ch.GuideNumber, err))
 			continue
 		}
 		if freq > 0 {
@@ -47,15 +61,16 @@ func (s *Server) scanMissing(ctx context.Context) {
 	}
 }
 
-func (s *Server) nextUnlisted(ctx context.Context, seen map[int]bool, tried map[int64]bool) (store.Channel, bool) {
+// nextUnlisted is the next channel to scan and its frequency, when known.
+func (s *Server) nextUnlisted(ctx context.Context, seen map[int]bool, tried map[int64]bool) (store.Channel, int, bool) {
 	channels, err := s.Store.Channels(ctx, false)
 	if err != nil {
-		return store.Channel{}, false
+		return store.Channel{}, 0, false
 	}
 	now := time.Now()
 	current, err := s.Store.ListingDepth(ctx, now)
 	if err != nil {
-		return store.Channel{}, false
+		return store.Channel{}, 0, false
 	}
 	for _, ch := range channels {
 		if ch.Hidden || !ch.Present || tried[ch.ID] {
@@ -66,7 +81,7 @@ func (s *Server) nextUnlisted(ctx context.Context, seen map[int]bool, tried map[
 			if err != nil || full.FrequencyHz == 0 || seen[full.FrequencyHz] {
 				continue
 			}
-			return ch, true
+			return ch, full.FrequencyHz, true
 		}
 		full, err := s.Store.SourceChannel(ctx, ch.ID)
 		if err != nil {
@@ -75,9 +90,9 @@ func (s *Server) nextUnlisted(ctx context.Context, seen map[int]bool, tried map[
 		if full.FrequencyHz > 0 && seen[full.FrequencyHz] {
 			continue
 		}
-		return ch, true
+		return ch, full.FrequencyHz, true
 	}
-	return store.Channel{}, false
+	return store.Channel{}, 0, false
 }
 
 func (s *Server) recordingSoon(ctx context.Context) bool {
