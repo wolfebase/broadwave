@@ -45,6 +45,23 @@ type Device struct {
 	Retired bool `json:"retired,omitempty"`
 }
 
+// DeviceQuietAfter is three missed rounds of the five-minute tuner refresh.
+// A tuner quiet that long is offline: it records nothing.
+const DeviceQuietAfter = 15 * time.Minute
+
+// Quiet reports a tuner that has not answered the refresh lately. A device
+// never seen yet, or with no tuners (a playlist), is not quiet.
+func (d Device) Quiet(now time.Time) bool {
+	if d.TunerCount <= 0 {
+		return false
+	}
+	seen, err := time.Parse(time.RFC3339, d.LastSeen)
+	if err != nil {
+		return false
+	}
+	return now.Sub(seen) > DeviceQuietAfter
+}
+
 // SignalReading is a channel's last signal: quality and strength in percent,
 // and when it was read.
 type SignalReading struct {

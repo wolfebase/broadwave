@@ -115,7 +115,7 @@ func (h *Hub) RunStillSweep(ctx context.Context) {
 }
 
 // sweepTargets is every tune the sweep may make, favorites first, then
-// guide order. Hidden, disabled, absent, and copy-protected channels (an
+// guide order. Hidden, disabled, absent, duplicate, and copy-protected channels (an
 // encrypted ATSC 3.0 channel's clear twin is swept instead) are left out,
 // and so are links and playlists, which have no tuner.
 func (h *Hub) sweepTargets(ctx context.Context) []sweepTarget {
@@ -123,9 +123,22 @@ func (h *Hub) sweepTargets(ctx context.Context) []sweepTarget {
 	if err != nil {
 		return nil
 	}
+	// A tuner that is retired or not answering is never swept: its status read
+	// failed, the pass counted as blocked, and it never ended, so the lineup
+	// was tuned round and round all day.
+	gone := map[string]bool{}
+	if devices, err := h.Store.Devices(ctx); err == nil {
+		now := time.Now()
+		for _, d := range devices {
+			if d.Retired || d.Quiet(now) {
+				gone[d.DeviceID] = true
+			}
+		}
+	}
 	var favorites, rest []store.Channel
 	for _, ch := range list {
-		if ch.Hidden || !ch.Enabled || !ch.Present || ch.Protected {
+		// A SameAs row is the same channel on another tuner; the shown row is swept.
+		if ch.Hidden || !ch.Enabled || !ch.Present || ch.Protected || ch.SameAs != 0 || gone[ch.DeviceID] {
 			continue
 		}
 		if ch.Favorite {

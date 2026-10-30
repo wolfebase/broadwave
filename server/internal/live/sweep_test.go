@@ -117,6 +117,29 @@ func TestSweepTargetsOrder(t *testing.T) {
 	}
 }
 
+// A tuner the owner retired is not swept: its status read failed, the pass
+// counted as blocked and never ended, and the lineup was tuned all day.
+func TestSweepLeavesARetiredTunerOut(t *testing.T) {
+	srv := &fake.Server{Channels: []fake.Channel{
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
+		{Number: "4.2", Name: "KBWV2", Freq: 593000000},
+		{Number: "5.1", Name: "WTST", Freq: 533000000},
+	}}
+	st, device := tuneStore(t, srv)
+	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
+	ctx := context.Background()
+	if got := len(h.sweepTargets(ctx)); got == 0 {
+		t.Fatal("no targets before retiring")
+	}
+	if err := st.SetDeviceRetired(ctx, device, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.sweepTargets(ctx); len(got) != 0 {
+		t.Fatalf("a retired tuner is swept: %+v", got)
+	}
+}
+
 // Every gate shuts the sweep: the setting, a recording soon, a hold, a
 // tune on the device, a guide scan, and fewer than two free tuners.
 func TestSweepGates(t *testing.T) {

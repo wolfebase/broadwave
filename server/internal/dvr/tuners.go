@@ -9,19 +9,12 @@ import (
 
 // TunerQuietAfter is three missed rounds of the five-minute tuner refresh.
 // A tuner quiet that long is offline: it records nothing.
-const TunerQuietAfter = 15 * time.Minute
+const TunerQuietAfter = store.DeviceQuietAfter
 
 // DeviceOffline reports a tuner that has not answered the refresh lately. A
 // device never seen yet, or with no tuners (a playlist), is not offline.
 func DeviceOffline(d store.Device, now time.Time) bool {
-	if d.TunerCount <= 0 {
-		return false
-	}
-	seen, err := time.Parse(time.RFC3339, d.LastSeen)
-	if err != nil {
-		return false
-	}
-	return now.Sub(seen) > TunerQuietAfter
+	return d.Quiet(now)
 }
 
 // LiveTuners is how many tuners the planner can count on: those that

@@ -7,12 +7,26 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/libp2p/zeroconf/v2"
 )
+
+// bridgePrefixes name the interfaces of containers and virtual machines on
+// the server itself. Their addresses (Docker's 172.17.0.1, libvirt's
+// 192.168.122.1) reach nothing from another device, and a TV that tried one
+// first stalled before it found the server.
+var bridgePrefixes = []string{"docker", "br-", "veth", "virbr", "vnet", "cni", "flannel", "cali", "kube", "lxc", "lxd", "podman", "zt", "tailscale", "wg"}
+
+func bridgeInterface(name string) bool {
+	for _, prefix := range bridgePrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 func localIPs() []string {
 	var out []string
@@ -21,7 +35,7 @@ func localIPs() []string {
 		return nil
 	}
 	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 || bridgeInterface(iface.Name) {
 			continue
 		}
 		addrs, err := iface.Addrs()
@@ -76,14 +90,30 @@ func serviceInstance(name string) string {
 	return name[:cut]
 }
 
+// hostLabel is the name the advert's addresses are published under. It is
+// the server's own, not the machine's: the machine's name is answered by its
+// own responder too (avahi on a NAS), with every address it has, Docker's
+// bridge included, and the two answers were mixed.
+func hostLabel(id string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(id) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+		if b.Len() == 8 {
+			break
+		}
+	}
+	if b.Len() == 0 {
+		return "broadwave"
+	}
+	return "broadwave-" + b.String()
+}
+
 // Announce registers the service. Call Shutdown on the result to withdraw it.
 func Announce(a Advert) (*zeroconf.Server, error) {
 	instance := serviceInstance(a.Name)
-	host, _ := os.Hostname()
-	host = strings.TrimSuffix(strings.TrimSuffix(host, "."), ".local")
-	if host == "" {
-		host = "broadwave"
-	}
+	host := hostLabel(a.ID)
 	ips := localIPs()
 	if len(ips) == 0 {
 		return nil, errors.New("no network address to advertise")

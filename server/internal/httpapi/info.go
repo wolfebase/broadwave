@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"broadwave/internal/dvr"
 	"broadwave/internal/realtime"
 	"broadwave/internal/region"
 )
@@ -31,10 +32,15 @@ func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	// The tuners the planner counts on: a retired or quiet one is not offered
+	// to the apps, which budget multiview by this number.
 	tuners := 0
 	if devices, err := s.Store.Devices(r.Context()); err == nil {
 		for _, d := range devices {
-			tuners += d.TunerCount
+			if d.TunerCount > 0 && !d.Retired {
+				tuners = dvr.LiveTuners(devices, time.Now())
+				break
+			}
 		}
 	}
 	encoder := ""

@@ -33,6 +33,14 @@ func (s *Store) AddEvent(ctx context.Context, kind, message string) error {
 }
 
 // AddEventAt records an activity line at a chosen time. The live path uses AddEvent.
+// HasEvent reports an event of this kind with this message among those kept.
+func (s *Store) HasEvent(ctx context.Context, kind, message string) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE kind = ? AND message = ?`,
+		clip(kind, 40), clip(strings.TrimSpace(message), 240)).Scan(&n)
+	return n > 0, err
+}
+
 func (s *Store) AddEventAt(ctx context.Context, at time.Time, kind, message string) error {
 	kind = clip(kind, 40)
 	message = clip(strings.TrimSpace(message), 240)

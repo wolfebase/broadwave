@@ -41,9 +41,22 @@ func (s *Server) noteArrivals(ctx context.Context) {
 		return
 	}
 	for _, msg := range arrivals.Observe(places, time.Now()) {
-		slog.Info(fmt.Sprintf("home: %s", msg))
-		if s.Store != nil {
-			_ = s.Store.AddEvent(ctx, "home", msg)
-		}
+		s.noteArrival(ctx, msg)
 	}
+}
+
+// noteArrival raises a device's arrival once. The watch forgets the house on
+// every restart, and a TV that changes its id came back as new: one Android
+// TV was announced 46 times. The line names the device, so a line already
+// in the activity is not raised again.
+func (s *Server) noteArrival(ctx context.Context, msg string) {
+	if s.Store == nil {
+		slog.Info(fmt.Sprintf("home: %s", msg))
+		return
+	}
+	if seen, err := s.Store.HasEvent(ctx, "home", msg); err == nil && seen {
+		return
+	}
+	slog.Info(fmt.Sprintf("home: %s", msg))
+	_ = s.Store.AddEvent(ctx, "home", msg)
 }
