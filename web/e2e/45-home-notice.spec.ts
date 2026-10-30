@@ -42,13 +42,15 @@ test("the notice hides itself about 12 s after it shows", async ({ page }) => {
 
 test("a control under the notice that takes focus wins", async ({ page }) => {
   const ws = await socket(page);
+  // The image runs the server on Chicago time and the browser on UTC. The time
+  // zone notice would push this one down onto text with no control under it.
+  await page.route("**/api/v1/server", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as Record<string, unknown>;
+    await route.fulfill({ response: res, json: { ...body, timeZone: "UTC", timeZoneValid: true, utcOffsetMinutes: 0 } });
+  });
   await page.goto("/guide");
   await settle(page);
-  // A runner whose clock zone isn't the server's shows the time zone notice,
-  // which pushes this one down onto text with no control under it.
-  const zone = page.locator(".banner-zone");
-  if (await zone.isVisible()) await zone.getByRole("button", { name: "Not now" }).click();
-  await expect(zone).toHaveCount(0);
   await ws.announce();
   const notice = page.getByRole("status").filter({ hasText: message });
   await expect(notice).toBeVisible();
