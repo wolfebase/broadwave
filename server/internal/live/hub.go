@@ -224,6 +224,10 @@ type Hub struct {
 	hold    int
 	// statusDown is when a device whose status read failed is asked again.
 	statusDown map[string]time.Time
+	// plain is a device that answered without a tuner status: an HDHomeRun
+	// emulator (Threadfin, xTeVe, Antennas, ErsatzTV, Dispatcharr). Its
+	// channels open their lineup stream, one per tuner it lists.
+	plain map[string]bool
 	// dark is when a tune of a channel or frequency last found no signal.
 	dark       map[darkKey]time.Time
 	next       int
@@ -729,6 +733,12 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 				continue
 			}
 			tuners, err := h.readTuners(ctx, candidate)
+			if errors.Is(err, errNoStatus) {
+				if h.plain == nil {
+					h.plain = map[string]bool{}
+				}
+				h.plain[candidate] = true
+			}
 			if err != nil {
 				// An unplugged device costs every tune its status timeout (3 s).
 				if ctx.Err() == nil {
@@ -737,6 +747,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 				continue
 			}
 			delete(h.statusDown, candidate)
+			delete(h.plain, candidate)
 			last = tuners
 			devices = append(devices, DeviceTuners{Host: hostOf(candidate), Base: candidate, Tuners: tuners})
 		}
@@ -751,6 +762,9 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	}
 	if len(devices) == 0 {
 		read(bases, false)
+	}
+	if len(devices) == 0 && h.plain[ch.BaseURL] && ch.StreamURL != "" {
+		return h.openPlainLocked(ch)
 	}
 	if len(devices) == 0 {
 		return nil, ErrTunerSilent
@@ -4391,6 +4405,23 @@ type tunerStatus struct {
 	SymbolQualityPercent  int
 }
 
+// errNoStatus is a device that answered its status request with something
+// other than a tuner list.
+var errNoStatus = errors.New("no tuner status")
+
+// openPlainLocked plays a channel of a device with no tuner status from its
+// lineup stream, as many at once as the device lists tuners.
+func (h *Hub) openPlainLocked(ch store.SourceChannel) (*feed, error) {
+	if ch.TunerCount > 0 && h.streamsForDeviceLocked(ch.DeviceID) >= ch.TunerCount {
+		return nil, &BusyError{}
+	}
+	res, err := openStream(ch.StreamURL, ch.UserAgent, ch.Referrer)
+	if err != nil {
+		return nil, autoError(err, nil, false)
+	}
+	return h.addFeedLocked(h.streamMuxLocked(ch, res.Body, "stream"), ch), nil
+}
+
 // statusTimeout bounds one device's status read. A tuner on the network
 // answers in milliseconds; an unplugged one would hold every caller for
 // the connection timeout, and the next device's read would never start.
@@ -4414,8 +4445,11 @@ func fetchTunerStatus(ctx context.Context, host string) ([]tunerStatus, error) {
 	}
 	defer res.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w (%s)", errNoStatus, res.Status)
+	}
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w (%w)", errNoStatus, err)
 	}
 	return raw, nil
 }
