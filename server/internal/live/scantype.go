@@ -651,7 +651,7 @@ func (h *Hub) finishScanFromPicture(m *mux, f *feed) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.channels[id] == f && (h.learnCodecsLocked(f, VideoCodecOf(data, program), "") || h.learnRateLocked(f, data)) {
+	if h.channels[id] == f && learnedAny(h.learnCodecsLocked(f, VideoCodecOf(data, program), ""), h.learnRateLocked(f, data)) {
 		h.rebuildRenditionsLocked(f)
 	}
 	if order == "" || f.headerOrder != "" || h.channels[id] != f {
@@ -820,7 +820,7 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	m.detach(sub)
-	if h.channels[id] == f && (h.learnCodecsLocked(f, VideoCodecOf(data, program), "") || h.learnRateLocked(f, data)) {
+	if h.channels[id] == f && learnedAny(h.learnCodecsLocked(f, VideoCodecOf(data, program), ""), h.learnRateLocked(f, data)) {
 		h.rebuildRenditionsLocked(f)
 	}
 	if order == "" || f.headerOrder != "" || h.channels[id] != f {
@@ -830,6 +830,9 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 	f.headerOrder = order
 	h.applyScanLocked(f, order)
 }
+
+// learnedAny is || once both sides have run.
+func learnedAny(codecs, rate bool) bool { return codecs || rate }
 
 // learnRateLocked takes this tune's frame rate from a picture header in data.
 func (h *Hub) learnRateLocked(f *feed, data []byte) bool {
