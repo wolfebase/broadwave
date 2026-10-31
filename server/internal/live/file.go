@@ -78,16 +78,9 @@ func fileHead(path string) ([]byte, bool) {
 	return buf[:n], true
 }
 
-// fileAC4 reports a recording whose sound is AC-4, from the PMT at its head.
-func fileAC4(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	buf := make([]byte, fileScanBytes)
-	n, _ := io.ReadFull(f, buf)
-	for _, t := range AudioTracks(buf[:n], 0) {
+// headAC4 reports a recording whose sound is AC-4, from the PMT at its head.
+func headAC4(head []byte) bool {
+	for _, t := range AudioTracks(head, 0) {
 		if t.Codec == "ac4" {
 			return true
 		}
@@ -96,12 +89,17 @@ func fileAC4(path string) bool {
 }
 
 // fileGraphFor is fileGraph for the recording at path. Its sound is left out
-// when it is AC-4 and ffmpeg cannot decode it.
+// when it is AC-4 and ffmpeg cannot decode it. The head is read once.
 func (h *Hub) fileGraphFor(path, codec, mode, fieldOrder string) Graph {
-	scanned, ok := fileScanOrder(path)
+	head, read := fileHead(path)
+	scanned, ok := "", false
+	if read {
+		scanned, ok = scanType(head, 0)
+	}
 	g := h.fileGraph(codec, mode, recordingOrder(scanned, ok, fieldOrder))
-	g.Rate = fileRate(path)
-	if h.NoAC4 && fileAC4(path) {
+	p, _ := pictureFacts(head, 0)
+	g.Rate = p.FPS
+	if h.NoAC4 && headAC4(head) {
 		g.Audio = "none"
 	}
 	return g
