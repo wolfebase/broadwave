@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.17.0 — 2026-10-31
+
+### Added
+
+- Server: HDHomeRun emulators play. Threadfin, xTeVe, Antennas, ErsatzTV, and Dispatcharr have no tuner status, so every watch failed with "This tuner did not answer". Their channels now open from the lineup, as many at once as the emulator lists tuners, and a slow emulator never holds up other screens.
+- Server: 25 and 50 Hz broadcasts (Europe, Australia, DVB, most IPTV) keep their own clock. The frame rate is read from the picture and kept per channel; full pictures play at 50 and small ones at 25, where they were stretched to 59.94 and repeated every fifth picture. A multiview of 50 Hz channels runs at 50.
+- Apple TV: Page Up and Page Down (the Control Center remote's channel buttons, and TV remotes through HDMI) move the guide a screen of channels, and the remote's Guide button opens the guide.
+- Apple TV: the guide's day menu jumps 2 hours later, to tonight, and to the coming days at the same time of day, and the time ruler names the day when it isn't today.
+- iPhone and iPad: a Now button brings the guide back to the current time.
+
+### Changed
+
+- Apple TV, iPhone, and iPad: every channel in the guide has a tile: its logo on a plate that suits it, or its name on its station's color when there is no logo. Program cells are words only; the small pictures that showed on some programs and not others are gone, and program art sits in the guide's header. Cells use larger type on Apple TV, and a program on now is shaded the same on every channel, with the category shown as a thin bar.
+- Apple TV: the focused program or channel turns light with dark words, so it reads from across the room.
+- Apple TV: Up and Down keep the time you are on, landing on whatever airs then on the next channel instead of jumping to the nearest show's start. Holding Down speeds up after a moment.
+- Apple TV: Left on the first show on screen goes back half an hour at a time until the guide is on now, then to the channel column.
+- Apple TV: Back in the guide comes to now on the channel you are on first, then to the first channel, then to the tab bar.
+- Apple TV: the station index groups a lineup numbered without dots (cable, DVB, playlists) into blocks of numbers or letters, so a thousand channels are a short list.
+- Server: the listing scan tunes antenna tuners only. It held a playlist's stream, often the provider's only one, and cable and DVB tuners, for 40 seconds a channel.
+- Server: a source that won't open says what to check (the address and port, the path, or the folder's permissions) instead of "Something went wrong".
+- Setup outside North America no longer looks for ABC, CBS, FOX, and NBC.
+
+### Fixed
+
+- Apple TV, iPhone, and iPad: channel logos show. They never loaded in the guide's channel column or header.
+- Server: a cable or DVB tuner's first tune no longer waits out a 4-second ceiling; the probe only recognised an ATSC lock.
+- Server: failover takes the same station on another tuner, not any channel with the same number on another source.
+- Server: an XMLTV guide in Latin-1 or Windows-1252 loads, and a programme listed in several languages keeps its main title.
+- Server: a tuner address can be pasted as a link, with a path (Dispatcharr's /hdhr), or as an IPv6 address.
+- Server: playlist channel names keep their commas, and a playlist starting with a byte order mark keeps its guide link.
+- Web: opening Broadwave behind a reverse proxy at a path (example.com/broadwave) says it needs a name of its own instead of showing a blank page.
+- iPhone, iPad, and Apple TV: a server address typed as a bare IPv6 address connects.
+- Apple TV: the guide's now time shows in the ruler for the first minutes of each half hour.
+
 ## 0.16.4 — 2026-10-31
 
 ### Fixed
