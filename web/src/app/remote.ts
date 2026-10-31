@@ -148,7 +148,11 @@ export function focusPastNotice(event: { detail: number; currentTarget: EventTar
 
 /** A plain focus() does not match :focus-visible, so the ring would not draw. */
 export function focusRing(el: HTMLElement | null | undefined) {
-  el?.focus({ focusVisible: true } as FocusOptions);
+  if (!el) return;
+  // Focusing what already has focus changes nothing, so a field a plain focus() reached
+  // first (Search, before the layout was known to be a TV) kept no ring.
+  if (el === document.activeElement && !el.matches(":focus-visible")) el.blur();
+  el.focus({ focusVisible: true } as FocusOptions);
 }
 
 function editing(target: HTMLElement | null) {
