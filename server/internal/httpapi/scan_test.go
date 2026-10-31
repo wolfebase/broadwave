@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -149,5 +151,24 @@ func TestNextUnlistedSkipsPlaylistsDVBAndCable(t *testing.T) {
 	srv := &Server{Store: st}
 	if ch, _, ok := srv.nextUnlisted(ctx, map[int]bool{}, map[int64]bool{}); ok {
 		t.Fatalf("scanned %s", ch.GuideName)
+	}
+}
+
+// An HDHomeRun emulator says it is an HDTC-2US. Its channels are a provider's
+// streams with no frequency to share, and the scan held one 40 s each.
+func TestNextUnlistedSkipsAnHDHomeRunEmulator(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	emu := httptest.NewServer(http.NotFoundHandler()) // no status.json
+	defer emu.Close()
+	if err := st.UpsertDevice(ctx, hdhr.Device{DeviceID: "EMU", FriendlyName: "Threadfin", ModelNumber: "HDTC-2US", BaseURL: emu.URL, TunerCount: 2},
+		[]hdhr.Channel{{GuideNumber: "1", GuideName: "News", StreamURL: emu.URL + "/auto/v1"}}); err != nil {
+		t.Fatal(err)
+	}
+	hub := live.New(st, t.TempDir(), "ffmpeg", "libx264")
+	defer hub.Shutdown()
+	srv := &Server{Store: st, Hub: hub}
+	if ch, _, ok := srv.nextUnlisted(ctx, map[int]bool{}, map[int64]bool{}); ok {
+		t.Fatalf("scanned the emulator's %s", ch.GuideName)
 	}
 }

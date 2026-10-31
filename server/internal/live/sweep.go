@@ -154,6 +154,10 @@ func (h *Hub) sweepTargets(ctx context.Context) []sweepTarget {
 		if err != nil || src.TunerCount == 0 || src.BaseURL == "" || hlsStream(src) {
 			continue
 		}
+		// An emulator's channels are a provider's streams, not idle tuners.
+		if h.NoStatus(ctx, src.BaseURL) {
+			continue
+		}
 		key := "id:" + strconv.FormatInt(src.ID, 10)
 		if !NeedFor(src.VideoCodec, src.AudioCodec, src.ATSC3).ATSC3 && src.FrequencyHz > 0 {
 			key = hostOf(src.BaseURL) + ":" + strconv.Itoa(src.FrequencyHz)

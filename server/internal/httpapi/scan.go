@@ -84,6 +84,11 @@ func (s *Server) nextUnlisted(ctx context.Context, seen map[int]bool, tried map[
 		if err != nil || full.TunerCount == 0 || !hdhr.BroadcastGuide(full.ModelNumber) {
 			continue
 		}
+		// An HDHomeRun emulator poses as an antenna model; its channels are
+		// a provider's streams.
+		if s.Hub != nil && s.Hub.NoStatus(ctx, full.BaseURL) {
+			continue
+		}
 		if current[ch.ID] >= 2 && full.FrequencyHz == 0 {
 			continue
 		}
