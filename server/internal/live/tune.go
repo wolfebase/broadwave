@@ -74,6 +74,9 @@ func (h *Hub) openTuned(ctx context.Context, ch store.SourceChannel) *tuned {
 	}
 	began := time.Now()
 	raw, err := fetchTunerStatus(ctx, ch.BaseURL)
+	h.mu.Lock()
+	h.noteStatusLocked(ch.BaseURL, err)
+	h.mu.Unlock()
 	if err != nil {
 		h.mu.Lock()
 		if ctx.Err() == nil && h.statusDown != nil {
@@ -236,6 +239,15 @@ func (h *Hub) feedLocked(ctx context.Context, ch store.SourceChannel, o opened, 
 // the device's answer. It returns with h.mu held, also on an error.
 func (h *Hub) tuneFeed(ctx context.Context, ch store.SourceChannel, res *http.Response) (*feed, error) {
 	var o opened
+	plain := false
+	if res == nil {
+		var err error
+		res, plain, err = h.openPlain(ctx, ch)
+		if err != nil {
+			h.mu.Lock()
+			return nil, err
+		}
+	}
 	if res == nil {
 		var err error
 		if o, err = h.openUnlocked(ctx, ch); err != nil {
@@ -245,6 +257,9 @@ func (h *Hub) tuneFeed(ctx context.Context, ch store.SourceChannel, res *http.Re
 		}
 	}
 	h.mu.Lock()
+	if plain {
+		h.plainOpening[ch.DeviceID]--
+	}
 	f, err := h.feedLocked(ctx, ch, o, res)
 	h.noteDarkLocked(ch, err)
 	return f, err

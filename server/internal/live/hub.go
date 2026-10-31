@@ -1,6 +1,7 @@
 package live
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -226,8 +227,12 @@ type Hub struct {
 	statusDown map[string]time.Time
 	// plain is a device that answered without a tuner status: an HDHomeRun
 	// emulator (Threadfin, xTeVe, Antennas, ErsatzTV, Dispatcharr). Its
-	// channels open their lineup stream, one per tuner it lists.
-	plain map[string]bool
+	// channels open their lineup stream, one per tuner it lists. statusOK is
+	// a device that has answered a status read; it is never plain.
+	plain    map[string]bool
+	statusOK map[string]bool
+	// plainOpening counts streams of a plain device being opened, by device id.
+	plainOpening map[string]int
 	// dark is when a tune of a channel or frequency last found no signal.
 	dark       map[darkKey]time.Time
 	next       int
@@ -700,7 +705,12 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		return f, nil
 	}
 	if stream != nil {
-		return h.addFeedLocked(h.streamMuxLocked(ch, stream.Body, "stream"), ch), nil
+		m := h.streamMuxLocked(ch, stream.Body, "stream")
+		// A plain device's stream is a tuner's: a stall opens it again.
+		if ch.TunerCount > 0 {
+			m.reopen = ch.StreamURL
+		}
+		return h.addFeedLocked(m, ch), nil
 	}
 	if hlsStream(ch) {
 		if err := fetchguard.Reachable(ctx, ch.StreamURL); err != nil {
@@ -733,12 +743,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 				continue
 			}
 			tuners, err := h.readTuners(ctx, candidate)
-			if errors.Is(err, errNoStatus) {
-				if h.plain == nil {
-					h.plain = map[string]bool{}
-				}
-				h.plain[candidate] = true
-			}
+			h.noteStatusLocked(candidate, err)
 			if err != nil {
 				// An unplugged device costs every tune its status timeout (3 s).
 				if ctx.Err() == nil {
@@ -747,7 +752,6 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 				continue
 			}
 			delete(h.statusDown, candidate)
-			delete(h.plain, candidate)
 			last = tuners
 			devices = append(devices, DeviceTuners{Host: hostOf(candidate), Base: candidate, Tuners: tuners})
 		}
@@ -762,9 +766,6 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	}
 	if len(devices) == 0 {
 		read(bases, false)
-	}
-	if len(devices) == 0 && h.plain[ch.BaseURL] && ch.StreamURL != "" {
-		return h.openPlainLocked(ch)
 	}
 	if len(devices) == 0 {
 		return nil, ErrTunerSilent
@@ -4409,17 +4410,87 @@ type tunerStatus struct {
 // other than a tuner list.
 var errNoStatus = errors.New("no tuner status")
 
-// openPlainLocked plays a channel of a device with no tuner status from its
-// lineup stream, as many at once as the device lists tuners.
-func (h *Hub) openPlainLocked(ch store.SourceChannel) (*feed, error) {
-	if ch.TunerCount > 0 && h.streamsForDeviceLocked(ch.DeviceID) >= ch.TunerCount {
-		return nil, &BusyError{}
+// noteStatusLocked records what a device's status read said. A device that
+// has answered one is a tuner, whatever a later read says.
+func (h *Hub) noteStatusLocked(base string, err error) {
+	switch {
+	case err == nil:
+		if h.statusOK == nil {
+			h.statusOK = map[string]bool{}
+		}
+		h.statusOK[base] = true
+		delete(h.plain, base)
+	case errors.Is(err, errNoStatus) && !h.statusOK[base]:
+		if h.plain == nil {
+			h.plain = map[string]bool{}
+		}
+		h.plain[base] = true
 	}
-	res, err := openStream(ch.StreamURL, ch.UserAgent, ch.Referrer)
+}
+
+// NoStatus reports a device that answers without a tuner status, an
+// HDHomeRun emulator. A device not read yet is asked once.
+func (h *Hub) NoStatus(ctx context.Context, base string) bool {
+	h.mu.Lock()
+	// A device that just failed a read is not asked again for a minute.
+	known := h.plain[base] || h.statusOK[base] || time.Now().Before(h.statusDown[base])
+	h.mu.Unlock()
+	if !known {
+		_, err := fetchTunerStatus(ctx, base)
+		h.mu.Lock()
+		h.noteStatusLocked(base, err)
+		if err != nil && !errors.Is(err, errNoStatus) && ctx.Err() == nil {
+			if h.statusDown == nil {
+				h.statusDown = map[string]time.Time{}
+			}
+			h.statusDown[base] = time.Now().Add(statusDownFor)
+		}
+		h.mu.Unlock()
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.plain[base]
+}
+
+// openPlain opens a plain device's channel stream without h.mu: an emulator
+// can take seconds to answer. plain is false for anything else, which tunes
+// as usual. A device not yet read has its status read here, once.
+func (h *Hub) openPlain(ctx context.Context, ch store.SourceChannel) (res *http.Response, plain bool, err error) {
+	if ch.TunerCount == 0 || ch.StreamURL == "" || ch.BaseURL == "" || hlsStream(ch) {
+		return nil, false, nil
+	}
+	h.mu.Lock()
+	_, tuned := h.channels[ch.ID]
+	known := h.plain[ch.BaseURL] || h.statusOK[ch.BaseURL]
+	h.mu.Unlock()
+	if tuned {
+		return nil, false, nil
+	}
+	if !known && !h.NoStatus(ctx, ch.BaseURL) {
+		return nil, false, nil
+	}
+	h.mu.Lock()
+	if !h.plain[ch.BaseURL] {
+		h.mu.Unlock()
+		return nil, false, nil
+	}
+	if h.streamsForDeviceLocked(ch.DeviceID)+h.plainOpening[ch.DeviceID] >= ch.TunerCount {
+		h.mu.Unlock()
+		return nil, true, &BusyError{}
+	}
+	if h.plainOpening == nil {
+		h.plainOpening = map[string]int{}
+	}
+	h.plainOpening[ch.DeviceID]++
+	h.mu.Unlock()
+	res, err = openStream(ch.StreamURL, ch.UserAgent, ch.Referrer)
 	if err != nil {
-		return nil, autoError(err, nil, false)
+		h.mu.Lock()
+		h.plainOpening[ch.DeviceID]--
+		h.mu.Unlock()
+		return nil, true, autoError(err, nil, false)
 	}
-	return h.addFeedLocked(h.streamMuxLocked(ch, res.Body, "stream"), ch), nil
+	return res, true, nil
 }
 
 // statusTimeout bounds one device's status read. A tuner on the network
@@ -4444,11 +4515,25 @@ func fetchTunerStatus(ctx context.Context, host string) ([]tunerStatus, error) {
 		return nil, err
 	}
 	defer res.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if res.StatusCode != http.StatusOK {
+	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil {
+		// A body cut off by the timeout or a reset is a tuner that is slow,
+		// not one with no status.
+		return nil, err
+	}
+	switch res.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented:
 		return nil, fmt.Errorf("%w (%s)", errNoStatus, res.Status)
+	default:
+		return nil, fmt.Errorf("status.json returned %s", res.Status)
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
+		// A web page or an object is not a status. A list that does not
+		// read is a tuner's, garbled.
+		if trimmed := bytes.TrimSpace(body); len(trimmed) > 0 && trimmed[0] == '[' {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w (%w)", errNoStatus, err)
 	}
 	return raw, nil
