@@ -2,6 +2,7 @@ package live
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -235,5 +236,44 @@ func TestARecordingThatCannotBeRemovedKeepsItsSidecars(t *testing.T) {
 	}
 	if _, err := os.Stat(edl); err != nil {
 		t.Fatalf("markers went with a recording that stayed: %v", err)
+	}
+}
+
+func TestDeletingARecordingStopsItsPlayback(t *testing.T) {
+	h := &Hub{Dir: t.TempDir()}
+	root := h.Recordings()
+	season := filepath.Join(root, "TV", "News", "Season 01")
+	if err := os.MkdirAll(season, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(season, "News - S01E01.ts")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	canceled := false
+	done := h.trackFileEncode(4, cmd, func() { canceled = true })
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+	}()
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+
+	if err := h.RemoveRecordingFiles(store.Recording{ID: 4, Path: path}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	default:
+		t.Fatal("the playback encode was still running after the delete")
+	}
+	if !canceled {
+		t.Fatal("the caption pass was not stopped")
+	}
+	if _, err := os.Stat(filepath.Join(root, "TV")); !os.IsNotExist(err) {
+		t.Fatalf("emptied show folders stayed: %v", err)
 	}
 }

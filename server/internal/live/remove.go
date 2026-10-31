@@ -15,7 +15,12 @@ import (
 // A file in a library folder is left alone. The error is from the recording
 // file itself, and then nothing else is removed. Sidecars are best-effort, and
 // a file that is already gone is not an error.
+// Its playback encode stops first: an ffmpeg still reading the file would
+// write into the work folder after it goes, and on a FUSE share (Unraid's
+// /mnt/user) the open file keeps its season folder from emptying.
 func (h *Hub) RemoveRecordingFiles(rec store.Recording) error {
+	defer h.lockFileStart(rec.ID)()
+	h.stopFileEncode(rec.ID)
 	root := h.Recordings()
 	workDir := h.Dir
 	if err := removeInside(root, rec.Path); err != nil {
