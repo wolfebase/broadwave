@@ -497,6 +497,8 @@ if (playlist) {
   if (quad) fakeArgs.push("-quad");
   // FLEX-4K adds a clear 3.0 row and an encrypted 3.0 twin of 5.1 (115.1 WTST).
   if (process.env.E2E_ATSC3 === "1") fakeArgs.push("-profile", "FLEX-4K");
+  // E2E_HDHR_PROFILE picks another device, such as PRIME (cable numbers) or DVB-T.
+  else if (process.env.E2E_HDHR_PROFILE) fakeArgs.push("-profile", process.env.E2E_HDHR_PROFILE);
   start(path.join(run, "fakehdhr"), fakeArgs, { env: { ...process.env, FAKEHDHR_ADMIN: `127.0.0.1:${port + 10}` } }, (chunk) => {
     fakeOut += chunk.toString();
   });
