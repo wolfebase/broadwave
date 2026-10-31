@@ -293,8 +293,12 @@ func drmFlag(raw string) bool {
 
 // titleComma is the comma that ends an #EXTINF line's attributes: the first
 // one outside quotes. A name can have its own ("News, Weather & Sport"), and
-// a group-title can too.
+// a group-title can too. A line whose quotes cannot be followed (single
+// quotes, or an odd count) keeps the last comma, as before.
 func titleComma(line string) int {
+	if strings.Contains(line, "='") || strings.Count(line, `"`)%2 != 0 {
+		return strings.LastIndex(line, ",")
+	}
 	quoted := false
 	for i, r := range line {
 		switch {

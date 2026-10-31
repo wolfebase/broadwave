@@ -267,6 +267,10 @@ func TestM3UNamesKeepTheirCommas(t *testing.T) {
 	if len(got) != 3 || got[0].Name != "News, Weather & Sport" || got[0].Group != "News, UK" || got[1].Name != "Plain" || got[2].Name != "Odd, Name" {
 		t.Fatalf("%+v", got)
 	}
+	odd := ParseM3U(strings.NewReader("#EXTM3U\n#EXTINF:-1 group-title='News, UK',BBC One\nhttp://example.test/4.ts\n#EXTINF:-1 tvg-name=\"Broken,Sports\nhttp://example.test/5.ts\n"))
+	if len(odd) != 2 || odd[0].Name != "BBC One" || odd[1].Name != "Sports" {
+		t.Fatalf("single or unbalanced quotes: %+v", odd)
+	}
 	if got[0].GuideURL != "http://example.test/guide.xml" {
 		t.Fatalf("a byte order mark hid the guide: %q", got[0].GuideURL)
 	}
