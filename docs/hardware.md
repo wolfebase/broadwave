@@ -18,6 +18,7 @@ A closed tuner reports `TargetIP` `closed` so the next tune skips it. Codec byte
 | SCRIBE DUO (HDVR-2US-1TB) | 2 | Tuner path plus `recorded_files.json` (`Title`, `EpisodeTitle`, `Filename`) | verified on fake |
 | SERVIO (HHDD-2TB) | 0 | Storage discover and `recorded_files.json`. Scan is refused. No tune and no failover. | verified on fake |
 | DUAL, old firmware (HDHR3-US, version 20140301) | 2 | No `DeviceAuth`, lineup without codecs, upgrade route is 404. Tune, scan, and failover still run. | verified on fake |
+| CONNECT QUATRO DVB-T (HDHR5-4DT) | 4 | Logical channel numbers with no dot, lock `t8qam64`, two services on one multiplex. The tune takes the first lock, 25i plays at 50 (25 on small pictures and tiles), and the ATSC listing scan leaves it alone. | verified on fake |
 | Tuner counts 1–8 | override on CONNECT DUO | Discover count, status length, busy at the cap. Failover when the count is 2 or more. One tuner fails the next tune after it is closed. | verified on fake |
 
 CONNECT DUO is the only model this project has already read on a real device (discover, lineup, and tuner status). This table does not add a real-hardware run.
@@ -26,7 +27,7 @@ A pool keeps ATSC 3.0 tuners for HEVC + AC-4 (a guide number alone does not coun
 
 What a viewer sees is in [ATSC 3.0](atsc3.md). ATSC 3.0 channels arrive as HEVC Main 10 with AC-4 sound, sometimes with a second-language AC-4 track. Players that report HEVC get the picture as sent. Apple TV HD, earlier iPhones and iPads, and other browsers get 8-bit H.264. The client table below names the models. No player decodes AC-4. The server reads each AC-4 track's width once per tune with ffprobe, which needs the AC-4 decoder that jellyfin-ffmpeg has. A 5.1 AC-4 mix goes out as Dolby Digital when the player can take it. Auto sends stereo AAC otherwise, and Surround sends 5.1 AAC. This was read on a real FLEX 4K.
 
-Untested, on a fake and on real hardware: first-generation HDHR-US, DVB and ISDB variants, CONNECT 4K (HDHR5-4K), FLEX 4K development edition, SCRIBE QUATRO, SCRIBE 4K, and the TECH rack models.
+Untested on real hardware: DVB variants (no DVB device has been read). Untested, on a fake and on real hardware: first-generation HDHR-US, ISDB variants, CONNECT 4K (HDHR5-4K), FLEX 4K development edition, SCRIBE QUATRO, SCRIBE 4K, and the TECH rack models.
 
 ## Clients
 
