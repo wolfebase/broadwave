@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +22,31 @@ import (
 	"broadwave/internal/source"
 	"broadwave/internal/store"
 )
+
+// sourceError is writeError for reading a source someone named. A file, a
+// name, or a connection that fails is theirs to fix, so it says which; the
+// log keeps the detail.
+func sourceError(w http.ResponseWriter, err error) {
+	var path *fs.PathError
+	var dns *net.DNSError
+	var op *net.OpError
+	switch {
+	case errors.Is(err, fs.ErrPermission):
+		slog.Warn("source: " + err.Error())
+		apiError(w, http.StatusBadRequest, "source_unreadable", "Broadwave isn't allowed to read that. Check PUID and PGID, or the folder's permissions.", nil)
+	case errors.As(err, &path):
+		slog.Warn("source: " + err.Error())
+		apiError(w, http.StatusBadRequest, "source_unreadable", "Broadwave can't read that file or folder. Check the path is on the server, in a folder mapped into it.", nil)
+	case errors.As(err, &dns):
+		slog.Warn("source: " + err.Error())
+		apiError(w, http.StatusBadRequest, "source_unreachable", "Broadwave can't find that name. Check the address, or use the computer's IP address.", nil)
+	case errors.As(err, &op), errors.Is(err, context.DeadlineExceeded):
+		slog.Warn("source: " + err.Error())
+		apiError(w, http.StatusBadRequest, "source_unreachable", "Broadwave can't reach that address. Check the address and port open in a browser.", nil)
+	default:
+		writeError(w, err)
+	}
+}
 
 func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(r.Header.Get("Content-Type"), "multipart/form-data") {
@@ -47,7 +75,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 	case "m3u":
 		raw, err := source.ReadPlaylist(ctx, strings.TrimSpace(body.URL))
 		if err != nil {
-			writeError(w, err)
+			sourceError(w, err)
 			return
 		}
 		s.installPlaylist(w, ctx, "m3u", body.Name, body.URL, body.Groups, body.Keep, body.XMLTV, body.Start, raw)
@@ -70,7 +98,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 	case "xtream":
 		playlist, _, err := source.Xtream(ctx, body.URL, body.User, body.Pass)
 		if err != nil {
-			writeError(w, err)
+			sourceError(w, err)
 			return
 		}
 		stored := strings.TrimRight(strings.TrimSpace(body.URL), "/")
@@ -87,7 +115,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 	case "tvheadend":
 		playlist, loc, guide, err := source.TVHeadend(ctx, body.URL, body.User, body.Pass)
 		if err != nil {
-			writeError(w, err)
+			sourceError(w, err)
 			return
 		}
 		if body.XMLTV != "" {
@@ -97,7 +125,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 	case "channels":
 		playlist, loc, guide, err := source.ChannelsDVR(ctx, body.URL)
 		if err != nil {
-			writeError(w, err)
+			sourceError(w, err)
 			return
 		}
 		name := strings.TrimSpace(body.Name)
@@ -108,7 +136,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 	case "threadfin", "xteve", "ersatztv", "dispatcharr":
 		playlist, loc, guide, err := source.EmulatorM3U(ctx, kind, body.URL)
 		if err != nil {
-			writeError(w, err)
+			sourceError(w, err)
 			return
 		}
 		name := strings.TrimSpace(body.Name)
@@ -117,9 +145,14 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 		}
 		s.installPlaylist(w, ctx, kind, name, loc, body.Groups, body.Keep, guide, body.Start, playlist)
 	case "folder":
+		// A path not mapped into the container would be added empty.
+		if _, err := os.ReadDir(strings.TrimSpace(body.URL)); err != nil {
+			sourceError(w, err)
+			return
+		}
 		found, err := source.ScanMedia(strings.TrimSpace(body.URL))
 		if err != nil {
-			writeError(w, err)
+			sourceError(w, err)
 			return
 		}
 		added := 0
