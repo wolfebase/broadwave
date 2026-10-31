@@ -257,3 +257,17 @@ func TestARemovedPlaylistStaysRemoved(t *testing.T) {
 		t.Fatalf("channels %+v %v", channels, err)
 	}
 }
+
+func TestM3UNamesKeepTheirCommas(t *testing.T) {
+	playlist := "\ufeff#EXTM3U url-tvg=\"http://example.test/guide.xml\"\n" +
+		"#EXTINF:-1 tvg-id=\"news.uk\" group-title=\"News, UK\",News, Weather & Sport\nhttp://example.test/1.ts\n" +
+		"#EXTINF:-1,Plain\nhttp://example.test/2.ts\n" +
+		"#EXTINF:-1 tvg-name=\"Odd, Name\"\nhttp://example.test/3.ts\n"
+	got := ParseM3U(strings.NewReader(playlist))
+	if len(got) != 3 || got[0].Name != "News, Weather & Sport" || got[0].Group != "News, UK" || got[1].Name != "Plain" || got[2].Name != "Odd, Name" {
+		t.Fatalf("%+v", got)
+	}
+	if got[0].GuideURL != "http://example.test/guide.xml" {
+		t.Fatalf("a byte order mark hid the guide: %q", got[0].GuideURL)
+	}
+}

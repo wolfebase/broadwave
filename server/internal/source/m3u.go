@@ -62,7 +62,8 @@ func ParseM3U(r io.Reader) []Entry {
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	n := 1
 	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
+		// A playlist saved on Windows can start with a byte order mark.
+		line := strings.TrimSpace(strings.TrimPrefix(sc.Text(), "\ufeff"))
 		if line == "" {
 			continue
 		}
@@ -74,8 +75,8 @@ func ParseM3U(r io.Reader) []Entry {
 			continue
 		}
 		if strings.HasPrefix(line, "#EXTINF:") {
-			name := line
-			if comma := strings.LastIndex(line, ","); comma >= 0 {
+			name := ""
+			if comma := titleComma(line); comma >= 0 {
 				name = strings.TrimSpace(line[comma+1:])
 			}
 			if quoted := attr(line, "tvg-name"); quoted != "" && name == "" {
@@ -288,6 +289,22 @@ func drmFlag(raw string) bool {
 	default:
 		return false
 	}
+}
+
+// titleComma is the comma that ends an #EXTINF line's attributes: the first
+// one outside quotes. A name can have its own ("News, Weather & Sport"), and
+// a group-title can too.
+func titleComma(line string) int {
+	quoted := false
+	for i, r := range line {
+		switch {
+		case r == '"':
+			quoted = !quoted
+		case r == ',' && !quoted:
+			return i
+		}
+	}
+	return -1
 }
 
 func attr(line, key string) string {
