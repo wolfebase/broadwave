@@ -359,6 +359,11 @@ func (s *Server) stepFolder(ctx context.Context) {
 }
 
 func (s *Server) stepFavorites(ctx context.Context) {
+	// ABC, CBS, FOX, and NBC mean nothing to a DVB lineup in Europe.
+	if region.Abroad(s.zone().Name) {
+		s.setFinish("favorites", "skipped", "Star your favorite channels in the guide.")
+		return
+	}
 	country := region.CountryOf(s.zone().Name)
 	s.setFinish("favorites", "running", "Picking "+joinAnd(network.Main(country)[:4])+".")
 	starred, err := s.starBigFour(ctx)

@@ -58,3 +58,20 @@ func TestCountry(t *testing.T) {
 		t.Fatal("BROADWAVE_COUNTRY wins")
 	}
 }
+
+func TestAbroadIsOutsideTheUSAndCanada(t *testing.T) {
+	t.Setenv("BROADWAVE_COUNTRY", "")
+	for zone, want := range map[string]bool{
+		"Europe/Berlin": true, "Australia/Sydney": true, "America/Mexico_City": true, "Asia/Tokyo": true,
+		"America/Chicago": false, "America/Toronto": false, "Pacific/Honolulu": false, "America/Puerto_Rico": false,
+		"UTC": false, "Etc/UTC": false, "": false, "CST": false,
+	} {
+		if got := Abroad(zone); got != want {
+			t.Errorf("Abroad(%q) = %v", zone, got)
+		}
+	}
+	t.Setenv("BROADWAVE_COUNTRY", "US")
+	if Abroad("Europe/Berlin") {
+		t.Error("BROADWAVE_COUNTRY is the answer")
+	}
+}

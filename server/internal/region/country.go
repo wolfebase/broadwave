@@ -70,3 +70,20 @@ func set(list string) map[string]bool {
 	}
 	return out
 }
+
+// Abroad reports a server set to a time zone outside the US and Canada, with
+// no BROADWAVE_COUNTRY. UTC and a bare abbreviation are not abroad: a
+// container with no TZ is most often in the US.
+func Abroad(zone string) bool {
+	if strings.TrimSpace(os.Getenv("BROADWAVE_COUNTRY")) != "" {
+		return false
+	}
+	zone = strings.TrimSpace(zone)
+	if ZoneCountry(zone) != "" || !strings.Contains(zone, "/") || strings.HasPrefix(zone, "Etc/") {
+		return false
+	}
+	return !usTerritory[zone]
+}
+
+// usTerritory is a zone outside the states that still gets ATSC networks.
+var usTerritory = set(`America/Puerto_Rico America/St_Thomas America/Virgin Pacific/Guam Pacific/Saipan Pacific/Pago_Pago`)

@@ -14,6 +14,7 @@ import (
 
 	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
+	"broadwave/internal/region"
 	"broadwave/internal/store"
 )
 
@@ -377,5 +378,26 @@ func TestSetupForAPlaylistPointsAtAGuideAndSkipsSignal(t *testing.T) {
 	}
 	if s := got["signal"]; s.State != "skipped" || strings.Contains(s.Detail, "No signal reading") {
 		t.Fatalf("signal %+v", s)
+	}
+}
+
+func TestFavoritesStepIsSkippedOutsideNorthAmerica(t *testing.T) {
+	t.Setenv("BROADWAVE_COUNTRY", "")
+	st := testStore(t)
+	if err := st.UpsertDevice(context.Background(), hdhr.Device{DeviceID: "DVB", FriendlyName: "Quatro", ModelNumber: "HDHR5-4DT", BaseURL: "http://127.0.0.1:1", TunerCount: 4},
+		[]hdhr.Channel{{GuideNumber: "1", GuideName: "ABC News"}}); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Store: st, Zone: func() region.Zone { return region.Zone{Name: "Europe/Berlin", Valid: true} }}
+	s.finishRun = &finishStatus{Steps: []finishStep{{ID: "favorites"}}}
+	s.stepFavorites(context.Background())
+	if step := s.finishRun.Steps[0]; step.State != "skipped" || strings.Contains(step.Detail, "NBC") {
+		t.Fatalf("%+v", step)
+	}
+	channels, _ := st.Channels(context.Background(), false)
+	for _, ch := range channels {
+		if ch.Favorite {
+			t.Fatalf("starred %s", ch.GuideName)
+		}
 	}
 }
