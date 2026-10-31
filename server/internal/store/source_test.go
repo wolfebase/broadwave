@@ -600,3 +600,34 @@ func TestAnAbsentChannelWhoseNumberIsTakenStaysReadable(t *testing.T) {
 		t.Fatalf("channels %v", got)
 	}
 }
+
+// Cable 5, an IPTV playlist's 5, and a DVB 5 are different stations. Only the
+// same station on another tuner or playlist takes over for a channel.
+func TestAFailoverIsTheSameStationNotJustTheNumber(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	cable := hdhr.Device{DeviceID: "CABLE", FriendlyName: "PRIME", BaseURL: "http://192.168.1.20", TunerCount: 3}
+	antenna := hdhr.Device{DeviceID: "DVBT", FriendlyName: "QUATRO", BaseURL: "http://192.168.1.30", TunerCount: 4}
+	pool := hdhr.Device{DeviceID: "CABLE2", FriendlyName: "PRIME 2", BaseURL: "http://192.168.1.40", TunerCount: 3}
+	playlist := hdhr.Device{DeviceID: "src-1", FriendlyName: "IPTV", BaseURL: "source"}
+	for dev, name := range map[hdhr.Device]string{cable: "LOCAL2", antenna: "Channel Five", pool: "local2", playlist: "Sports Five"} {
+		if err := st.UpsertDevice(ctx, dev, []hdhr.Channel{{GuideNumber: "5", GuideName: name, StreamURL: dev.BaseURL + "/auto/v5"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := st.OtherDevices(ctx, "5", "CABLE")
+	if err != nil || len(got) != 1 || got[0] != pool.BaseURL {
+		t.Fatalf("failover devices %v %v", got, err)
+	}
+	var cableID int64
+	if err := st.db.QueryRow(`SELECT id FROM channels WHERE device_id='CABLE'`).Scan(&cableID); err != nil {
+		t.Fatal(err)
+	}
+	alts, err := st.AlternateChannels(ctx, "5", cableID)
+	if err != nil || len(alts) != 1 {
+		t.Fatalf("alternates %v %v", alts, err)
+	}
+	if ch, err := st.SourceChannel(ctx, alts[0]); err != nil || ch.DeviceID != "CABLE2" {
+		t.Fatalf("alternate %+v %v", ch, err)
+	}
+}

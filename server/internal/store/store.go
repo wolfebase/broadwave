@@ -469,15 +469,28 @@ FROM channels WHERE device_id=? ORDER BY id`, deviceID)
 	return b.String(), rows.Err()
 }
 
+// sameStation is the SQL test that row c is the station named :name. A
+// number alone is not: cable 5, an IPTV playlist's 5, and a DVB 5 are
+// different channels. Two tuners on one antenna read the same name. An
+// unnamed row still matches.
+const sameStation = `(trim(c.guide_name) = '' OR :name = '' OR lower(trim(c.guide_name)) = lower(:name))`
+
 // OtherDevices lists base URLs for other tuners that already have this channel number, lowest priority first.
 // A row hidden from the lineup still counts: hiding is a display choice, and a
-// 1.0 channel with its 3.0 twin shown is stored hidden.
+// 1.0 channel with its 3.0 twin shown is stored hidden. The row must carry the
+// same station as this device's row with that number.
 func (s *Store) OtherDevices(ctx context.Context, guideNumber, exceptDevice string) ([]string, error) {
+	var name string
+	err := s.db.QueryRowContext(ctx, `SELECT trim(guide_name) FROM channels WHERE device_id = ? AND guide_number = ? LIMIT 1`, exceptDevice, guideNumber).Scan(&name)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx, `
 SELECT d.base_url FROM devices d
 JOIN channels c ON c.device_id = d.device_id
-WHERE c.guide_number = ? AND c.present = 1 AND c.protected = 0 AND d.device_id != ?
-ORDER BY d.priority, d.device_id`, guideNumber, exceptDevice)
+WHERE c.guide_number = :number AND c.present = 1 AND c.protected = 0 AND d.device_id != :device AND d.tuner_count > 0
+	AND `+sameStation+`
+ORDER BY d.priority, d.device_id`, sql.Named("number", guideNumber), sql.Named("device", exceptDevice), sql.Named("name", name))
 	if err != nil {
 		return nil, err
 	}
@@ -509,13 +522,20 @@ LIMIT 1`, base, guide).Scan(&raw)
 	return raw, err
 }
 
-// AlternateChannels lists other present channels with this guide number, lowest device priority first.
+// AlternateChannels lists other present channels with this guide number and
+// station, lowest device priority first.
 func (s *Store) AlternateChannels(ctx context.Context, guideNumber string, exceptID int64) ([]int64, error) {
+	var name string
+	err := s.db.QueryRowContext(ctx, `SELECT trim(guide_name) FROM channels WHERE id = ?`, exceptID).Scan(&name)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx, `
 SELECT c.id FROM channels c
 JOIN devices d ON d.device_id = c.device_id
-WHERE c.guide_number = ? AND c.id != ? AND c.present = 1 AND c.protected = 0 AND c.stream_url != ''
-ORDER BY d.priority, c.id`, guideNumber, exceptID)
+WHERE c.guide_number = :number AND c.id != :id AND c.present = 1 AND c.protected = 0 AND c.stream_url != ''
+	AND `+sameStation+`
+ORDER BY d.priority, c.id`, sql.Named("number", guideNumber), sql.Named("id", exceptID), sql.Named("name", name))
 	if err != nil {
 		return nil, err
 	}
