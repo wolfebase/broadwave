@@ -1,8 +1,6 @@
 package guide
 
 import (
-	"encoding/xml"
-
 	"broadwave/internal/network"
 	"broadwave/internal/store"
 )
@@ -10,7 +8,7 @@ import (
 // Networks reads an XMLTV document and returns the network for each lineup channel it matches.
 func Networks(data []byte, lineup []store.Channel) map[int64]string {
 	var doc tv
-	if err := xml.Unmarshal(data, &doc); err != nil {
+	if err := unmarshalXMLTV(data, &doc); err != nil {
 		return nil
 	}
 	assigned := assign(doc.Channels, lineup)

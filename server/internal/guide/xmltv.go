@@ -47,9 +47,9 @@ type programme struct {
 	Start   string       `xml:"start,attr"`
 	Stop    string       `xml:"stop,attr"`
 	Channel string       `xml:"channel,attr"`
-	Title   string       `xml:"title"`
-	Sub     string       `xml:"sub-title"`
-	Desc    string       `xml:"desc"`
+	Title   []string     `xml:"title"`
+	Sub     []string     `xml:"sub-title"`
+	Desc    []string     `xml:"desc"`
 	Cats    []string     `xml:"category"`
 	EpNums  []episodeNum `xml:"episode-num"`
 	Icons   []iconEl     `xml:"icon"`
@@ -285,7 +285,7 @@ var ErrNoPrograms = errors.New("the XMLTV link gave no programs")
 // matches no channel, so a broken feed is not mistaken for a quiet one.
 func Parse(data []byte, channels []store.Channel) ([]store.Airing, map[int64]string, error) {
 	var doc tv
-	if err := xml.Unmarshal(data, &doc); err != nil {
+	if err := unmarshalXMLTV(data, &doc); err != nil {
 		return nil, nil, err
 	}
 	xmlToChannel := assign(doc.Channels, channels)
@@ -317,8 +317,8 @@ func Parse(data []byte, channels []store.Channel) ([]store.Airing, map[int64]str
 		video, audio, cc := p.features()
 		out = append(out, store.Airing{
 			Video: video, Audio: audio, CC: cc,
-			ChannelID: channelID, Title: strings.TrimSpace(p.Title), Subtitle: strings.TrimSpace(p.Sub),
-			Description: strings.TrimSpace(p.Desc), Category: joinCats(p.Cats), ProgramID: programID,
+			ChannelID: channelID, Title: first(p.Title), Subtitle: first(p.Sub),
+			Description: first(p.Desc), Category: joinCats(p.Cats), ProgramID: programID,
 			ImageURL: imageURL, ImageWidth: imageW, ImageHeight: imageH, Season: season, Episode: episode, EpisodeLabel: label,
 			OriginalAir: originalAir(p.Date), SeriesID: strings.TrimSpace(p.Series),
 			New: p.New != nil && p.Shown == nil, Live: p.Live != nil, Premiere: p.Premiere != nil, Finale: p.Finale != nil,
