@@ -82,7 +82,7 @@ Devices you invited are listed under **Settings**, **Devices and away from home*
 
 ## Your own reverse proxy
 
-A reverse proxy with its own certificate can publish Broadwave at a name such as `tv.example.com`. Point the name at `http://<the server's address>:8477` and turn on WebSockets for it (Nginx Proxy Manager calls it Websockets Support). Broadwave treats those requests like the Cloudflare tunnel: each one needs a paired device, whatever device sign-in is set to. That includes the guide, the video, recordings, settings, the support bundle, the playlist (`/export/lineup.m3u`), and the stream URLs. The home network does not change.
+A reverse proxy with its own certificate can publish Broadwave at a name such as `tv.example.com`. Broadwave has to be the whole name: a path such as `example.com/broadwave` is not supported, and the page says so instead of loading. Point the name at `http://<the server's address>:8477` and turn on WebSockets for it (Nginx Proxy Manager calls it Websockets Support). Broadwave treats those requests like the Cloudflare tunnel: each one needs a paired device, whatever device sign-in is set to. That includes the guide, the video, recordings, settings, the support bundle, the playlist (`/export/lineup.m3u`), and the stream URLs. The home network does not change.
 
 1. On the home network, open **Settings**, **Devices and away from home**, **Advanced**, and type the name into **Public address**, such as `tv.example.com`. Broadwave then answers to that name from the apps too, and invite links use it.
 2. [Invite family](#2-invite-family) the same way as with Cloudflare. A browser opens the invite link. The Apple apps choose **Join a home server** and type the address and the code.

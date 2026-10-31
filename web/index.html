@@ -30,6 +30,23 @@
           if (bar) bar.setAttribute("content", mode === "light" ? "default" : "black-translucent");
         } catch (e) {}
       })();
+      // The bundles load from /assets at the root of the address. Behind a
+      // proxy at a path (example.com/broadwave) they miss, and the page would
+      // stay blank.
+      window.addEventListener(
+        "error",
+        function (e) {
+          var el = e.target;
+          if (!el || el.tagName !== "SCRIPT" || !el.src) return;
+          var root = document.getElementById("root");
+          if (!root || root.childNodes.length) return;
+          root.setAttribute("role", "alert");
+          root.style.cssText = "max-width:34rem;margin:20vh auto;padding:0 16px;font:16px/1.5 system-ui,sans-serif";
+          root.textContent =
+            "Broadwave didn't load. Reload the page. Through a reverse proxy, Broadwave needs a name of its own, such as tv.example.com, not a path such as example.com/broadwave.";
+        },
+        true,
+      );
     </script>
   </head>
   <body>
