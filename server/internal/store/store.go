@@ -469,28 +469,58 @@ FROM channels WHERE device_id=? ORDER BY id`, deviceID)
 	return b.String(), rows.Err()
 }
 
-// sameStation is the SQL test that row c is the station named :name. A
-// number alone is not: cable 5, an IPTV playlist's 5, and a DVB 5 are
-// different channels. Two tuners on one antenna read the same name. An
-// unnamed row still matches.
-const sameStation = `(trim(c.guide_name) = '' OR :name = '' OR lower(trim(c.guide_name)) = lower(:name))`
+// stationRow is what tells two channel rows with one number apart.
+type stationRow struct {
+	name    string
+	freq    int
+	program int
+	model   string
+	tuners  int
+}
+
+// sameStation reports whether b carries a's station. A number alone does not:
+// cable 5, an IPTV playlist's 5, and a DVB 5 are different channels. Two
+// tuners on one antenna read the same name, or, when one lineup was scanned
+// before the station renamed itself, tune the same frequency and program.
+// An unnamed row still matches.
+func sameStation(a, b stationRow) bool {
+	an, bn := strings.ToLower(strings.TrimSpace(a.name)), strings.ToLower(strings.TrimSpace(b.name))
+	if an == "" || bn == "" || an == bn {
+		return true
+	}
+	antenna := func(r stationRow) bool { return r.tuners > 0 && hdhr.BroadcastGuide(r.model) }
+	if !antenna(a) || !antenna(b) || a.freq <= 0 || a.freq != b.freq {
+		return false
+	}
+	return a.program == 0 || b.program == 0 || a.program == b.program
+}
+
+const stationColumns = `trim(c.guide_name), c.frequency_hz, c.program_num, d.model_number, d.tuner_count`
+
+func (s *Store) stationOf(ctx context.Context, where string, args ...any) (stationRow, error) {
+	var r stationRow
+	err := s.db.QueryRowContext(ctx, `SELECT `+stationColumns+` FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE `+where+` LIMIT 1`, args...).
+		Scan(&r.name, &r.freq, &r.program, &r.model, &r.tuners)
+	if errors.Is(err, sql.ErrNoRows) {
+		return stationRow{}, nil
+	}
+	return r, err
+}
 
 // OtherDevices lists base URLs for other tuners that already have this channel number, lowest priority first.
 // A row hidden from the lineup still counts: hiding is a display choice, and a
 // 1.0 channel with its 3.0 twin shown is stored hidden. The row must carry the
 // same station as this device's row with that number.
 func (s *Store) OtherDevices(ctx context.Context, guideNumber, exceptDevice string) ([]string, error) {
-	var name string
-	err := s.db.QueryRowContext(ctx, `SELECT trim(guide_name) FROM channels WHERE device_id = ? AND guide_number = ? LIMIT 1`, exceptDevice, guideNumber).Scan(&name)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	ref, err := s.stationOf(ctx, `c.device_id = ? AND c.guide_number = ?`, exceptDevice, guideNumber)
+	if err != nil {
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT d.base_url FROM devices d
+SELECT d.base_url, `+stationColumns+` FROM devices d
 JOIN channels c ON c.device_id = d.device_id
-WHERE c.guide_number = :number AND c.present = 1 AND c.protected = 0 AND d.device_id != :device AND d.tuner_count > 0
-	AND `+sameStation+`
-ORDER BY d.priority, d.device_id`, sql.Named("number", guideNumber), sql.Named("device", exceptDevice), sql.Named("name", name))
+WHERE c.guide_number = ? AND c.present = 1 AND c.protected = 0 AND d.device_id != ? AND d.tuner_count > 0
+ORDER BY d.priority, d.device_id`, guideNumber, exceptDevice)
 	if err != nil {
 		return nil, err
 	}
@@ -498,10 +528,11 @@ ORDER BY d.priority, d.device_id`, sql.Named("number", guideNumber), sql.Named("
 	var out []string
 	for rows.Next() {
 		var base string
-		if err := rows.Scan(&base); err != nil {
+		var r stationRow
+		if err := rows.Scan(&base, &r.name, &r.freq, &r.program, &r.model, &r.tuners); err != nil {
 			return nil, err
 		}
-		if base != "" {
+		if base != "" && sameStation(ref, r) {
 			out = append(out, base)
 		}
 	}
@@ -525,17 +556,15 @@ LIMIT 1`, base, guide).Scan(&raw)
 // AlternateChannels lists other present channels with this guide number and
 // station, lowest device priority first.
 func (s *Store) AlternateChannels(ctx context.Context, guideNumber string, exceptID int64) ([]int64, error) {
-	var name string
-	err := s.db.QueryRowContext(ctx, `SELECT trim(guide_name) FROM channels WHERE id = ?`, exceptID).Scan(&name)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	ref, err := s.stationOf(ctx, `c.id = ?`, exceptID)
+	if err != nil {
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT c.id FROM channels c
+SELECT c.id, `+stationColumns+` FROM channels c
 JOIN devices d ON d.device_id = c.device_id
-WHERE c.guide_number = :number AND c.id != :id AND c.present = 1 AND c.protected = 0 AND c.stream_url != ''
-	AND `+sameStation+`
-ORDER BY d.priority, c.id`, sql.Named("number", guideNumber), sql.Named("id", exceptID), sql.Named("name", name))
+WHERE c.guide_number = ? AND c.id != ? AND c.present = 1 AND c.protected = 0 AND c.stream_url != ''
+ORDER BY d.priority, c.id`, guideNumber, exceptID)
 	if err != nil {
 		return nil, err
 	}
@@ -543,10 +572,13 @@ ORDER BY d.priority, c.id`, sql.Named("number", guideNumber), sql.Named("id", ex
 	var ids []int64
 	for rows.Next() {
 		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var r stationRow
+		if err := rows.Scan(&id, &r.name, &r.freq, &r.program, &r.model, &r.tuners); err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
+		if sameStation(ref, r) {
+			ids = append(ids, id)
+		}
 	}
 	return ids, rows.Err()
 }

@@ -631,3 +631,34 @@ func TestAFailoverIsTheSameStationNotJustTheNumber(t *testing.T) {
 		t.Fatalf("alternate %+v %v", ch, err)
 	}
 }
+
+// Two antenna tuners scanned at different times can name a station
+// differently. The same frequency and program is still the same station.
+func TestAntennaTwinsWithStaleNamesStillFailOver(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	a := hdhr.Device{DeviceID: "AAAA", FriendlyName: "Duo", ModelNumber: "HDHR5-2US", BaseURL: "http://192.168.1.20", TunerCount: 2}
+	b := hdhr.Device{DeviceID: "BBBB", FriendlyName: "Flex", ModelNumber: "HDFX-4K", BaseURL: "http://192.168.1.30", TunerCount: 4}
+	c := hdhr.Device{DeviceID: "CCCC", FriendlyName: "Quatro", ModelNumber: "HDHR5-4US", BaseURL: "http://192.168.1.40", TunerCount: 4}
+	for dev, name := range map[hdhr.Device]string{a: "KBWV", b: "KBWV-HD", c: "OTHER"} {
+		if err := st.UpsertDevice(ctx, dev, []hdhr.Channel{{GuideNumber: "4.1", GuideName: name, StreamURL: dev.BaseURL + "/auto/v4.1"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for dev, freq := range map[string]int{"AAAA": 593000000, "BBBB": 593000000, "CCCC": 599000000} {
+		if err := st.RememberProgram(ctx, dev, "4.1", freq, 3); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := st.OtherDevices(ctx, "4.1", "AAAA")
+	if err != nil || len(got) != 1 || got[0] != b.BaseURL {
+		t.Fatalf("failover %v %v", got, err)
+	}
+	var first int64
+	if err := st.db.QueryRow(`SELECT id FROM channels WHERE device_id='AAAA'`).Scan(&first); err != nil {
+		t.Fatal(err)
+	}
+	if alts, err := st.AlternateChannels(ctx, "4.1", first); err != nil || len(alts) != 1 {
+		t.Fatalf("alternates %v %v", alts, err)
+	}
+}
