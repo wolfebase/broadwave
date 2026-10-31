@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.4 — 2026-10-31
+
+### Fixed
+
+- Server: deleting a recording while it plays stops its playback first. The playback kept running on the deleted file, and on an Unraid user share the open file left the show's empty folders behind, where Plex or Jellyfin could see them.
+
 ## 0.16.3 — 2026-10-30
 
 ### Added
