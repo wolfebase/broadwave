@@ -151,21 +151,19 @@ func basesFor(ctx context.Context, ip string) ([]string, error) {
 		if ip == "" {
 			return nil, nil
 		}
-		if !loopbackHost(ip) {
+		if hostport, _, err := tunerAddress(ip); err != nil || !loopbackHost(hostport) {
 			return nil, fmt.Errorf("this test server only uses the local fake tuner")
 		}
 	}
 	if ip != "" {
-		ip = strings.TrimPrefix(ip, "http://")
-		ip = strings.TrimPrefix(ip, "https://")
-		ip = strings.TrimRight(ip, "/")
-		if strings.ContainsAny(ip, "/ @") {
-			return nil, fmt.Errorf("enter a host or host:port")
+		hostport, path, err := tunerAddress(ip)
+		if err != nil {
+			return nil, err
 		}
-		if _, _, err := net.SplitHostPort(ip); err == nil {
-			return []string{"http://" + ip}, nil
+		if _, _, err := net.SplitHostPort(hostport); err == nil || path != "" {
+			return []string{"http://" + hostport + path}, nil
 		}
-		return probeCompatible(ctx, ip)
+		return probeCompatible(ctx, strings.Trim(hostport, "[]"))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
@@ -216,6 +214,40 @@ func basesFor(ctx context.Context, ip string) ([]string, error) {
 		}
 	}
 	return bases, nil
+}
+
+// tunerAddress reads a typed tuner address: a host, host:port, a bare IPv6
+// address, or a pasted link in any case (HTTP://host/discover.json). path is
+// what an emulator serves under, such as Dispatcharr's /hdhr.
+func tunerAddress(raw string) (hostport, path string, err error) {
+	s := strings.TrimSpace(raw)
+	if scheme, rest, ok := strings.Cut(s, "://"); ok {
+		if scheme = strings.ToLower(scheme); scheme != "http" && scheme != "https" {
+			return "", "", fmt.Errorf("enter a host or host:port")
+		}
+		s = rest
+	}
+	hostport, path, _ = strings.Cut(s, "/")
+	path = strings.Trim(path, "/")
+	for _, doc := range []string{"discover.json", "lineup.json", "lineup_status.json"} {
+		path = strings.Trim(strings.TrimSuffix(path, doc), "/")
+	}
+	if hostport == "" || strings.ContainsAny(hostport, " @") {
+		return "", "", fmt.Errorf("enter a host or host:port")
+	}
+	for _, r := range path {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("/-_.", r)) {
+			return "", "", fmt.Errorf("enter a host or host:port")
+		}
+	}
+	if path != "" {
+		path = "/" + path
+	}
+	// fd00::5 alone is an address, not a host with port 5.
+	if ip := net.ParseIP(hostport); ip != nil && ip.To4() == nil {
+		hostport = "[" + hostport + "]"
+	}
+	return hostport, path, nil
 }
 
 func loopbackHost(ip string) bool {
@@ -273,11 +305,15 @@ func lanLiteral(host string, nets []*net.IPNet) bool {
 }
 
 func probeCompatible(ctx context.Context, host string) ([]string, error) {
+	plain := host
+	if strings.Contains(host, ":") {
+		plain = "[" + host + "]"
+	}
 	candidates := []struct{ base string }{
-		{"http://" + host},
-		{"http://" + host + ":5004"},
-		{"http://" + host + ":34400"},
-		{"http://" + host + ":8409"},
+		{"http://" + plain},
+		{"http://" + net.JoinHostPort(host, "5004")},
+		{"http://" + net.JoinHostPort(host, "34400")},
+		{"http://" + net.JoinHostPort(host, "8409")},
 		{"http://" + net.JoinHostPort(host, "9191") + "/hdhr"},
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)

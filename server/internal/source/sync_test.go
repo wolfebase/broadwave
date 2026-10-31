@@ -217,3 +217,37 @@ func lastSeen(t *testing.T, st *store.Store, id string) time.Time {
 	t.Fatalf("no device %s", id)
 	return time.Time{}
 }
+
+// What people paste for a tuner: a phone's capitalized scheme, a link to the
+// device's own page, Dispatcharr's /hdhr, an IPv6 address.
+func TestTunerAddressReadsWhatPeoplePaste(t *testing.T) {
+	for raw, want := range map[string][2]string{
+		"192.168.1.50":                             {"192.168.1.50", ""},
+		" HTTP://192.168.1.50/ ":                   {"192.168.1.50", ""},
+		"http://192.168.1.50/discover.json":        {"192.168.1.50", ""},
+		"192.168.1.50:5004/lineup.json":            {"192.168.1.50:5004", ""},
+		"http://nas.local:9191/hdhr/":              {"nas.local:9191", "/hdhr"},
+		"http://nas.local:9191/hdhr/discover.json": {"nas.local:9191", "/hdhr"},
+		"fd00::50":        {"[fd00::50]", ""},
+		"[fd00::50]:8080": {"[fd00::50]:8080", ""},
+		"hdhomerun.local": {"hdhomerun.local", ""},
+	} {
+		host, path, err := tunerAddress(raw)
+		if err != nil || host != want[0] || path != want[1] {
+			t.Errorf("tunerAddress(%q) = %q %q %v, want %q %q", raw, host, path, err, want[0], want[1])
+		}
+	}
+	for _, bad := range []string{"", "bad host/path", "127.0.0.1:9@203.0.113.10", "ftp://192.168.1.50", "192.168.1.50/a?b"} {
+		if _, _, err := tunerAddress(bad); err == nil {
+			t.Errorf("tunerAddress(%q) was allowed", bad)
+		}
+	}
+}
+
+func TestBasesForKeepsAPastedPath(t *testing.T) {
+	t.Setenv("BROADWAVE_E2E", "1")
+	bases, err := basesFor(t.Context(), "HTTP://127.0.0.1:19201/hdhr/discover.json")
+	if err != nil || len(bases) != 1 || bases[0] != "http://127.0.0.1:19201/hdhr" {
+		t.Fatalf("%v %v", bases, err)
+	}
+}
