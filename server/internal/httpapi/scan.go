@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"broadwave/internal/dvr"
+	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
 	"broadwave/internal/store"
 )
@@ -76,15 +77,14 @@ func (s *Server) nextUnlisted(ctx context.Context, seen map[int]bool, tried map[
 		if ch.Hidden || !ch.Present || tried[ch.ID] {
 			continue
 		}
-		if current[ch.ID] >= 2 {
-			full, err := s.Store.SourceChannel(ctx, ch.ID)
-			if err != nil || full.FrequencyHz == 0 || seen[full.FrequencyHz] {
-				continue
-			}
-			return ch, full.FrequencyHz, true
-		}
 		full, err := s.Store.SourceChannel(ctx, ch.ID)
-		if err != nil {
+		// Only an antenna tuner carries ATSC listings. A playlist would hold a
+		// stream (often a provider's only one), and a cable or DVB tuner a
+		// tuner, for a guide that never comes.
+		if err != nil || full.TunerCount == 0 || !hdhr.BroadcastGuide(full.ModelNumber) {
+			continue
+		}
+		if current[ch.ID] >= 2 && full.FrequencyHz == 0 {
 			continue
 		}
 		if full.FrequencyHz > 0 && seen[full.FrequencyHz] {
