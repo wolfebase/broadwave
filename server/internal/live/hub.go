@@ -563,6 +563,7 @@ func sourceOf(ch store.SourceChannel) Source {
 		src.AudioChannels = t.Channels
 	}
 	src.Height = ch.PictureHeight
+	src.Rate = ch.PictureRate
 	return src
 }
 

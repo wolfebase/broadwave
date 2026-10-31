@@ -177,6 +177,9 @@ type Source struct {
 	AudioChannels int
 	// Height is the picture height the last tune read, 0 when unknown.
 	Height int
+	// Rate is the frame rate a picture header named ("25", "29.97"), empty
+	// when unknown. A 25 or 50 Hz broadcast keeps its own clock.
+	Rate string
 }
 
 type Decision struct {
@@ -539,7 +542,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		if src.Film && NormalizeMode(mode) == "broadcast" {
 			mode = "film"
 		}
-		probe := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate, SD: SDHeight(src.Height)}
+		probe := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate, SD: SDHeight(src.Height), Rate: src.Rate}
 		inter := fieldDoubled(src.VideoCodec, probe.Mode, src.Progressive, src.Lace)
 		gpu = gpuDecode(probe, inter, vaapiDeintMode(probe, inter))
 	}
@@ -595,7 +598,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		if src.Film && NormalizeMode(mode) == "broadcast" {
 			mode = "film"
 		}
-		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate, SD: SDHeight(src.Height)}
+		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate, SD: SDHeight(src.Height), Rate: src.Rate}
 		interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
 		field := interlaced && !smallPicture(g)
 		width, height, rate := outputSize(g, field)

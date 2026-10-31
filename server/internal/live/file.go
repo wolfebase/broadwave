@@ -46,17 +46,36 @@ func recordingOrder(fileOrder string, fileOK bool, channelOrder string) string {
 const fileScanBytes = 4 << 20
 
 func fileScanOrder(path string) (string, bool) {
+	head, ok := fileHead(path)
+	if !ok {
+		return "", false
+	}
+	return scanType(head, 0)
+}
+
+// fileRate is the frame rate a recording's picture header names, empty when
+// its head has none.
+func fileRate(path string) string {
+	head, ok := fileHead(path)
+	if !ok {
+		return ""
+	}
+	p, _ := pictureFacts(head, 0)
+	return p.FPS
+}
+
+func fileHead(path string) ([]byte, bool) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", false
+		return nil, false
 	}
 	defer f.Close()
 	buf := make([]byte, fileScanBytes)
 	n, err := io.ReadFull(f, buf)
 	if n < 188 || (err != nil && err != io.ErrUnexpectedEOF && err != io.EOF) {
-		return "", false
+		return nil, false
 	}
-	return scanType(buf[:n], 0)
+	return buf[:n], true
 }
 
 // fileAC4 reports a recording whose sound is AC-4, from the PMT at its head.
@@ -81,6 +100,7 @@ func fileAC4(path string) bool {
 func (h *Hub) fileGraphFor(path, codec, mode, fieldOrder string) Graph {
 	scanned, ok := fileScanOrder(path)
 	g := h.fileGraph(codec, mode, recordingOrder(scanned, ok, fieldOrder))
+	g.Rate = fileRate(path)
 	if h.NoAC4 && fileAC4(path) {
 		g.Audio = "none"
 	}
@@ -95,6 +115,10 @@ func graphStamp(g Graph) string {
 		scan = "film"
 	}
 	parts := []string{NormalizeMode(g.Mode), g.VideoCodec, g.Encoder, g.Deint, g.Profile, scan}
+	// Encodes made before the rate was read were at 59.94; a 25 Hz one is redone.
+	if FiftyHz(g.Rate) {
+		parts = append(parts, "50hz")
+	}
 	// A silent playlist is redone once ffmpeg can decode the sound.
 	if g.Audio == "none" {
 		parts = append(parts, "silent")

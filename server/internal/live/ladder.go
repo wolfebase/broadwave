@@ -186,6 +186,16 @@ func ladderTiming(src Source, mode string) (fps string, field bool, gop int, key
 	key = openingKeyframes
 	keyint = sourceKeyint
 	gop = 120
+	if FiftyHz(src.Rate) {
+		gop = 100
+		if mode == "film" {
+			return "25", false, 50, ladderFilmKeys, 100
+		}
+		if field {
+			fps = "50"
+		}
+		return fps, field, gop, key, keyint
+	}
 	if mode == "film" {
 		fps = "24000/1001"
 		gop = 48
@@ -367,14 +377,7 @@ func ladderFrameRate(src Source, mode string) string {
 		mode = "film"
 	}
 	fps, _, _, _, _ := ladderTiming(src, mode)
-	switch fps {
-	case "24000/1001":
-		return "23.976"
-	case "60000/1001":
-		return "59.94"
-	default:
-		return ""
-	}
+	return fpsLabel(fps)
 }
 
 func ladderURI(serving, spec Rendition) string {

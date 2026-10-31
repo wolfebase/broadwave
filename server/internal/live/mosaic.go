@@ -90,10 +90,13 @@ type mosaicInput struct {
 	program            int
 	input              string
 	userAgent, referer string
+	// rate is the source frame rate a header named, empty when unknown.
+	rate string
 }
 
 // mosaicArgs decodes every input in software, deinterlaces what is
-// interlaced, and stacks the pictures on a 1920x1080 frame at 59.94. Without
+// interlaced, and stacks the pictures on a 1920x1080 frame at 59.94, or at 50
+// when every input is a 25 or 50 Hz broadcast. Without
 // -copyts ffmpeg starts each input near zero, so pictures that arrive
 // together show together, and it smooths each broadcast's timestamp breaks
 // itself. The output carries the first input's sound.
@@ -120,11 +123,17 @@ func mosaicArgs(inputs []mosaicInput, encoder string) []string {
 		}
 		return fmt.Sprintf("%d:%s:0", i, kind)
 	}
+	fps := "50"
+	for _, in := range inputs {
+		if !FiftyHz(in.rate) {
+			fps = "60000/1001"
+		}
+	}
 	var graph []string
 	var stack string
 	for i := range inputs {
-		graph = append(graph, fmt.Sprintf("[%s]"+sdCaptionCrop+",yadif=mode=send_field:deint=interlaced,fps=60000/1001,"+
-			"scale=960:540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2,setsar=1[t%d]", pick(i, "v"), i))
+		graph = append(graph, fmt.Sprintf("[%s]"+sdCaptionCrop+",yadif=mode=send_field:deint=interlaced,fps=%s,"+
+			"scale=960:540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2,setsar=1[t%d]", pick(i, "v"), fps, i))
 		stack += fmt.Sprintf("[t%d]", i)
 	}
 	layout := "0_0|w0_0|0_h0|w0_h0"
@@ -317,7 +326,7 @@ func (h *Hub) startMosaicLocked(mo *mosaic) error {
 		}
 	}
 	for i, f := range mo.feeds {
-		inputs[i] = mosaicInput{program: f.program, userAgent: f.channel.UserAgent, referer: f.channel.Referrer}
+		inputs[i] = mosaicInput{program: f.program, userAgent: f.channel.UserAgent, referer: f.channel.Referrer, rate: f.source.Rate}
 		if m := muxOf(h, f); m != nil && m.input != "" {
 			inputs[i].input = m.input
 			writers = append(writers, nil)

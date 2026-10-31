@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 )
@@ -650,7 +651,7 @@ func (h *Hub) finishScanFromPicture(m *mux, f *feed) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.channels[id] == f && h.learnCodecsLocked(f, VideoCodecOf(data, program), "") {
+	if h.channels[id] == f && (h.learnCodecsLocked(f, VideoCodecOf(data, program), "") || h.learnRateLocked(f, data)) {
 		h.rebuildRenditionsLocked(f)
 	}
 	if order == "" || f.headerOrder != "" || h.channels[id] != f {
@@ -682,6 +683,7 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 	headerDone := false
 	audioDone := false
 	videoDone := false
+	rateDone := false
 	var seen []AudioTrack
 	for time.Now().Before(deadline) {
 		h.mu.Lock()
@@ -715,6 +717,16 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 				videoDone = true
 			}
 		}
+		if !rateDone {
+			if p, ok := pictureFacts(data, program); ok {
+				h.mu.Lock()
+				if h.channels[id] == f && h.takeRateLocked(f, p.FPS) {
+					h.rebuildRenditionsLocked(f)
+				}
+				h.mu.Unlock()
+				rateDone = true
+			}
+		}
 		if !audioDone {
 			if tracks := AudioTracks(data, program); len(tracks) > 0 {
 				seen = tracks
@@ -724,7 +736,7 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 				}
 			}
 		}
-		if headerDone && audioDone && videoDone {
+		if headerDone && audioDone && videoDone && rateDone {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -808,7 +820,7 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	m.detach(sub)
-	if h.channels[id] == f && h.learnCodecsLocked(f, VideoCodecOf(data, program), "") {
+	if h.channels[id] == f && (h.learnCodecsLocked(f, VideoCodecOf(data, program), "") || h.learnRateLocked(f, data)) {
 		h.rebuildRenditionsLocked(f)
 	}
 	if order == "" || f.headerOrder != "" || h.channels[id] != f {
@@ -817,6 +829,30 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 	slog.Info(fmt.Sprintf("scan type %s for %s after the window", order, guide))
 	f.headerOrder = order
 	h.applyScanLocked(f, order)
+}
+
+// learnRateLocked takes this tune's frame rate from a picture header in data.
+func (h *Hub) learnRateLocked(f *feed, data []byte) bool {
+	p, ok := pictureFacts(data, f.program)
+	return ok && h.takeRateLocked(f, p.FPS)
+}
+
+// takeRateLocked sets the feed's frame rate and stores it for the next tune.
+// It reports a change, so a running encode on the wrong clock is rebuilt: a
+// 25 Hz station is not stretched to 59.94.
+func (h *Hub) takeRateLocked(f *feed, rate string) bool {
+	if rate == "" || rate == f.source.Rate {
+		return false
+	}
+	f.source.Rate = rate
+	if rate != f.channel.PictureRate {
+		f.channel.PictureRate = rate
+		if h.Store != nil {
+			id := f.channel.ID
+			go func() { _ = h.Store.SetChannelPictureRate(context.Background(), id, rate) }()
+		}
+	}
+	return true
 }
 
 // applyScanLocked stores the station scan and sets this tune's picture.
@@ -1028,9 +1064,10 @@ func h264Picture(es []byte) (notedPicture, bool) {
 		if es[i+3]&0x1f != 7 {
 			continue
 		}
-		w, h, ok := spsSize(unescape(es[i+4:]))
+		r := &bitReader{b: unescape(es[i+4:])}
+		w, h, ok := spsSize(r)
 		if ok && w >= 16 && h >= 16 && w <= 7680 && h <= 4320 {
-			return notedPicture{Width: w, Height: h}, true
+			return notedPicture{Width: w, Height: h, FPS: vuiRate(r)}, true
 		}
 	}
 	return notedPicture{}, false
@@ -1038,8 +1075,8 @@ func h264Picture(es []byte) (notedPicture, bool) {
 
 // spsSize walks an H.264 SPS to the cropped display size. A crop that does not
 // parse returns nothing: 1080-line video is stored as 1088 and then cropped.
-func spsSize(rbsp []byte) (int, int, bool) {
-	r := &bitReader{b: rbsp}
+// r is left at the VUI flag.
+func spsSize(r *bitReader) (int, int, bool) {
 	profile, ok := r.u(8)
 	if !ok {
 		return 0, 0, false
@@ -1162,6 +1199,84 @@ func spsSize(rbsp []byte) (int, int, bool) {
 		return 0, 0, false
 	}
 	return w, h, true
+}
+
+// vuiRate reads the frame rate from the VUI timing of an H.264 SPS, r just
+// past the frame crop (ITU-T H.264 E.1.1). It is empty when the SPS has none.
+// A frame is two ticks.
+func vuiRate(r *bitReader) string {
+	if vui, ok := r.u(1); !ok || vui == 0 {
+		return ""
+	}
+	if aspect, ok := r.u(1); !ok {
+		return ""
+	} else if aspect == 1 {
+		idc, ok := r.u(8)
+		if !ok {
+			return ""
+		}
+		if idc == 255 {
+			if _, ok := r.u(32); !ok {
+				return ""
+			}
+		}
+	}
+	if overscan, ok := r.u(1); !ok {
+		return ""
+	} else if overscan == 1 {
+		if _, ok := r.u(1); !ok {
+			return ""
+		}
+	}
+	if signal, ok := r.u(1); !ok {
+		return ""
+	} else if signal == 1 {
+		if _, ok := r.u(4); !ok {
+			return ""
+		}
+		colour, ok := r.u(1)
+		if !ok {
+			return ""
+		}
+		if colour == 1 {
+			if _, ok := r.u(24); !ok {
+				return ""
+			}
+		}
+	}
+	if chromaLoc, ok := r.u(1); !ok {
+		return ""
+	} else if chromaLoc == 1 {
+		if _, ok := r.ue(); !ok {
+			return ""
+		}
+		if _, ok := r.ue(); !ok {
+			return ""
+		}
+	}
+	timing, ok := r.u(1)
+	if !ok || timing == 0 {
+		return ""
+	}
+	units, ok1 := r.u(32)
+	scale, ok2 := r.u(32)
+	if !ok1 || !ok2 || units == 0 || scale == 0 {
+		return ""
+	}
+	return rateName(float64(scale) / float64(2*units))
+}
+
+// rateName is a frame rate as the picture headers name it.
+func rateName(fps float64) string {
+	for _, known := range []struct {
+		fps  float64
+		name string
+	}{{23.976, "23.976"}, {24, "24"}, {25, "25"}, {29.97, "29.97"}, {30, "30"}, {50, "50"}, {59.94, "59.94"}, {60, "60"}, {12.5, "12.5"}} {
+		if math.Abs(fps-known.fps) < 0.005 {
+			return known.name
+		}
+	}
+	return ""
 }
 
 // cropUnits is the H.264 frame-crop sample size for a chroma format.

@@ -31,6 +31,8 @@ type Graph struct {
 	// SD is a source the last tune read as 576 lines or shorter. Its frames
 	// are decoded on the processor so sdCaptionCrop can run on them.
 	SD bool
+	// Rate is the source frame rate a header named, empty when unknown.
+	Rate string
 }
 
 // sdCaptionCrop drops the top four rows of a picture 576 lines or shorter.
@@ -196,7 +198,18 @@ func pictureSize(profile string, field bool) (int, int, string) {
 // pictureRate is the output frame rate, or "" to keep the source rate.
 // Interlaced video at field rate is 59.94; a progressive source keeps its own
 // rate so 720p60 stays 60. Small pictures cap at 29.97 to save bandwidth.
+// A 25 or 50 Hz source (DVB, and most of the world) is the same at 50 and 25:
+// 59.94 from 50 fields repeats every fifth picture.
 func pictureRate(g Graph, field bool) (string, int) {
+	if FiftyHz(g.Rate) {
+		switch {
+		case field:
+			return "50", 100
+		case g.Mode == "film" || smallPicture(g):
+			return "25", 50
+		}
+		return "", 100
+	}
 	if g.Mode == "film" {
 		return "24000/1001", 48
 	}
@@ -456,7 +469,7 @@ func streamFacts(src Source, fieldOrder string, spec Rendition, encoder, deint s
 		enc = OutputEncoder("libx264", spec.Codec)
 	}
 	out.Encoder = enc
-	g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(spec.Video), Encoder: enc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: spec.FullRate, SD: SDHeight(src.Height)}
+	g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(spec.Video), Encoder: enc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: spec.FullRate, SD: SDHeight(src.Height), Rate: src.Rate}
 	interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
 	field := interlaced && !smallPicture(g)
 	capW, capH, rate := outputSize(g, field)
@@ -492,8 +505,20 @@ func scanLabel(src Source, fieldOrder string) string {
 	return ""
 }
 
+// FiftyHz reports a frame rate of the 25 Hz family: 25 and 50, and 12.5
+// from an encoder that counts fields as ticks.
+func FiftyHz(rate string) bool {
+	switch rate {
+	case "25", "50", "12.5":
+		return true
+	}
+	return false
+}
+
 func fpsLabel(rational string) string {
 	switch rational {
+	case "50", "25":
+		return rational
 	case "60000/1001":
 		return "59.94"
 	case "30000/1001":
