@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.16.3 — 2026-10-30
+
+### Added
+
+- Apple TV: a station index in the guide. Left from the channel column lists every channel number once (2.1 CBS, 4.1 NBC, 7.1 ABC, …); the guide follows as you move down it, and Select lands on that station. A hundred channels no longer take a hundred presses.
+
+### Changed
+
+- Apple TV: pages stay put while you move along the tab bar, and Down lands on each page's first item: For You's Watch, the first game on Sports, Open the guide on an empty Recordings.
+- Apple TV: Sports says "No games today" in its title line, and the note about how far listings reach sits under the games.
+- Apple TV: notices about a new tuner, server, or screen stay on the phone and web, where they are set up, instead of covering the TV's tab bar.
+- Server: the log keeps to news. The line each tune wrote about its picture's scan type is a debug line; it was most of the log on a server whose guide pictures refresh in the background.
+
+### Fixed
+
+- Apple TV: changing channel with Up or Down shows the new picture, not the playback bar. A screen alone on a channel paused a moment to line up with nobody, and the player brought its whole bar up for the pause. Screens sharing a channel still line up.
+- Apple TV: Up from a show on the guide's first row reaches the Now and channel menus, then the tab bar. It stayed on the row.
+- Apple TV: the tab bar no longer stops at Sports; Sports pulled the remote into its first game as the bar passed it.
+- Apple TV: holding Select on a show that is on now opens its details; it also started the channel over them.
+- Apple TV: game cards on For You show both teams.
+- Web on a TV: the search field opens with its focus ring every time; now and then it had focus and no ring.
+- Apple TV: the guide stays on whole rows after a show's details close.
+- Server: the guide scan tunes a station that is off the air once, not once for each of its channels, and logs it as information rather than an error.
+- Server: the background refresh of the guide's pictures finishes its pass. It kept trying a tuner that was retired or had stopped answering, never finished, and so tuned the lineup round and round all day. Channels carried by two tuners are refreshed once.
+- Server: `/server` counts the tuners that answer and are not retired, as the recording plan does; a retired tuner made apps think there were more.
+- Server: Bonjour advertises the house network's addresses only, under the server's own name. It also listed Docker's and virtual machines' bridge addresses under the machine's name, and a TV could try one of those first.
+- Server: a new screen, tuner, or server in the house is announced once. Every restart forgot the house, and a TV whose id changes came back as new each time.
+
 ## 0.16.2 — 2026-10-29
 
 ### Changed
