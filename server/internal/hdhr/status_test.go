@@ -23,3 +23,21 @@ func TestParseStatus(t *testing.T) {
 		t.Fatalf("verdict %s tip %q", verdict, tip)
 	}
 }
+
+func TestDemodulatedReadsEveryStandard(t *testing.T) {
+	for status, want := range map[string]bool{
+		"ch=8vsb:593000000 lock=8vsb ss=90 snq=88 seq=100":          true,
+		"ch=qam:519000000 lock=qam256 ss=90 snq=88 seq=100":         true,
+		"ch=auto:474000000 lock=t8qam64 ss=90 snq=88 seq=100":       true,
+		"ch=auto:346000000 lock=a8qam256-6900 ss=90 snq=88 seq=100": true,
+		"ch=auto:599000000 lock=atsc3 ss=90 snq=88 seq=100":         true,
+		"ch=8vsb:593000000 lock=none ss=0 snq=0 seq=0":              false,
+		"ch=auto:593000000 lock=(8vsb) ss=60 snq=0 seq=0":           false,
+		"ch=none lock=none ss=0 snq=0 seq=0":                        false,
+		"":                                                          false,
+	} {
+		if got := Demodulated(status); got != want {
+			t.Errorf("Demodulated(%q) = %v, want %v", status, got, want)
+		}
+	}
+}

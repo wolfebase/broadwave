@@ -821,9 +821,9 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 			return feed, nil
 		}
 	}
-	// The control port's lock reads 8vsb only. An ATSC 3.0 channel never shows
-	// it, so the probe would wait out its deadlines (about 7 s, holding every
-	// other watch) before falling back to the same /auto stream.
+	// An ATSC 3.0 channel's control-port tune never lists its programs, so
+	// the probe would wait out its deadlines (about 7 s, holding every other
+	// watch) before falling back to the same /auto stream.
 	if need.ATSC3 {
 		return h.openAutoLocked(ch, root, host, last, false, began, status)
 	}
@@ -4566,7 +4566,7 @@ func probe(host string, tuner int, guide string, wait time.Duration) (int, []hdh
 	began := time.Now()
 	for {
 		status, err = c.Get(fmt.Sprintf("/tuner%d/status", tuner))
-		if err == nil && hdhr.FrequencyHz(status) > 0 && strings.Contains(status, "lock=8vsb") {
+		if err == nil && hdhr.FrequencyHz(status) > 0 && hdhr.Demodulated(status) {
 			break
 		}
 		// A weak signal can take a few seconds to lock. A FLEX on a dark

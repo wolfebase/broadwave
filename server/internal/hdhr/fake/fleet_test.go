@@ -140,6 +140,8 @@ func profileWant(name string) wantProfile {
 		return wantProfile{"HHDD-2TB", "HDHomeRun SERVIO", "hdhomerun_dvr", "20260101", 0, true, false, true}
 	case ProfileOldFirmware:
 		return wantProfile{"HDHR3-US", "HDHomeRun DUAL", "hdhomerun3_atsc", "20140301", 2, false, false, false}
+	case ProfileDVBT:
+		return wantProfile{"HDHR5-4DT", "HDHomeRun CONNECT QUATRO", "hdhomerun5_dvbt", "20260101", 4, true, true, false}
 	default:
 		return wantProfile{}
 	}

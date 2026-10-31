@@ -13,6 +13,7 @@ const (
 	ProfileScribe        = "SCRIBE"
 	ProfileServio        = "SERVIO"
 	ProfileOldFirmware   = "OLD-FIRMWARE"
+	ProfileDVBT          = "DVB-T"
 
 	maxTuners = 8
 )
@@ -87,6 +88,16 @@ func flex4KChannels() []Channel {
 	)
 }
 
+// dvbChannels is a DVB-T lineup: logical channel numbers, two services on one
+// 8 MHz multiplex, and a third on another.
+func dvbChannels() []Channel {
+	return []Channel{
+		{Number: "1", Name: "Channel One HD", Freq: 474000000, Video: "H264", Audio: "AAC"},
+		{Number: "2", Name: "Channel Two", Freq: 474000000, Video: "MPEG2", Audio: "MPEG"},
+		{Number: "21", Name: "News 21", Freq: 522000000, Video: "H264", Audio: "AC3"},
+	}
+}
+
 func primeChannels() []Channel {
 	return []Channel{
 		{Number: "4", Name: "LOCAL", Freq: 507000000},
@@ -159,6 +170,14 @@ var catalog = []profile{
 		Name: ProfileServio, Friendly: "HDHomeRun SERVIO", Model: "HHDD-2TB",
 		Firmware: "hdhomerun_dvr", Version: "20260101",
 		DeviceID: "A3E00050", Tuners: 0, Auth: true, Storage: true, ownLineup: true,
+	},
+	{
+		// A European or Australian CONNECT QUATRO: DVB-T/T2, logical channel
+		// numbers with no dot, and 25 Hz pictures.
+		Name: ProfileDVBT, Friendly: "HDHomeRun CONNECT QUATRO", Model: "HDHR5-4DT",
+		Firmware: "hdhomerun5_dvbt", Version: "20260101", Upgrade: "20260326",
+		DeviceID: "A3E00D04", Tuners: 4, Auth: true, Lock: "t8qam64",
+		ownLineup: true, channels: dvbChannels(),
 	},
 	{
 		Name: ProfileOldFirmware, Friendly: "HDHomeRun DUAL", Model: "HDHR3-US",

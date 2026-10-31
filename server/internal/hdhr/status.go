@@ -35,6 +35,18 @@ func ParseStatus(status string) Lock {
 	return lock
 }
 
+// Demodulated reports a status line whose tuner has locked a signal it can
+// read: lock=8vsb on an antenna, qam256 on cable, t8qam64 or a8qam256-6900
+// on DVB. A lock in parentheses is a signal the tuner cannot decode.
+func Demodulated(status string) bool {
+	for _, field := range strings.Fields(status) {
+		if val, ok := strings.CutPrefix(field, "lock="); ok {
+			return val != "" && val != "none" && !strings.HasPrefix(val, "(")
+		}
+	}
+	return false
+}
+
 // Verdict is Great, OK, Weak, or Lost. The tip is empty when the signal is fine.
 func (l Lock) Verdict() (verdict, tip string) {
 	if !l.Locked {
