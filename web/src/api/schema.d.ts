@@ -2141,7 +2141,7 @@ export interface components {
         Error: {
             /**
              * @description Stable machine code. An unknown code is still a failure.
-             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_failed, guide_rate_limited, guide_source_failed, guide_url, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, postal_code, rate_limited, recording_soon, recordings_missing, recordings_unwritable, remove_failed, sd_account, sd_failed, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
+             *     Known codes: already_on, bad_name, bad_request, busy, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_failed, guide_rate_limited, guide_source_failed, guide_url, internal, name_taken, no_signal, no_source, not_found, not_home, not_signed_in, pictures_full, postal_code, rate_limited, recording_soon, recordings_missing, recordings_unwritable, remove_failed, sd_account, sd_failed, source_unreachable, source_unreadable, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable, wrong_account.
              */
             code: string;
             /** @description Short text safe to show a user. */
