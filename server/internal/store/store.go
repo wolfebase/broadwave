@@ -488,7 +488,7 @@ func sameStation(a, b stationRow) bool {
 	if an == "" || bn == "" || an == bn {
 		return true
 	}
-	antenna := func(r stationRow) bool { return r.tuners > 0 && hdhr.BroadcastGuide(r.model) }
+	antenna := func(r stationRow) bool { return r.tuners > 0 && hdhr.BroadcastGuide(r.model) && !hdhr.DVB(r.model) }
 	if !antenna(a) || !antenna(b) || a.freq <= 0 || a.freq != b.freq {
 		return false
 	}

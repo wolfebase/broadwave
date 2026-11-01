@@ -78,9 +78,9 @@ func (s *Server) nextUnlisted(ctx context.Context, seen map[int]bool, tried map[
 			continue
 		}
 		full, err := s.Store.SourceChannel(ctx, ch.ID)
-		// Only an antenna tuner carries ATSC listings. A playlist would hold a
-		// stream (often a provider's only one), and a cable or DVB tuner a
-		// tuner, for a guide that never comes.
+		// Only an antenna or DVB tuner carries listings on the air. A playlist
+		// would hold a stream (often a provider's only one), and a CableCARD
+		// tuner a tuner, for a guide that never comes.
 		if err != nil || full.TunerCount == 0 || !hdhr.BroadcastGuide(full.ModelNumber) {
 			continue
 		}

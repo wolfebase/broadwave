@@ -134,13 +134,12 @@ func TestTheGuideScanTunesADarkStationOnce(t *testing.T) {
 	}
 }
 
-// ATSC listings come only from an antenna tuner. The scan must not hold a
-// playlist stream or a DVB or cable tuner for a guide that never comes.
-func TestNextUnlistedSkipsPlaylistsDVBAndCable(t *testing.T) {
+// Listings come only from an antenna or DVB tuner. The scan must not hold a
+// playlist stream or a CableCARD tuner for a guide that never comes.
+func TestNextUnlistedSkipsPlaylistsAndCableCARD(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()
 	for _, dev := range []hdhr.Device{
-		{DeviceID: "DVB", FriendlyName: "Quatro", ModelNumber: "HDHR5-4DT", BaseURL: "http://127.0.0.1:1", TunerCount: 4},
 		{DeviceID: "CC", FriendlyName: "Prime", ModelNumber: "HDHR3-CC", BaseURL: "http://127.0.0.1:2", TunerCount: 3},
 		{DeviceID: "src-1", FriendlyName: "IPTV", ModelNumber: "m3u", BaseURL: "source"},
 	} {
@@ -151,6 +150,13 @@ func TestNextUnlistedSkipsPlaylistsDVBAndCable(t *testing.T) {
 	srv := &Server{Store: st}
 	if ch, _, ok := srv.nextUnlisted(ctx, map[int]bool{}, map[int64]bool{}); ok {
 		t.Fatalf("scanned %s", ch.GuideName)
+	}
+	dvb := hdhr.Device{DeviceID: "DVB", FriendlyName: "Quatro", ModelNumber: "HDHR5-4DT", BaseURL: "http://127.0.0.1:1", TunerCount: 4}
+	if err := st.UpsertDevice(ctx, dvb, []hdhr.Channel{{GuideNumber: "1", GuideName: "Channel One", StreamURL: "http://127.0.0.1:1/auto/v1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if ch, _, ok := srv.nextUnlisted(ctx, map[int]bool{}, map[int64]bool{}); !ok || ch.DeviceID != "DVB" {
+		t.Fatalf("a DVB tuner was not scanned: %+v %v", ch, ok)
 	}
 }
 

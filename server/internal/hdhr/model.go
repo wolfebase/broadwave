@@ -30,18 +30,27 @@ func ExtendQuery(model string) string {
 	return ""
 }
 
-// BroadcastGuide reports a tuner whose channels can carry ATSC listings on
-// the air. A DVB model (HDHR5-4DT, HDHR3-4DC, HDHR3-EU) and a CableCARD
-// PRIME do not. An unknown model is assumed to be an antenna tuner.
+// BroadcastGuide reports a tuner whose channels carry listings on the air:
+// ATSC on an antenna model, DVB on a DVB-T, T2, or C model. A CableCARD
+// PRIME does not. An unknown model is assumed to be an antenna tuner.
 func BroadcastGuide(model string) bool {
 	m := strings.ToUpper(strings.TrimSpace(model))
 	if strings.Contains(m, "PRIME") {
 		return false
 	}
-	for _, tail := range []string{"DT", "DC", "EU", "CC"} {
-		if strings.HasSuffix(m, tail) && strings.Contains(m, "-") {
-			return false
+	return !strings.HasSuffix(m, "CC") || !strings.Contains(m, "-")
+}
+
+// DVB reports a DVB-T, T2, or C model (HDHR5-4DT, HDHR3-4DC, HDHR3-EU).
+func DVB(model string) bool {
+	m := strings.ToUpper(strings.TrimSpace(model))
+	if !strings.Contains(m, "-") {
+		return false
+	}
+	for _, tail := range []string{"DT", "DC", "EU"} {
+		if strings.HasSuffix(m, tail) {
+			return true
 		}
 	}
-	return true
+	return false
 }

@@ -19,13 +19,22 @@ func TestModelNote(t *testing.T) {
 	}
 }
 
-func TestBroadcastGuideIsAnATSCAntenna(t *testing.T) {
+func TestBroadcastGuideIsAnAntennaOrDVBTuner(t *testing.T) {
 	for model, want := range map[string]bool{
 		"HDHR5-4US": true, "HDFX-4K": true, "HDTC-2US": true, "HDHR3-US": true, "": true,
-		"HDHR5-4DT": false, "HDHR4-2DT": false, "HDHR3-4DC": false, "HDHR3-EU": false, "HDHR3-CC": false,
+		"HDHR5-4DT": true, "HDHR4-2DT": true, "HDHR3-4DC": true, "HDHR3-EU": true,
+		"HDHR3-CC": false, "HDHR PRIME": false,
 	} {
 		if got := BroadcastGuide(model); got != want {
 			t.Errorf("BroadcastGuide(%q) = %v", model, got)
+		}
+	}
+	for model, want := range map[string]bool{
+		"HDHR5-4DT": true, "HDHR4-2DT": true, "HDHR3-4DC": true, "HDHR3-EU": true, "hdhr5-2dt": true,
+		"HDHR5-4US": false, "HDFX-4K": false, "HDHR3-CC": false, "": false, "m3u": false,
+	} {
+		if got := DVB(model); got != want {
+			t.Errorf("DVB(%q) = %v", model, got)
 		}
 	}
 }
