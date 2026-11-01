@@ -47,8 +47,8 @@ type Channel struct {
 	DRM   bool
 	// Copy is "copy-once" or "copy-never" on a CableCARD channel. Empty means copy freely.
 	Copy string
-	// Program is the program number streaminfo lists, 1 when unset. On a DVB
-	// profile it is also the service_id of the SDT and EIT.
+	// Program is the service_id of a DVB profile's SDT and EIT, and the
+	// program number streaminfo lists when no sample file plays (see program).
 	Program int
 }
 
@@ -1249,13 +1249,22 @@ func (s *Server) command(name, value string, set bool) (string, string) {
 		}
 		for _, ch := range s.Channels {
 			if ch.Freq == t.freq {
-				fmt.Fprintf(&b, "%d: %s %s\n", max(ch.Program, 1), ch.Number, ch.Name)
+				fmt.Fprintf(&b, "%d: %s %s\n", s.program(ch), ch.Number, ch.Name)
 			}
 		}
 		return b.String(), ""
 	default:
 		return "", "unknown"
 	}
+}
+
+// program is the number streaminfo lists. A sample file is one program,
+// numbered 1, so a channel's own Program is listed only when no file plays.
+func (s *Server) program(ch Channel) int {
+	if s.TS != "" || ch.Program == 0 {
+		return 1
+	}
+	return ch.Program
 }
 
 func (s *Server) lockMod(t tuner) string {
