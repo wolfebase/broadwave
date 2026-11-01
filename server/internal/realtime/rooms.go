@@ -221,12 +221,15 @@ func (r *Rooms) stepBackLocked(room string, st *RoomState, now time.Time) RoomSt
 //
 // "ahead": a screen that started more than aheadMin past a young room brings
 // the room to its frame less measureMargin, and keeps playing. "behind": a
-// screen that can't reach a measured room (its live edge is further back)
-// takes the room back to its own frame less the margin (smaller for a room
-// one screen plays, see soloMargin), so no screen is ever
-// stranded behind; the others pause once for the step. Either way the room is
-// marked measured: Settle and the Apple floor no longer pull it back to the
-// latency target, and a viewer's Live delay choice clears the mark.
+// screen that can't reach its room (its live edge is further back) takes the
+// room back to its own frame less the margin (smaller for a room one screen
+// plays, see soloMargin), so no screen is ever stranded behind; the others
+// pause once for the step. That holds for a room on its latency target too:
+// an iPhone on the plain address held back 17 s, past balanced, and an
+// unmeasured room ignored its "behind" for good. Either way the room is marked
+// measured: Settle and the Apple floor no longer pull it back to the latency
+// target, and a viewer's Live delay choice clears the mark. A room easing
+// toward its target (rate below 1) is left to the ease.
 func (r *Rooms) measureLocked(room string, st *RoomState, action string, media float64, now time.Time) RoomState {
 	if st.Mode != "follow" && !soloTile(room, st) || st.Rate != 1 || media <= 0 {
 		return *st
@@ -245,7 +248,7 @@ func (r *Rooms) measureLocked(room string, st *RoomState, action string, media f
 			return *st
 		}
 	case "behind":
-		if !r.measured[room] || current-media < float64(behindMin/time.Millisecond) {
+		if current-media < float64(behindMin/time.Millisecond) {
 			return *st
 		}
 	}

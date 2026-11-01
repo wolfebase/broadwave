@@ -1075,17 +1075,13 @@ func TestAheadOnlyForYoungFollowRoomsAndSoloTiles(t *testing.T) {
 }
 
 // A screen whose live edge sits further back than a measured room takes the
-// room back to itself, so nobody is stranded behind. An unmeasured room keeps
-// today's behavior (its 16 s target already covers every Apple screen).
+// room back to itself, so nobody is stranded behind.
 func TestBehindStepsAMeasuredRoomBackToTheScreen(t *testing.T) {
 	start := time.Date(2026, 10, 11, 17, 0, 0, 0, time.UTC)
 	r, now := fixedRooms(start)
 	r.Join("channel:5", 5, unixMS(start.Add(-60*time.Second)))
 	*now = start.Add(5 * time.Second)
 	nowMS := unixMS(*now)
-	if st, _ := r.Apply("channel:5", Command{Action: "behind", MediaTime: nowMS - 20000}); st.Version != 1 {
-		t.Fatalf("behind moved an unmeasured room: %+v", st)
-	}
 	r.Apply("channel:5", Command{Action: "ahead", MediaTime: nowMS - 8000})
 	r.Join("channel:5", 5, unixMS(start.Add(-60*time.Second)))
 	*now = start.Add(60 * time.Second)
@@ -1099,6 +1095,115 @@ func TestBehindStepsAMeasuredRoomBackToTheScreen(t *testing.T) {
 	same, _ := r.State("channel:5")
 	if st, _ := r.Apply("channel:5", Command{Action: "behind", MediaTime: same.Target(nowMS) - 200}); st.Version != same.Version {
 		t.Fatalf("a small gap moved the room: %+v", st)
+	}
+}
+
+// An iPhone on the plain address held back 17 s (2026-11-01), further than
+// the 16 s target an unmeasured room keeps for Apple screens, and the room
+// ignored its "behind" because it was never measured. The room steps back to
+// it once, the TVs pause once, and Settle and the Apple floor leave it there.
+func TestBehindStepsAnUnmeasuredRoomBackToTheScreen(t *testing.T) {
+	start := time.Date(2026, 11, 1, 18, 0, 0, 0, time.UTC)
+	r, now := fixedRooms(start)
+	first := unixMS(start.Add(-10 * time.Minute))
+	r.Join("channel:32", 32, first)
+	r.Join("channel:32", 32, first)
+	*now = start.Add(youngRoom + time.Minute)
+	nowMS := unixMS(*now)
+	before, _ := r.State("channel:32")
+	if math.Abs(before.Target(nowMS)-(nowMS-16000)) > 1 {
+		t.Fatalf("the TVs' room should sit on its 16 s target: %v", nowMS-before.Target(nowMS))
+	}
+	r.Join("channel:32", 32, first)
+	onScreen := nowMS - 17200
+	st, _ := r.Apply("channel:32", Command{Action: "behind", MediaTime: onScreen})
+	if st.Version != before.Version+1 || math.Abs(st.Target(nowMS)-(onScreen-2500)) > 1 || st.Rate != 1 {
+		t.Fatalf("the room should step back to 2.5 s behind the stranded screen: %+v, %v behind live", st, nowMS-st.Target(nowMS))
+	}
+	*now = now.Add(time.Minute)
+	if eased := r.Settle(32, first, nil); len(eased) != 0 {
+		t.Fatalf("Settle pulled the room back toward live: %+v", eased)
+	}
+	if _, floored := r.Floor("channel:32", "balanced"); floored {
+		t.Fatal("the Apple floor moved the room off the stranded screen")
+	}
+}
+
+// A behind on a room still easing toward its target is left to the ease;
+// the screen reaches the room once it gets there.
+func TestBehindLeavesAnEasingRoom(t *testing.T) {
+	start := time.Date(2026, 11, 1, 18, 0, 0, 0, time.UTC)
+	r, now := fixedRooms(start)
+	first := unixMS(start)
+	r.Join("channel:41", 41, first)
+	r.Join("channel:41", 41, first)
+	*now = start.Add(20 * time.Second)
+	eased := r.Settle(41, first, func(string) bool { return true })
+	if len(eased) != 1 || eased[0].State.Rate != settleRate {
+		t.Fatalf("the fresh tune should ease: %+v", eased)
+	}
+	nowMS := unixMS(*now)
+	st, _ := r.Apply("channel:41", Command{Action: "behind", MediaTime: nowMS - 17000})
+	if st.Version != eased[0].State.Version {
+		t.Fatalf("behind moved an easing room: %+v", st)
+	}
+}
+
+// A socket that closes leaves its rooms; the same screen's next socket is in
+// none of them until it joins again. Then its commands move the room and the
+// member count is right.
+func TestAScreenOnANewSocketRejoinsAndCommands(t *testing.T) {
+	bus := NewBus()
+	srv := httptest.NewServer(bus)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	dial := func(here string) *websocket.Conn {
+		conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { conn.CloseNow() })
+		send(t, ctx, conn, "here", here)
+		return conn
+	}
+	until := func(conn *websocket.Conn, what string, ok func(RoomState) bool) RoomState {
+		t.Helper()
+		for {
+			_, msg, err := conn.Read(ctx)
+			if err != nil {
+				t.Fatalf("waiting for %s: %v", what, err)
+			}
+			var m Message
+			_ = json.Unmarshal(msg, &m)
+			var st RoomState
+			if m.Type == "sync.state" && json.Unmarshal(m.Data, &st) == nil && ok(st) {
+				return st
+			}
+		}
+	}
+	members := func(n int) func(RoomState) bool { return func(st RoomState) bool { return st.Members == n } }
+	tv := dial(`{"id":"tv-1","name":"Den","kind":"appletv"}`)
+	send(t, ctx, tv, "sync.join", `{"room":"channel:32","channelId":32,"latency":"balanced"}`)
+	until(tv, "the TV's room", members(1))
+	phone := dial(`{"id":"phone-1","name":"iPhone","kind":"iphone"}`)
+	send(t, ctx, phone, "sync.join", `{"room":"channel:32","channelId":32,"latency":"balanced"}`)
+	until(tv, "the iPhone joining", members(2))
+	phone.Close(websocket.StatusGoingAway, "")
+	before := until(tv, "the old socket leaving", members(1))
+
+	again := dial(`{"id":"phone-1","name":"iPhone","kind":"iphone"}`)
+	behind := fmt.Sprintf(`{"room":"channel:32","action":"behind","mediaTime":%.0f}`, unixMS(time.Now())-19000)
+	send(t, ctx, again, "sync.command", behind)
+	send(t, ctx, again, "sync.join", `{"room":"channel:32","channelId":32,"latency":"balanced"}`)
+	if st := until(again, "the rejoin", members(2)); st.Version != before.Version {
+		t.Fatalf("a socket outside the room moved it: %+v", st)
+	}
+	onScreen := unixMS(time.Now()) - 19000
+	send(t, ctx, again, "sync.command", fmt.Sprintf(`{"room":"channel:32","action":"behind","mediaTime":%.0f}`, onScreen))
+	st := until(tv, "the step back", func(st RoomState) bool { return st.Version > before.Version })
+	if now := unixMS(time.Now()); st.Members != 2 || math.Abs(st.Target(now)-(onScreen-2500)) > 500 {
+		t.Fatalf("the room should step back to the iPhone with both screens in it: %+v, %v behind live", st, now-st.Target(now))
 	}
 }
 
