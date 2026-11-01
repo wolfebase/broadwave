@@ -180,6 +180,10 @@ type Source struct {
 	// Rate is the frame rate a picture header named ("25", "29.97"), empty
 	// when unknown. A 25 or 50 Hz broadcast keeps its own clock.
 	Rate string
+	// AudioLang, when set, replaces the languages the PMT gave the sound
+	// tracks with this one for the main and each extra's own: the station
+	// labels them the wrong way round.
+	AudioLang string
 }
 
 type Decision struct {
@@ -591,6 +595,14 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		args = append(args, "-map", audioMap)
 		for _, t := range src.Extras {
 			args = append(args, "-map", fmt.Sprintf("0:i:%d", t.PID))
+		}
+		if src.AudioLang != "" {
+			args = append(args, "-metadata:s:a:0", "language="+src.AudioLang)
+			for i, t := range src.Extras {
+				if t.Language != "" {
+					args = append(args, fmt.Sprintf("-metadata:s:a:%d", i+1), "language="+t.Language)
+				}
+			}
 		}
 	}
 	if transcode {

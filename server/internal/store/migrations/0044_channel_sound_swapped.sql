@@ -1,0 +1,1 @@
+ALTER TABLE channels ADD COLUMN sound_swapped INTEGER NOT NULL DEFAULT 0;

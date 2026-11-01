@@ -558,7 +558,7 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 			video = VideoCodecOf(data, f.program)
 		}
 		if needAudio {
-			if tracks := AudioTracks(data, f.program); len(tracks) > 0 {
+			if tracks := f.channelTracks(data, f.program); len(tracks) > 0 {
 				f.tracks = tracks
 				// Two complete mains share one copied descriptor on some
 				// stations. Wait for a frame from each before the rendition
@@ -742,7 +742,7 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 			h.mu.Unlock()
 		}
 		if !audioDone {
-			if tracks := AudioTracks(data, program); len(tracks) > 0 {
+			if tracks := f.channelTracks(data, program); len(tracks) > 0 {
 				seen = tracks
 				if audioReady(tracks) {
 					h.applyDeferredAudio(f, id, tracks)

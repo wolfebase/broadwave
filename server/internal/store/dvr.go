@@ -264,18 +264,18 @@ func (s *Store) SourceChannel(ctx context.Context, id int64) (SourceChannel, err
 
 func (s *Store) sourceChannel(ctx context.Context, id int64) (SourceChannel, error) {
 	var ch SourceChannel
-	var hd, fav, en, hidden, present, protected, long int
+	var hd, fav, en, hidden, present, protected, long, swapped int
 	var customNumber, customName string
 	err := s.db.QueryRowContext(ctx, `
 SELECT c.id, c.device_id, c.guide_number, c.guide_name, c.custom_number, c.custom_name,
-	c.video_codec, c.audio_codec, c.hd, c.favorite, c.enabled, c.hidden, c.present, c.protected,
+	c.video_codec, c.audio_codec, c.hd, c.favorite, c.enabled, c.hidden, c.present, c.protected, c.sound_swapped,
 	c.stream_url, c.frequency_hz, c.program_num, c.field_order, c.audio_tracks, c.picture_height, c.picture_rate, c.long_groups, c.user_agent, c.referrer,
 	d.base_url, d.tuner_count, d.model_number,
 	COALESCE((SELECT stream_limit FROM sources WHERE device_id = c.device_id LIMIT 1), 0),
 	COALESCE((SELECT stream_format FROM sources WHERE device_id = c.device_id LIMIT 1), '')
 FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id).Scan(
 		&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
-		&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &protected,
+		&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &protected, &swapped,
 		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.AudioTracks, &ch.PictureHeight, &ch.PictureRate, &long, &ch.UserAgent, &ch.Referrer,
 		&ch.BaseURL, &ch.TunerCount, &ch.ModelNumber, &ch.StreamLimit, &ch.StreamFormat,
 	)
@@ -285,6 +285,7 @@ FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id)
 	ch.HD, ch.Favorite, ch.Enabled, ch.Hidden, ch.Present = hd != 0, fav != 0, en != 0, hidden != 0, present != 0
 	ch.Protected = protected != 0
 	ch.LongGroups = long != 0
+	ch.SoundSwapped = swapped != 0
 	ch.DisplayNumber = ch.GuideNumber
 	if strings.TrimSpace(customNumber) != "" {
 		ch.DisplayNumber = strings.TrimSpace(customNumber)

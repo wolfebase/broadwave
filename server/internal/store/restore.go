@@ -15,7 +15,7 @@ var restoreTables = []string{"settings", "passes", "virtual_channels", "virtual_
 
 // channelChoices are the columns of a channel the viewer sets. The rest come
 // from the tuner and the guide.
-var channelChoices = []string{"favorite", "enabled", "hidden", "custom_name", "custom_number", "guide_key", "twin_choice"}
+var channelChoices = []string{"favorite", "enabled", "hidden", "custom_name", "custom_number", "guide_key", "twin_choice", "sound_swapped"}
 
 // RestoreFrom brings back a backup's choices and catalog, all or nothing.
 // A backup from an older version fills the columns it has; new ones take

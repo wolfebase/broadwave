@@ -3504,6 +3504,7 @@ components:
         twinChoice: { type: string, enum: [atsc3, atsc1, both], description: "Which channel of the pair shows in the guide." }
         playsAs: { type: integer, format: int64, description: "An encrypted ATSC 3.0 channel's clear 1.0 channel of the same station. Watching or recording the encrypted channel plays this one." }
         sameAs: { type: integer, format: int64, description: "The row shown for this channel when another tuner on the same antenna carries it too. This row stays off the guide (guide=1) and still plays. A change to either row changes both." }
+        soundSwapped: { type: boolean, description: "Set when the station labels its two languages the wrong way round; its second-language track plays as the main sound." }
     ChannelPatch:
       type: object
       properties:
@@ -3517,6 +3518,7 @@ components:
           type: string
           enum: [atsc3, atsc1, both]
           description: Show the pair's ATSC 3.0 channel, its 1.0 channel, or both. The channel that stays keeps the favorite.
+        soundSwapped: { type: boolean, description: "The station labels its two languages the wrong way round: play its second-language track as the main sound, and label both by what they carry." }
     SignalReading:
       type: object
       required: [quality, strength, at]

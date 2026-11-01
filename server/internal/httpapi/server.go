@@ -605,6 +605,7 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 		CustomNumber *string `json:"customNumber"`
 		GuideKey     *string `json:"guideKey"`
 		TwinChoice   *string `json:"twinChoice"`
+		SoundSwapped *bool   `json:"soundSwapped"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
@@ -628,6 +629,7 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 	patch := store.ChannelPatch{
 		Favorite: body.Favorite, Enabled: body.Enabled, Hidden: body.Hidden,
 		CustomName: body.CustomName, CustomNumber: body.CustomNumber, GuideKey: body.GuideKey,
+		SoundSwapped: body.SoundSwapped,
 	}
 	var ch store.Channel
 	if body.TwinChoice != nil && patch == (store.ChannelPatch{}) {

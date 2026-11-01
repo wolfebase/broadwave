@@ -77,6 +77,7 @@ export type Channel = {
   twinChoice?: string;
   playsAs?: number;
   sameAs?: number;
+  soundSwapped?: boolean;
 };
 
 export type ChannelPatch = {
@@ -87,6 +88,7 @@ export type ChannelPatch = {
   customNumber?: string;
   guideKey?: string;
   twinChoice?: string;
+  soundSwapped?: boolean;
 };
 
 export type ChannelSignal = {

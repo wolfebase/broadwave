@@ -198,3 +198,27 @@ func TestAChannelOnTwoTunersRecordsOnce(t *testing.T) {
 		t.Fatalf("marks %v, want %v", got, want)
 	}
 }
+
+func TestSwappedSoundsAreStoredAndForgetTheOldTracks(t *testing.T) {
+	s, ctx := openTwoTuners(t)
+	all, err := s.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a51 := rowFor(t, all, "AAA1", "5.1")
+	if err := s.SetChannelAudioTracks(ctx, a51.ID, `[{"pid":50,"language":"eng","role":"main","codec":"ac4","label":"English"}]`); err != nil {
+		t.Fatal(err)
+	}
+	yes, no := true, false
+	got, err := s.PatchChannel(ctx, a51.ID, ChannelPatch{SoundSwapped: &yes})
+	if err != nil || !got.SoundSwapped {
+		t.Fatalf("PatchChannel = %+v, %v", got, err)
+	}
+	src, err := s.SourceChannel(ctx, a51.ID)
+	if err != nil || !src.SoundSwapped || src.AudioTracks != "" {
+		t.Fatalf("SourceChannel swapped=%v tracks=%q, %v", src.SoundSwapped, src.AudioTracks, err)
+	}
+	if got, err := s.PatchChannel(ctx, a51.ID, ChannelPatch{SoundSwapped: &no}); err != nil || got.SoundSwapped {
+		t.Fatalf("PatchChannel off = %+v, %v", got, err)
+	}
+}

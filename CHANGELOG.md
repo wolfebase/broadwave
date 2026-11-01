@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.2 — 2026-11-01
+
+### Added
+
+- Server: a channel whose station labels its two languages the wrong way round can be set to swap them (`soundSwapped` on `PATCH /api/v1/channels/{id}`). Its second-language track then plays as the main sound on every screen, and both tracks carry the language they really are. One ATSC 3.0 station sent its Spanish commentary as English and its English as Spanish.
+
 ## 0.17.1 — 2026-11-01
 
 ### Added

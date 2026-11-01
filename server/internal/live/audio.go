@@ -584,6 +584,32 @@ func languageName(code string) string {
 	}
 }
 
+// swapSounds is tracks for a station that labels its two languages the wrong
+// way round (the stored SoundSwapped choice): the second-language track takes
+// the main track's place, language, and label, and the main one takes its.
+// A program without both keeps its tracks.
+func swapSounds(tracks []AudioTrack) []AudioTrack {
+	main := slices.IndexFunc(tracks, func(t AudioTrack) bool { return t.Role == "main" })
+	other := slices.IndexFunc(tracks, func(t AudioTrack) bool { return t.Role == "language" })
+	if main < 0 || other < 0 {
+		return tracks
+	}
+	out := slices.Clone(tracks)
+	a, b := out[main], out[other]
+	out[main].PID, out[main].Codec, out[main].Channels, out[main].Measured = b.PID, b.Codec, b.Channels, b.Measured
+	out[other].PID, out[other].Codec, out[other].Channels, out[other].Measured = a.PID, a.Codec, a.Channels, a.Measured
+	return out
+}
+
+// channelTracks reads a program's audio as this feed's channel plays it.
+func (f *feed) channelTracks(data []byte, program int) []AudioTrack {
+	tracks := AudioTracks(data, program)
+	if f.channel.SoundSwapped {
+		tracks = swapSounds(tracks)
+	}
+	return tracks
+}
+
 // PickTrack returns the track with the requested role.
 // role is main, language, or described. An unknown role picks main.
 // Main prefers the widest mix, so passthrough keeps a 5.1 complete main
@@ -663,6 +689,9 @@ func (f *feed) sourceFor(want Rendition) Source {
 		// (0:a:0) is not always the PMT's first track, so on a channel with a
 		// second-language track it could play the Spanish commentary.
 		src.AudioPID = t.PID
+		if f.channel.SoundSwapped {
+			src.AudioLang = t.Language
+		}
 		if t.Codec != "" {
 			src.AudioCodec = strings.ToUpper(t.Codec)
 		}
@@ -877,7 +906,7 @@ func (h *Hub) saveTracks(m *mux, f *feed, window time.Duration) {
 			return
 		}
 		full := m.pictureFull()
-		tracks = AudioTracks(m.pictureBytes(), f.program)
+		tracks = f.channelTracks(m.pictureBytes(), f.program)
 		// AC-4 is measured by a decoder, which wants more than the PMT.
 		ac4 := slices.ContainsFunc(tracks, func(t AudioTrack) bool { return t.Codec == "ac4" })
 		if allMeasured(tracks) && !ac4 || full {
