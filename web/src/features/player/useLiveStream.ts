@@ -77,6 +77,7 @@ export function useLiveStream(
     fits,
     alternates,
     rendition,
+    onViewerPause,
   }: {
     channelId: number;
     quality?: Prefs["quality"];
@@ -101,12 +102,20 @@ export function useLiveStream(
     // Join this rendition on the first watch: the picture another player on this
     // page was just playing, still running on the server.
     rendition?: string;
+    // A pause the player did not make (picture in picture, a media key, the
+    // system). Sync calls this instead of playing the picture again.
+    onViewerPause?: () => void;
   },
 ) {
   const syncRef = useRef<SyncEngine | null>(null);
   const joinFirst = useRef(rendition ?? "");
   const hlsRef = useRef<Hls | null>(null);
   const audibleRef = useRef(audible);
+  const viewerPause = useRef(onViewerPause);
+  useEffect(() => {
+    viewerPause.current = onViewerPause;
+  });
+  const hearsPause = Boolean(onViewerPause);
   const [session, setSession] = useState<WatchSession | null>(null);
   // The master's sounds when this watch switches them in place, else null.
   const [sounds, setSounds] = useState<Sound[] | null>(null);
@@ -726,14 +735,14 @@ export function useLiveStream(
     const video = videoRef.current;
     if (!sync) holdSync.current = false;
     if (!video || !session || !sync || holdSync.current || !room || session.channelId !== channelId) return;
-    const engine = new SyncEngine(video, hlsRef.current, room, channelId, setSyncStatus);
+    const engine = new SyncEngine(video, hlsRef.current, room, channelId, setSyncStatus, hearsPause ? () => viewerPause.current?.() : undefined);
     syncRef.current = engine;
     engine.start();
     return () => {
       engine.stop();
       if (syncRef.current === engine) syncRef.current = null;
     };
-  }, [session, sync, room, channelId, videoRef]);
+  }, [session, sync, room, channelId, videoRef, hearsPause]);
 
   // A restarted server has lost this watch. Start it again now instead of
   // waiting for the picture to run dry and the stall clock to name it.

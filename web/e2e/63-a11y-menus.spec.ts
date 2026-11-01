@@ -35,8 +35,18 @@ test("captions and audio are labelled and a remote can change them", async ({ pa
   ).toBe(true);
   const video = page.locator("video.stage-video");
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.videoWidth > 0), { timeout: 45_000 }).toBe(true);
-  await video.evaluate((el: HTMLVideoElement) => el.pause());
+  // Pause as the remote does: the player's pause drops sync for the visit. A
+  // press inside sync's own hold (the picture already paused) plays instead and
+  // keeps sync, so press again until it lets go.
+  const syncPill = page.getByRole("button", { name: /^Whole-Home Sync/ });
+  await expect(async () => {
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => !el.paused), { timeout: 5_000 }).toBe(true);
+    await stage.focus();
+    await page.keyboard.press(" ");
+    await expect(syncPill).toHaveCount(0, { timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Play", exact: true }).first()).toBeVisible();
+  expect(await video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(true);
 
   const sync = page.locator("[data-sync-live]");
   await expect(sync).toHaveAttribute("role", "status", { timeout: 20_000 });

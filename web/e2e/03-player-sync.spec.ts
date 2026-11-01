@@ -185,3 +185,26 @@ test("a screen joining a playing room starts on its frame", async ({ page }) => 
   }
   await other.close();
 });
+
+test("a pause from outside the player lets sync go, and the picture stays paused", async ({ page }) => {
+  await page.goto("/");
+  await settle(page);
+  await page.getByRole("button", { name: "Watch", exact: true }).click();
+  const video = page.locator("video.stage-video");
+  const syncPill = page.getByRole("button", { name: /^Whole-Home Sync/ });
+  await expect(syncPill).toHaveCount(1, { timeout: 30_000 });
+  await expect(video).toHaveAttribute("data-sync-drift", /\d/, { timeout: 30_000 });
+  // Picture in picture, a media key, or the system pauses the element itself.
+  // Inside sync's own hold the picture is already paused and no pause event
+  // comes, so pause again once it plays.
+  await expect(async () => {
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => !el.paused), { timeout: 5_000 }).toBe(true);
+    await video.evaluate((el: HTMLVideoElement) => el.pause());
+    await expect(syncPill).toHaveCount(0, { timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Play", exact: true }).first()).toBeVisible();
+  // Sync played it again within a tick (250 ms). Give it several.
+  await page.waitForTimeout(2_000);
+  expect(await video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(true);
+  await expect(page.getByRole("button", { name: "Play", exact: true }).first()).toBeVisible();
+});

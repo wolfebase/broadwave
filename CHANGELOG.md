@@ -9,6 +9,7 @@
 ### Fixed
 
 - Server: listings from the broadcast keep arriving while a channel stays tuned. They stopped once a tune had sent about 256 KB of them, and a read that split a packet in two lost the guide packets around it.
+- Web: live TV paused from picture in picture, a media key, headphones, or the system's controls stays paused. Whole-Home Sync played it again within a quarter second; such a pause now lets sync go for the visit, as the player's own Pause does, and play, skip back, and skip ahead from those places work the same as the player's buttons.
 - Web: two quick Forward 30 presses in a recording land where the second one says; the spots they saved could arrive out of order.
 - Web: a seek in a recording from media keys, the lock screen, or the browser's own controls plays from that spot, instead of sliding to where the current encode starts.
 - Web: "New … found" and game notices sit under the update and time zone notices instead of covering their words.

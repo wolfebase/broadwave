@@ -112,6 +112,7 @@ export function LivePlayer({
   const together = syncing && togetherOn === channel.id;
   const room = together ? groupRoom(channel.id) : `channel:${channel.id}`;
   const group = useGroup(channel.id);
+  const pauseHeard = useRef(() => {});
   const stream = useLiveStream(videoRef, {
     channelId: channel.id,
     quality: opts.quality,
@@ -126,6 +127,7 @@ export function LivePlayer({
     remember: channel,
     captions: opts.captions,
     alternates: true,
+    onViewerPause: () => pauseHeard.current(),
   });
   useEffect(() => {
     events().watching(channel.id);
@@ -414,13 +416,31 @@ export function LivePlayer({
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;
-    if (together) {
-      stream.command(video.paused ? "play" : "pause");
-      return;
-    }
-    if (!video.paused) detachSync();
-    if (video.paused) void video.play();
-    else video.pause();
+    if (video.paused) playLive();
+    else pauseLive();
+  }
+
+  // Pause drops sync for this visit; together, it pauses the group.
+  function pauseLive() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (together) return stream.command("pause");
+    detachSync();
+    video.pause();
+  }
+
+  function playLive() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (together) return stream.command("play");
+    void video.play();
+  }
+
+  // Sync heard a pause from outside the player: picture in picture, a media
+  // key, the system. The picture is already paused.
+  function viewerPaused() {
+    if (together) stream.command("pause");
+    else detachSync();
   }
 
   function goLive() {
@@ -603,10 +623,34 @@ export function LivePlayer({
 
   // A remote on another screen (a watch, or a phone working a TV) presses the
   // same buttons as the keys: up and down change channel like the arrows.
-  const remoteRef = useRef({ step, togglePlay, toggleRecord });
+  const remoteRef = useRef({ step, togglePlay, toggleRecord, pauseLive, playLive, jump });
   useEffect(() => {
-    remoteRef.current = { step, togglePlay, toggleRecord };
+    remoteRef.current = { step, togglePlay, toggleRecord, pauseLive, playLive, jump };
+    pauseHeard.current = viewerPaused;
   });
+  // Picture in picture, media keys, headphones, and the system's controls
+  // pause and play through the player, as its own buttons do.
+  useEffect(() => {
+    const media = typeof navigator !== "undefined" ? navigator.mediaSession : undefined;
+    if (!media) return;
+    const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
+      ["play", () => remoteRef.current.playLive()],
+      ["pause", () => remoteRef.current.pauseLive()],
+      ["seekbackward", () => remoteRef.current.jump(-15)],
+      ["seekforward", () => remoteRef.current.jump(30)],
+    ];
+    const set = (action: MediaSessionAction, fn: MediaSessionActionHandler | null) => {
+      try {
+        media.setActionHandler(action, fn);
+      } catch {
+        // An action this browser does not know.
+      }
+    };
+    for (const [action, fn] of handlers) set(action, fn);
+    return () => {
+      for (const [action] of handlers) set(action, null);
+    };
+  }, []);
   useEffect(() => {
     const off = events().on("screen.remote", (data) => {
       const { action } = (data ?? {}) as { action?: string };
@@ -614,7 +658,8 @@ export function LivePlayer({
       const r = remoteRef.current;
       if (action === "up") r.step(-1);
       else if (action === "down") r.step(1);
-      else if ((action === "pause" && !paused) || (action === "play" && paused)) r.togglePlay();
+      else if (action === "pause") r.pauseLive();
+      else if (action === "play" && paused) r.playLive();
       else if (action === "record") void r.toggleRecord();
     });
     return () => {
