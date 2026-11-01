@@ -42,12 +42,13 @@ test("the notice hides itself about 12 s after it shows", async ({ page }) => {
 
 test("a control under the notice that takes focus wins", async ({ page }) => {
   const ws = await socket(page);
-  // The image runs the server on Chicago time and the browser on UTC. The time
-  // zone notice would push this one down onto text with no control under it.
+  // A time zone notice would push this one down onto text with no control under
+  // it. A server that sends no offset has none, whatever zone each side runs on.
   await page.route("**/api/v1/server", async (route) => {
     const res = await route.fetch();
     const body = (await res.json()) as Record<string, unknown>;
-    await route.fulfill({ response: res, json: { ...body, timeZone: "UTC", timeZoneValid: true, utcOffsetMinutes: 0 } });
+    delete body.utcOffsetMinutes;
+    await route.fulfill({ response: res, json: body });
   });
   await page.goto("/guide");
   await settle(page);
