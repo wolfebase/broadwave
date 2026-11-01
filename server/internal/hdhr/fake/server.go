@@ -47,6 +47,9 @@ type Channel struct {
 	DRM   bool
 	// Copy is "copy-once" or "copy-never" on a CableCARD channel. Empty means copy freely.
 	Copy string
+	// Program is the program number streaminfo lists, 1 when unset. On a DVB
+	// profile it is also the service_id of the SDT and EIT.
+	Program int
 }
 
 // Server is an HDHomeRun. HTTP serves discover, lineup, and the stream. Control is TCP.
@@ -801,6 +804,7 @@ func (s *Server) streamAllocated(w http.ResponseWriter, r *http.Request) {
 		pkt = markerPacket("MPEG2", "AC3")
 	}
 	done := r.Context().Done()
+	w = s.withSI(w, ch.Freq)
 	if pkt != nil {
 		s.loopPacket(w, ch.Number, pkt, stop, done)
 		return
@@ -1245,7 +1249,7 @@ func (s *Server) command(name, value string, set bool) (string, string) {
 		}
 		for _, ch := range s.Channels {
 			if ch.Freq == t.freq {
-				fmt.Fprintf(&b, "1: %s %s\n", ch.Number, ch.Name)
+				fmt.Fprintf(&b, "%d: %s %s\n", max(ch.Program, 1), ch.Number, ch.Name)
 			}
 		}
 		return b.String(), ""

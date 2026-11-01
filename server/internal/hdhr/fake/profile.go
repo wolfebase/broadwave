@@ -23,21 +23,23 @@ const (
 const fakeDeviceAuth = "fake-device-auth"
 
 type profile struct {
-	Name      string
-	Friendly  string
-	Model     string
-	Firmware  string
-	Version   string
-	Upgrade   string
-	DeviceID  string
-	Tuners    int
-	Auth      bool
-	legacy    bool
-	Lock      string
-	Extend    bool
-	ATSC3     int
-	Storage   bool
-	Old       bool
+	Name     string
+	Friendly string
+	Model    string
+	Firmware string
+	Version  string
+	Upgrade  string
+	DeviceID string
+	Tuners   int
+	Auth     bool
+	legacy   bool
+	Lock     string
+	Extend   bool
+	ATSC3    int
+	Storage  bool
+	Old      bool
+	// DVB streams carry an SDT and EIT for the lineup (si.go).
+	DVB       bool
 	ownLineup bool
 	channels  []Channel
 }
@@ -92,9 +94,9 @@ func flex4KChannels() []Channel {
 // 8 MHz multiplex, and a third on another.
 func dvbChannels() []Channel {
 	return []Channel{
-		{Number: "1", Name: "Channel One HD", Freq: 474000000, Video: "H264", Audio: "AAC"},
-		{Number: "2", Name: "Channel Two", Freq: 474000000, Video: "MPEG2", Audio: "MPEG"},
-		{Number: "21", Name: "News 21", Freq: 522000000, Video: "H264", Audio: "AC3"},
+		{Number: "1", Name: "Channel One HD", Freq: 474000000, Video: "H264", Audio: "AAC", Program: 4161},
+		{Number: "2", Name: "Channel Two", Freq: 474000000, Video: "MPEG2", Audio: "MPEG", Program: 4162},
+		{Number: "21", Name: "News 21", Freq: 522000000, Video: "H264", Audio: "AC3", Program: 8261},
 	}
 }
 
@@ -176,7 +178,7 @@ var catalog = []profile{
 		// numbers with no dot, and 25 Hz pictures.
 		Name: ProfileDVBT, Friendly: "HDHomeRun CONNECT QUATRO", Model: "HDHR5-4DT",
 		Firmware: "hdhomerun5_dvbt", Version: "20260101", Upgrade: "20260326",
-		DeviceID: "A3E00D04", Tuners: 4, Auth: true, Lock: "t8qam64",
+		DeviceID: "A3E00D04", Tuners: 4, Auth: true, Lock: "t8qam64", DVB: true,
 		ownLineup: true, channels: dvbChannels(),
 	},
 	{
