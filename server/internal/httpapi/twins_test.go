@@ -147,6 +147,14 @@ func TestFlex4KTwinChoiceAndFavorite(t *testing.T) {
 	if !ok || !enc.Hidden || !enc.Protected || enc.PlaysAs == 0 {
 		t.Fatalf("115.1 %+v, want a hidden encrypted row that plays as 5.1", enc)
 	}
+	// The ATSC 3.0 TV spec finds one "plays as 5.1" line. The encrypted station
+	// with no clear broadcast must not pair (105.1 did, by the 1xx numbering).
+	if locked, ok := byNumber(false)["109.1"]; !ok || !locked.Protected || locked.PlaysAs != 0 {
+		t.Fatalf("109.1 %+v, want an encrypted row that plays as nothing", locked)
+	}
+	if fiveOne := byNumber(false)["5.1"]; enc.PlaysAs != fiveOne.ID {
+		t.Fatalf("115.1 plays as %d, want 5.1 (%d)", enc.PlaysAs, fiveOne.ID)
+	}
 	if _, onGuide := byNumber(true)["115.1"]; onGuide {
 		t.Fatal("115.1 is on the guide")
 	}
