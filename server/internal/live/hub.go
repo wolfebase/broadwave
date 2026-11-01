@@ -168,8 +168,10 @@ type Hub struct {
 	// OnPSIP is called, outside the read loop, when a tuned mux yields a guide.
 	OnPSIP func(freqHz int, guide psip.Guide)
 
-	// OnDVB is called, outside the read loop, when a tuned DVB mux yields listings.
-	OnDVB func(freqHz int, guide dvbsi.Guide)
+	// OnDVB is called, outside the read loop, when a tuned DVB mux yields
+	// listings. A single program stream (an /auto URL) has no frequency;
+	// channelID is then the channel it carries, and 0 for a whole mux.
+	OnDVB func(freqHz int, channelID int64, guide dvbsi.Guide)
 
 	// RenditionIdle is how long a rendition with no viewers keeps running,
 	// so flipping back to a channel is instant.
@@ -309,6 +311,7 @@ type mux struct {
 	frames      sync.Once
 	psip        psip.Harvester
 	dvb         dvbsi.Harvester
+	stream      int64 // the channel a single program stream carries, 0 for a mux
 	picMu       sync.Mutex
 	picBuf      []byte
 	picDone     bool
@@ -981,7 +984,7 @@ func (h *Hub) rememberSiblings(host string, tuner, freq int) {
 // streamMuxLocked wraps a single-program stream (IPTV, or the tuner's /auto URL).
 func (h *Hub) streamMuxLocked(ch store.SourceChannel, body io.ReadCloser, host string) *mux {
 	h.next--
-	m := &mux{freq: h.next, tuner: -1, host: host, device: ch.DeviceID, body: body, feeds: map[string]*feed{}}
+	m := &mux{freq: h.next, tuner: -1, host: host, device: ch.DeviceID, body: body, feeds: map[string]*feed{}, stream: ch.ID}
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	h.muxes[m.freq] = m
@@ -3175,7 +3178,7 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 			}
 			if g, ok := m.dvb.Add(chunk); ok && h.OnDVB != nil {
 				freq, guide := m.freq, g
-				go h.OnDVB(freq, guide)
+				go h.OnDVB(freq, m.stream, guide)
 			}
 			h.observeMuxPicture(m, chunk)
 			for _, sub := range m.noteLead(chunk) {

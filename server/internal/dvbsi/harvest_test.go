@@ -87,3 +87,24 @@ func TestTheHarvesterJoinsPacketsSplitAcrossReads(t *testing.T) {
 		t.Fatal("no guide from reads that split packets")
 	}
 }
+
+// A tuner's single-program stream says which program it carries in its PAT.
+func TestTheHarvesterReadsTheStreamsProgram(t *testing.T) {
+	// program 0 (the NIT) at PID 0x10, then program 0x1001 at PMT PID 0x100.
+	pat := longSection(0x00, 0x0101, []byte{0x00, 0x00, 0xE0, 0x10, 0x10, 0x01, 0xE1, 0x00})
+	if got := Parse((&carrier{pid: pidPAT}).alone(pat)).Programs; len(got) != 1 || got[0] != 0x1001 {
+		t.Fatalf("programs %v", got)
+	}
+	eit, sdt, pc := &carrier{pid: pidEIT}, &carrier{pid: pidSDT}, &carrier{pid: pidPAT}
+	var h Harvester
+	for range 200 {
+		chunk := append(pc.alone(pat), carousel(eit, sdt)...)
+		if g, ok := h.Add(chunk); ok {
+			if len(g.Programs) != 1 || g.Programs[0] != 0x1001 || len(g.Events) != 2 {
+				t.Fatalf("%+v", g)
+			}
+			return
+		}
+	}
+	t.Fatal("no guide")
+}

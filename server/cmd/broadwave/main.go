@@ -231,8 +231,8 @@ func main() {
 			slog.Debug(fmt.Sprintf("guide: broadcast filled %d listings", n))
 		}
 	}
-	hub.OnDVB = func(freq int, g dvbsi.Guide) {
-		n, err := api.ApplyDVB(context.Background(), freq, g)
+	hub.OnDVB = func(freq int, channelID int64, g dvbsi.Guide) {
+		n, err := api.ApplyDVB(context.Background(), freq, channelID, g)
 		if err != nil {
 			slog.Error(fmt.Sprintf("guide: broadcast: %v", err))
 			return

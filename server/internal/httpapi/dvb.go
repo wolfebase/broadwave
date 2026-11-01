@@ -15,7 +15,9 @@ import (
 // does for ATSC. A listing for the tuned mux goes to the channel tuned at
 // that frequency with its service as the program; one for another mux, or a
 // service not tuned yet, to the DVB channel named as the SDT names it.
-func (s *Server) ApplyDVB(ctx context.Context, freqHz int, g dvbsi.Guide) (int, error) {
+// A single program stream (freqHz 0 or less) has no frequency to match: its
+// own program, from its PAT, is channelID, and the rest match by name.
+func (s *Server) ApplyDVB(ctx context.Context, freqHz int, channelID int64, g dvbsi.Guide) (int, error) {
 	if s == nil || s.Store == nil || len(g.Events) == 0 {
 		return 0, nil
 	}
@@ -28,6 +30,9 @@ func (s *Server) ApplyDVB(ctx context.Context, freqHz int, g dvbsi.Guide) (int, 
 		return 0, err
 	}
 	byProgram := map[int][]int64{}
+	if freqHz <= 0 && channelID > 0 && len(g.Programs) == 1 {
+		byProgram[g.Programs[0]] = []int64{channelID}
+	}
 	byName := map[string][]int64{}
 	perDevice := map[string]int{}
 	for _, row := range rows {

@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	tablePAT      = 0x00
 	tableSDT      = 0x42
 	tableSDTOther = 0x46
 	tableNowNext  = 0x4E
@@ -59,6 +60,9 @@ type Event struct {
 type Guide struct {
 	Services []Service
 	Events   []Event
+	// Programs are the program numbers the PAT lists. A tuner's single
+	// program stream lists one.
+	Programs []int
 }
 
 // Parse reads a transport stream and returns its SDT services and EIT
@@ -71,6 +75,8 @@ func Parse(raw []byte) Guide {
 	for _, sec := range sections(raw) {
 		t := sec.Body[0]
 		switch {
+		case sec.PID == pidPAT && t == tablePAT:
+			g.Programs = parsePAT(sec.Body)
 		case sec.PID == pidSDT && (t == tableSDT || t == tableSDTOther):
 			for _, s := range parseSDT(sec.Body) {
 				key := [3]int{s.NetworkID, s.StreamID, s.ID}
@@ -97,6 +103,20 @@ func Parse(raw []byte) Guide {
 		}
 	}
 	return g
+}
+
+// The PAT header is 8 bytes; each program is 4. Program 0 names the NIT.
+func parsePAT(b []byte) []int {
+	if len(b) < 12 || b[1]&0x80 == 0 || b[5]&0x01 == 0 {
+		return nil
+	}
+	var out []int
+	for pos := 8; pos+4 <= len(b)-4; pos += 4 {
+		if n := int(binary.BigEndian.Uint16(b[pos : pos+2])); n != 0 {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // The SDT header is 11 bytes; each service is 5 more and its descriptors.

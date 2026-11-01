@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	pidPAT = 0x00
 	pidSDT = 0x11
 	pidEIT = 0x12
 )
@@ -23,7 +24,7 @@ type assembly struct {
 	cc  int
 }
 
-// sections reassembles the sections carried on the SDT and EIT PIDs. A
+// sections reassembles the sections carried on the PAT, SDT, and EIT PIDs. A
 // section that fails its CRC, a length that cannot be a section, and a
 // section broken by a lost packet are dropped.
 func sections(raw []byte) []section {
@@ -34,7 +35,7 @@ func sections(raw []byte) []section {
 			return
 		}
 		pid := int(pkt[1]&0x1F)<<8 | int(pkt[2])
-		if pid != pidSDT && pid != pidEIT {
+		if pid != pidPAT && pid != pidSDT && pid != pidEIT {
 			return
 		}
 		afc := (pkt[3] >> 4) & 3

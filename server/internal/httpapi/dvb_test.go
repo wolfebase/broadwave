@@ -75,7 +75,7 @@ func TestDVBListingsFindTheirChannels(t *testing.T) {
 			other(0x0404, 7001, 8, "Somewhere Regional"),
 		},
 	}
-	n, err := (&Server{Store: st}).ApplyDVB(ctx, 474000000, g)
+	n, err := (&Server{Store: st}).ApplyDVB(ctx, 474000000, 0, g)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestDVBListingsFindTheirChannels(t *testing.T) {
 		t.Fatalf("regional %+v %+v", got[ids["31"]], got[ids["32"]])
 	}
 	// The next window brings the same listings again and adds nothing.
-	if n, err := (&Server{Store: st}).ApplyDVB(ctx, 474000000, g); err != nil || n != 0 {
+	if n, err := (&Server{Store: st}).ApplyDVB(ctx, 474000000, 0, g); err != nil || n != 0 {
 		t.Fatalf("again %d %v", n, err)
 	}
 }
@@ -122,11 +122,61 @@ func TestDVBNamesMatchOnlyDVBTuners(t *testing.T) {
 		t.Fatal(err)
 	}
 	at := time.Date(2026, 3, 14, 19, 0, 0, 0, time.UTC)
-	n, err := (&Server{Store: st}).ApplyDVB(ctx, 474000000, dvbsi.Guide{
+	n, err := (&Server{Store: st}).ApplyDVB(ctx, 474000000, 0, dvbsi.Guide{
 		Services: []dvbsi.Service{{NetworkID: 1, StreamID: 2, ID: 3, Name: "News 21"}},
 		Events:   []dvbsi.Event{{NetworkID: 1, StreamID: 2, ServiceID: 3, Title: "Bulletin", Start: at, End: at.Add(time.Hour)}},
 	})
 	if err != nil || n != 0 {
 		t.Fatalf("filled %d %v", n, err)
+	}
+}
+
+// A tuner's /auto stream is one program with no frequency. Its own listings
+// go to the channel it carries, by the program its PAT names; the others it
+// lists go by the SDT's names.
+func TestDVBListingsFromASingleProgramStream(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	dev := hdhr.Device{DeviceID: "DVB1", FriendlyName: "Quatro", ModelNumber: "HDHR5-4DT", BaseURL: "http://127.0.0.1:1", TunerCount: 4}
+	if err := st.UpsertDevice(ctx, dev, []hdhr.Channel{
+		{GuideNumber: "1", GuideName: "Channel One HD"},
+		{GuideNumber: "21", GuideName: "Renamed Since The Scan"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]int64{}
+	channels, err := st.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ch := range channels {
+		ids[ch.GuideNumber] = ch.ID
+	}
+	at := time.Date(2026, 3, 14, 19, 0, 0, 0, time.UTC)
+	ev := func(service int, title string) dvbsi.Event {
+		return dvbsi.Event{NetworkID: 1, StreamID: 2, ServiceID: service, Actual: true, NowNext: true, Title: title, Start: at, End: at.Add(time.Hour)}
+	}
+	g := dvbsi.Guide{
+		Programs: []int{8261},
+		Services: []dvbsi.Service{
+			{NetworkID: 1, StreamID: 2, ID: 4161, Name: "Channel One HD", Actual: true},
+			{NetworkID: 1, StreamID: 2, ID: 8261, Name: "News 21", Actual: true},
+		},
+		Events: []dvbsi.Event{ev(8261, "Evening Bulletin"), ev(4161, "Quiz Night")},
+	}
+	n, err := (&Server{Store: st}).ApplyDVB(ctx, -2, ids["21"], g)
+	if err != nil || n != 2 {
+		t.Fatalf("filled %d %v", n, err)
+	}
+	rows, err := st.Airings(ctx, at, at.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[int64]string{}
+	for _, r := range rows {
+		got[r.ChannelID] = r.Title
+	}
+	if got[ids["21"]] != "Evening Bulletin" || got[ids["1"]] != "Quiz Night" {
+		t.Fatalf("%v", got)
 	}
 }

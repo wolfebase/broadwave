@@ -45,8 +45,8 @@ func TestTheGuideScanReadsDVBListings(t *testing.T) {
 	hub := &live.Hub{Store: st, Dir: t.TempDir(), Encoder: "libx264", FFmpeg: "ffmpeg"}
 	t.Cleanup(hub.Shutdown)
 	srv := &Server{Store: st, HDHR: client, Hub: hub, Version: "dev", Staging: true}
-	hub.OnDVB = func(freq int, g dvbsi.Guide) {
-		if _, err := srv.ApplyDVB(context.Background(), freq, g); err != nil {
+	hub.OnDVB = func(freq int, channelID int64, g dvbsi.Guide) {
+		if _, err := srv.ApplyDVB(context.Background(), freq, channelID, g); err != nil {
 			t.Error(err)
 		}
 	}
