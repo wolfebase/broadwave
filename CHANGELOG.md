@@ -8,6 +8,8 @@
 - Web: a seek in a recording from media keys, the lock screen, or the browser's own controls plays from that spot, instead of sliding to where the current encode starts.
 - Web: "New … found" and game notices sit under the update and time zone notices instead of covering their words.
 - Web: moving a recording rule up or down no longer snaps the rows back for a moment, losing the focused button, when another change to the schedule arrives while the new order is being saved.
+- Server: an HEVC channel at 25 or 50 Hz (DVB-T2) keeps its own clock. Its small pictures played at 29.97.
+- Server: a 25 or 50 Hz channel plays at its own rate from its first tune, the adaptive ladder included. That tune ran at 59.94, and the ladder kept it until it restarted.
 
 ## 0.17.0 — 2026-10-31
 

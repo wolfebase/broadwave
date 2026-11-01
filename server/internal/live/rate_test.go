@@ -1,12 +1,15 @@
 package live
 
 import (
+	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"broadwave/internal/store"
 )
@@ -298,5 +301,117 @@ func TestRateChangeIsAClockChange(t *testing.T) {
 	}
 	if !h.takeRateLocked(f, "50") || !h.takeRateLocked(f, "29.97") {
 		t.Fatal("50 Hz in or out is a new clock")
+	}
+}
+
+// mpeg2RateTS is an interlaced MPEG-2 program whose sequence header names
+// frame_rate_code code (3 is 25, 4 is 29.97).
+func mpeg2RateTS(program int, code byte) []byte {
+	es := []byte{0x00, 0x00, 0x01, 0xB3, 0x2D, 0x02, 0x40, 0x30 | code, 0xff, 0xff, 0xe0, 0x00}
+	es = append(es, 0x00, 0x00, 0x01, 0xB5, 0x10, 0x00)
+	es = append(es, 0x00, 0x00, 0x01, 0xB5, 0x80, 0x00, 0x00, 0x00, 0x00)
+	return programTS(program, streamMPEG2, 0x100, es)
+}
+
+func ladderHub(t *testing.T) (*Hub, *mux, string) {
+	t.Helper()
+	bin, mark := writeFakeFFmpeg(t, "hold")
+	h, m := testHub(t)
+	h.FFmpeg = bin
+	h.Encoder = "libx264"
+	t.Cleanup(func() {
+		h.mu.Lock()
+		if live := h.channels[1]; live != nil {
+			h.stopFeedLocked(live)
+		}
+		h.mu.Unlock()
+	})
+	return h, m, mark
+}
+
+// The first tune of a 25 Hz channel reads the rate with the scan, so the
+// ladder it starts is already at 50.
+func TestFirstTuneLadderTakesTheRate(t *testing.T) {
+	h, m, _ := ladderHub(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	m.body = pr
+	go h.readLoop(ctx, m)
+	defer func() {
+		cancel()
+		_ = pw.Close()
+	}()
+	go writeUntil(ctx, pw, mpeg2RateTS(1, 3))
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f := h.addFeedLocked(m, store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "7.1", VideoCodec: "MPEG2"}, ProgramNum: 1})
+	if f.source.Rate != "25" || f.channel.PictureRate != "25" {
+		t.Fatalf("first tune rate %q stored %q", f.source.Rate, f.channel.PictureRate)
+	}
+	r, err := h.ensureLadderLocked(f, ladderRung("broadcast", "1080"), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := strings.Join(r.args, " "); !strings.Contains(line, "fps=50") || strings.Contains(line, "60000/1001") {
+		t.Fatalf("first tune ladder: %s", line)
+	}
+}
+
+// A ladder that started before the header restarts once at the rate the
+// header names, with its viewers. One header that changes the scan and the
+// rate is one restart.
+func TestLateRateRestartsTheLadderOnce(t *testing.T) {
+	h, m, mark := ladderHub(t)
+	h.mu.Lock()
+	f := h.addFeedLocked(m, store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "7.1", VideoCodec: "MPEG2"}, ProgramNum: 1, FieldOrder: "tt"})
+	r, err := h.ensureLadderLocked(f, ladderRung("broadcast", "1080"), time.Time{})
+	if err != nil {
+		h.mu.Unlock()
+		t.Fatal(err)
+	}
+	r.viewers = 2
+	h.mu.Unlock()
+	waitMark(t, mark, ".count")
+	h.finishScan(m, f, &scanBuf{wake: make(chan struct{}, 1), b: mpeg2RateTS(1, 3)}, nil)
+	h.mu.Lock()
+	now := f.ladderPrimary("broadcast")
+	h.mu.Unlock()
+	if now == nil || now == r || now.viewers != 2 {
+		t.Fatalf("ladder after the rate: %+v", now)
+	}
+	if line := strings.Join(now.args, " "); !strings.Contains(line, "fps=50") {
+		t.Fatalf("restarted ladder: %s", line)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for markCount(t, mark) < 2 && time.Now().Before(deadline) {
+		time.Sleep(15 * time.Millisecond)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := markCount(t, mark); n != 2 {
+		t.Fatalf("ladder started %d times, want 2", n)
+	}
+}
+
+// A US station's 29.97 is the clock the ladder already runs on: reading it
+// restarts nothing.
+func TestUSRateKeepsTheLadder(t *testing.T) {
+	h, m, _ := ladderHub(t)
+	h.mu.Lock()
+	f := h.addFeedLocked(m, store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "7.1", VideoCodec: "MPEG2"}, ProgramNum: 1, FieldOrder: "tt"})
+	r, err := h.ensureLadderLocked(f, ladderRung("broadcast", "1080"), time.Time{})
+	if err != nil {
+		h.mu.Unlock()
+		t.Fatal(err)
+	}
+	r.viewers = 1
+	h.mu.Unlock()
+	h.finishScan(m, f, &scanBuf{wake: make(chan struct{}, 1), b: mpeg2RateTS(1, 4)}, nil)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if f.source.Rate != "29.97" {
+		t.Fatalf("rate %q", f.source.Rate)
+	}
+	if now := f.ladderPrimary("broadcast"); now != r {
+		t.Fatal("a 29.97 rate restarted the ladder")
 	}
 }

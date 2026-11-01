@@ -542,7 +542,7 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	sub := h.attachPipeLocked(m, buf)
 	started := time.Now()
 	deadline := started.Add(scanWait)
-	var order, video string
+	var order, video, rate string
 	for time.Now().Before(deadline) {
 		buf.mu.Lock()
 		data := append([]byte(nil), buf.b...)
@@ -550,6 +550,8 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 		if order == "" {
 			if got, ok := scanType(data, f.program); ok {
 				order = got
+				// The header that names the scan names the rate.
+				rate = headerRate(data, f.program)
 			}
 		}
 		if video == "" {
@@ -591,8 +593,10 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	if len(f.tracks) > 0 {
 		slog.Info(fmt.Sprintf("audio tracks for %s: %s", f.channel.GuideNumber, trackLog(f.tracks)))
 	}
-	// No rendition runs yet, so the encode starts on what the stream carries.
+	// No rendition runs yet, so the encode starts on what the stream carries,
+	// at the stream's own clock.
 	h.learnCodecsLocked(f, video, mainCodec(f.tracks))
+	h.takeRateLocked(f, rate)
 	if order != "" {
 		m.detach(sub)
 		slog.Info(fmt.Sprintf("scan type %s for %s in %s", order, f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
@@ -652,15 +656,23 @@ func (h *Hub) finishScanFromPicture(m *mux, f *feed) {
 	video, rate := VideoCodecOf(data, program), headerRate(data, program)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.channels[id] == f && learnedAny(h.learnCodecsLocked(f, video, ""), h.takeRateLocked(f, rate)) {
+	if h.channels[id] == f {
+		h.applyLateLocked(f, order, video, rate, guide)
+	}
+}
+
+// applyLateLocked applies what a read after the encode started learned, and
+// rebuilds a rendition or ladder whose graph changed once for all of it.
+func (h *Hub) applyLateLocked(f *feed, order, video, rate, guide string) {
+	rebuild := learnedAny(h.learnCodecsLocked(f, video, ""), h.takeRateLocked(f, rate))
+	if order != "" && f.headerOrder == "" {
+		slog.Info(fmt.Sprintf("scan type %s for %s after the window", order, guide))
+		f.headerOrder = order
+		rebuild = h.setScanLocked(f, order) || rebuild
+	}
+	if rebuild {
 		h.rebuildRenditionsLocked(f)
 	}
-	if order == "" || f.headerOrder != "" || h.channels[id] != f {
-		return
-	}
-	slog.Info(fmt.Sprintf("scan type %s for %s after the window", order, guide))
-	f.headerOrder = order
-	h.applyScanLocked(f, order)
 }
 
 // deferScanLocked learns audio and a late film header without holding the
@@ -694,39 +706,40 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 			return
 		}
 		data := m.pictureBytes()
+		var order, video, rate string
 		if !headerDone {
-			if order, ok := scanType(data, program); ok {
-				h.mu.Lock()
-				if h.channels[id] == f && f.headerOrder == "" {
-					// Every tune, the idle still sweep's included, learns this: debug, or
-					// it is most of the log.
-					slog.Debug(fmt.Sprintf("scan type %s for %s after the picture starts", order, guide))
-					f.headerOrder = order
-					h.applyScanLocked(f, order)
-				}
-				h.mu.Unlock()
-				headerDone = true
+			if got, ok := scanType(data, program); ok {
+				order, headerDone = got, true
 			}
 		}
 		if !videoDone {
-			if video := VideoCodecOf(data, program); video != "" {
-				h.mu.Lock()
-				if h.channels[id] == f && h.learnCodecsLocked(f, video, "") {
-					h.rebuildRenditionsLocked(f)
-				}
-				h.mu.Unlock()
+			if video = VideoCodecOf(data, program); video != "" {
 				videoDone = true
 			}
 		}
 		if !rateDone {
 			if p, ok := pictureFacts(data, program); ok {
-				h.mu.Lock()
-				if h.channels[id] == f && h.takeRateLocked(f, p.FPS) {
+				rate, rateDone = p.FPS, true
+			}
+		}
+		// The scan, the codec, and the rate usually come from one header: one
+		// rebuild covers them.
+		if order != "" || video != "" || rate != "" {
+			h.mu.Lock()
+			if h.channels[id] == f {
+				rebuild := learnedAny(h.learnCodecsLocked(f, video, ""), h.takeRateLocked(f, rate))
+				if order != "" && f.headerOrder == "" {
+					// Every tune, the idle still sweep's included, learns this: debug, or
+					// it is most of the log.
+					slog.Debug(fmt.Sprintf("scan type %s for %s after the picture starts", order, guide))
+					f.headerOrder = order
+					rebuild = h.setScanLocked(f, order) || rebuild
+				}
+				if rebuild {
 					h.rebuildRenditionsLocked(f)
 				}
-				h.mu.Unlock()
-				rateDone = true
 			}
+			h.mu.Unlock()
 		}
 		if !audioDone {
 			if tracks := AudioTracks(data, program); len(tracks) > 0 {
@@ -822,15 +835,9 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	m.detach(sub)
-	if h.channels[id] == f && learnedAny(h.learnCodecsLocked(f, video, ""), h.takeRateLocked(f, rate)) {
-		h.rebuildRenditionsLocked(f)
+	if h.channels[id] == f {
+		h.applyLateLocked(f, order, video, rate, guide)
 	}
-	if order == "" || f.headerOrder != "" || h.channels[id] != f {
-		return
-	}
-	slog.Info(fmt.Sprintf("scan type %s for %s after the window", order, guide))
-	f.headerOrder = order
-	h.applyScanLocked(f, order)
 }
 
 // learnedAny is || once both sides have run.
@@ -868,8 +875,16 @@ func (h *Hub) takeRateLocked(f *feed, rate string) bool {
 // Film stays on the tune and is stored as interlaced, so the next program
 // is scanned again. A running rendition whose graph changed is rebuilt.
 func (h *Hub) applyScanLocked(f *feed, order string) {
+	if h.setScanLocked(f, order) {
+		h.rebuildRenditionsLocked(f)
+	}
+}
+
+// setScanLocked is applyScanLocked without the rebuild. It reports a change
+// to the picture graph.
+func (h *Hub) setScanLocked(f *feed, order string) bool {
 	if order == "" {
-		return
+		return false
 	}
 	stored := storedFieldOrder(order)
 	progressive := stored == "progressive"
@@ -888,9 +903,7 @@ func (h *Hub) applyScanLocked(f *feed, order string) {
 			go func() { _ = h.Store.SetFieldOrder(context.Background(), id, stored) }()
 		}
 	}
-	if changed {
-		h.rebuildRenditionsLocked(f)
-	}
+	return changed
 }
 
 // applyProbeLocked is the ffprobe result. It rebuilds a rendition that
