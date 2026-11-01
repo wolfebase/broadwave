@@ -44,6 +44,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			tuners = []live.Tuner{}
 		}
 		out["tuners"] = tuners
+		out["emulators"] = s.emulators(ctx, devices)
 		encoder := map[string]any{
 			"name":        s.Hub.Encoder,
 			"hardware":    s.Hub.Encoder != "libx264",
@@ -147,6 +148,30 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	out["feeds"] = feeds
 	out["logs"] = scrubLogs(logbuf.Tail(diagLogLines), secrets)
 	writeCachedJSON(w, r, out)
+}
+
+// emulator is a device with no tuner status, and what this server has open on it.
+type emulator struct {
+	DeviceID   string `json:"deviceId"`
+	Name       string `json:"name"`
+	Model      string `json:"model"`
+	TunerCount int    `json:"tunerCount"`
+	Streams    int    `json:"streams"`
+}
+
+// emulators lists the HDHomeRun emulators. Their tuners are not in tuners:
+// they report no status.
+func (s *Server) emulators(ctx context.Context, devices []store.Device) []emulator {
+	out := []emulator{}
+	for _, d := range devices {
+		if d.TunerCount <= 0 || d.Retired || !strings.Contains(d.BaseURL, "://") {
+			continue
+		}
+		if plain, open := s.Hub.PlainStreams(ctx, d.BaseURL, d.DeviceID); plain {
+			out = append(out, emulator{DeviceID: d.DeviceID, Name: d.FriendlyName, Model: d.ModelNumber, TunerCount: d.TunerCount, Streams: open})
+		}
+	}
+	return out
 }
 
 func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {

@@ -165,6 +165,9 @@ export type DeviceHealth = {
   firmwareVersion: string;
   tuners: TunerLock[];
   error?: string;
+  noStatus?: boolean;
+  tunerCount?: number;
+  streams?: number;
 };
 
 export type DirectStatus = {

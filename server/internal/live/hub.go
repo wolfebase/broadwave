@@ -2861,13 +2861,20 @@ func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
 	for i, base := range bases {
 		h.mu.Lock()
 		down := h.statusDown != nil && time.Now().Before(h.statusDown[base])
+		plain := h.plain[base]
 		h.mu.Unlock()
-		if down && i < len(bases)-1 {
+		// An emulator has no tuner status to list. That is not a failure.
+		if plain || down && i < len(bases)-1 {
 			continue
 		}
 		// The read runs without h.mu: playlists wait on it.
 		raw, err := fetchTunerStatus(ctx, base)
 		h.mu.Lock()
+		h.noteStatusLocked(base, err)
+		if errors.Is(err, errNoStatus) && h.plain[base] {
+			h.mu.Unlock()
+			continue
+		}
 		if err != nil {
 			if ctx.Err() == nil && h.statusDown != nil {
 				h.statusDown[base] = time.Now().Add(statusDownFor)
@@ -4450,6 +4457,18 @@ func (h *Hub) NoStatus(ctx context.Context, base string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.plain[base]
+}
+
+// PlainStreams reports a device that answers without a tuner status (an
+// HDHomeRun emulator) and how many of its streams this server has open.
+// A device not read yet is asked once.
+func (h *Hub) PlainStreams(ctx context.Context, base, deviceID string) (plain bool, open int) {
+	if !h.NoStatus(ctx, base) {
+		return false, 0
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return true, h.streamsForDeviceLocked(deviceID) + h.plainOpening[deviceID]
 }
 
 // openPlain opens a plain device's channel stream without h.mu: an emulator

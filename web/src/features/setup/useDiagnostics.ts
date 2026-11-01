@@ -9,6 +9,8 @@ export type Diagnostics = {
   server?: { id: string; name: string };
   tuners?: TunerStatus[];
   tunerError?: string;
+  /** HDHomeRun emulators: no tuner status, so only what this server has open on them. */
+  emulators?: { deviceId: string; name: string; model: string; tunerCount: number; streams: number }[];
   encoder?: { name: string; hardware: boolean; deinterlace?: string; ffmpeg: string; ac4?: boolean; line?: string; height?: number; focus?: string; tiles?: number };
   storage?: { Free: number; Total: number };
   guide?: { channels: number; channelsWithListings: number; airings: number; listingsUntil?: string; nextRefresh?: string; lastRefresh?: string; lastError?: string; lastErrorAt?: string };

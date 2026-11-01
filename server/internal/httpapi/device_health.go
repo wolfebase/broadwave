@@ -23,6 +23,22 @@ func (s *Server) deviceHealth(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(device.BaseURL, "http://") && !strings.HasPrefix(device.BaseURL, "https://") {
 			continue
 		}
+		// An emulator has no tuner status or control port: reading one would
+		// call it a tuner that did not answer.
+		if s.Hub != nil && device.TunerCount > 0 {
+			if plain, open := s.Hub.PlainStreams(r.Context(), device.BaseURL, device.DeviceID); plain {
+				out = append(out, hdhr.DeviceHealth{
+					DeviceID:        device.DeviceID,
+					Model:           device.ModelNumber,
+					FirmwareVersion: device.FirmwareVersion,
+					Tuners:          []hdhr.TunerLock{},
+					NoStatus:        true,
+					TunerCount:      device.TunerCount,
+					Streams:         open,
+				})
+				continue
+			}
+		}
 		health, err := client.ReadHealth(r.Context(), device.BaseURL)
 		if err != nil {
 			out = append(out, hdhr.DeviceHealth{

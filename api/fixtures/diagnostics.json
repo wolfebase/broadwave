@@ -16,6 +16,7 @@
     }
   ],
   "doctor": [],
+  "emulators": [],
   "encoder": {
     "ac4": true,
     "deinterlace": "",

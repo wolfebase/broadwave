@@ -161,7 +161,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Tuners and signal, encoder and ffmpeg (`encoder.ac4` is false when ffmpeg cannot decode ATSC 3.0 sound), the startup picture benchmark (class, speed, transcode height, the large tile, and how many tiles fit), storage, guide freshness, what the relay is carrying, the last ten channel starts (`starts`, seconds from the watch to the first segment split into tune, keyframe, encoder, and segment, newest first), feed counts, recent logs, connected apps, and recent activity. */
+        /** @description Tuners and signal, encoder and ffmpeg (`encoder.ac4` is false when ffmpeg cannot decode ATSC 3.0 sound), the startup picture benchmark (class, speed, transcode height, the large tile, and how many tiles fit), storage, guide freshness, what the relay is carrying, the last ten channel starts (`starts`, seconds from the watch to the first segment split into tune, keyframe, encoder, and segment, newest first), feed counts, recent logs, connected apps, and recent activity. HDHomeRun emulators report no tuner status, so their tuners are not in `tuners`; `emulators` lists each one (`deviceId`, `name`, `model`, `tunerCount`, and `streams`, how many of its tuners this server has open). */
         get: operations["getDiagnostics"];
         put?: never;
         post?: never;
@@ -2297,6 +2297,12 @@ export interface components {
             tuners: components["schemas"]["TunerLock"][];
             /** @description Set when the tuner did not answer. */
             error?: string;
+            /** @description An HDHomeRun emulator (Threadfin, xTeVe, Dispatcharr) that reports no tuner status. tuners is empty and error is not set. Absent when false. */
+            noStatus?: boolean;
+            /** @description How many tuners the emulator lists, when noStatus is set. */
+            tunerCount?: number;
+            /** @description How many of those this server has open, when noStatus is set. Absent when none. */
+            streams?: number;
         };
         /** @description Signal lock for one tuner. Locked is false when the device reports no lock. */
         TunerLock: {
