@@ -67,6 +67,15 @@ async function seek(page: Page, to: number) {
   }, to);
 }
 
+// The playhead lands in the break with a picture to play (a seek may start a
+// new encode there first) and is still short of its end half a second later.
+async function stays(page: Page, from: number, below: number) {
+  const landed = () => page.locator("video").evaluate((v: HTMLVideoElement) => (!v.seeking && v.readyState >= 3 ? v.currentTime : -1));
+  await expect.poll(async () => { const t = await landed(); return t > from && t < below; }, { timeout: 30_000 }).toBe(true);
+  await page.waitForTimeout(500);
+  expect(await at(page)).toBeLessThan(below);
+}
+
 async function skipMode(page: Page, name: "Skip auto" | "Skip button" | "Manual") {
   const choice = page.getByRole("button", { name, exact: true });
   if (!(await choice.isVisible())) await page.getByRole("button", { name: "Options" }).click();
@@ -97,8 +106,7 @@ test("auto skips a sure break, and only a sure one", async ({ page }) => {
   // Confidence 0.5 stays put and offers the button. This fails if auto ignores confidence.
   // Pause keeps the dock up: while it is faded the bar is inert and the picture takes the click.
   await seek(page, 32);
-  await page.waitForTimeout(500);
-  expect(await at(page)).toBeLessThan(44);
+  await stays(page, 30.5, 44);
   await pause();
   const skip = page.getByRole("button", { name: "Skip break" });
   await expect(skip).toBeVisible();
@@ -110,16 +118,14 @@ test("auto skips a sure break, and only a sure one", async ({ page }) => {
   // Skip button: a sure break waits for the button too.
   await skipMode(page, "Skip button");
   await seek(page, 12);
-  await page.waitForTimeout(500);
-  expect(await at(page)).toBeLessThan(19);
+  await stays(page, 10.5, 19);
   await pause();
   await expect(page.getByRole("button", { name: "Skip break" })).toBeVisible();
 
   // Manual: nothing to press, and the playhead stays in the break.
   await skipMode(page, "Manual");
   await seek(page, 32);
-  await page.waitForTimeout(500);
-  expect(await at(page)).toBeLessThan(44);
+  await stays(page, 30.5, 44);
   await pause();
   await expect(page.getByRole("button", { name: "Skip break" })).toBeHidden();
 
