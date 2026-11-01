@@ -6,6 +6,7 @@
 
 - Web: two quick Forward 30 presses in a recording land where the second one says; the spots they saved could arrive out of order.
 - Web: a seek in a recording from media keys, the lock screen, or the browser's own controls plays from that spot, instead of sliding to where the current encode starts.
+- Web: "New … found" and game notices sit under the update and time zone notices instead of covering their words.
 
 ## 0.17.0 — 2026-10-31
 

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { sportsMessages } from "../../i18n/messages/sports.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
-import { focusPastNotice } from "../../app/remote";
+import { floatBelowNotices, focusPastNotice } from "../../app/remote";
 import { events } from "../../lib/events";
 import type { GameAlert } from "../../types";
 
@@ -68,6 +68,7 @@ function GameNotice({ alert, onDismiss }: { alert: Seen; onDismiss: () => void }
   const player = usePlayer();
   const ref = useRef<HTMLDivElement>(null);
   const channel = channels.find((c) => c.id === alert.channelId) ?? allChannels.find((c) => c.id === alert.channelId);
+  useLayoutEffect(() => floatBelowNotices(ref.current), []);
   useEffect(() => {
     // It floats over the page. A control under it that takes focus wins.
     const onFocus = (event: FocusEvent) => {

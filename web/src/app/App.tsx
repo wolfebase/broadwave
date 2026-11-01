@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Guide } from "../features/guide/Guide";
 import { Home } from "../features/home/Home";
 import { sectionPath } from "../features/settings/sections";
@@ -11,7 +11,7 @@ import { useLayout } from "./layout";
 import { Nav, routeTitle } from "./Nav";
 import { NotFound } from "./NotFound";
 import { PlayerProvider, usePlayer } from "./player";
-import { focusPastNotice, focusRing, installTvRemote } from "./remote";
+import { floatBelowNotices, focusPastNotice, focusRing, installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
 import { isSearchShortcut } from "./searchKey";
 import { installKind, updateHint, updateSteps, type UpdateInstall } from "../lib/updateHow";
@@ -265,6 +265,7 @@ function Shell() {
 /** A device that joined the house. It waits off the player and multiview, and goes by itself. */
 function HomeNotice({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => floatBelowNotices(ref.current), []);
   useEffect(() => {
     // 12 s once it can be seen: a tab in the background has not seen it yet.
     let timer = 0;
