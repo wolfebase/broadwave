@@ -521,7 +521,12 @@ func (h *Hub) startLadderLocked(f *feed, specs []Rendition, frame time.Time) (*r
 	if len(specs) == 0 {
 		return nil, errors.New("ladder has no rungs")
 	}
-	_, args := h.ladderCommandLocked(f, specs[0], "")
+	encoder := ladderEncoder(h.Encoder)
+	soft := f.soft[specs[0].Key()]
+	if soft {
+		encoder = "libx264"
+	}
+	_, args := h.ladderCommandLocked(f, specs[0], encoder)
 	dirs := make([]string, len(specs))
 	for i, spec := range specs {
 		dirs[i] = filepath.Join(h.Dir, "live", fmt.Sprintf("%d", f.channel.ID), spec.Key())
@@ -562,12 +567,13 @@ func (h *Hub) startLadderLocked(f *feed, specs []Rendition, frame time.Time) (*r
 			primary = r
 			primary.cmd = cmd
 			primary.stdin = stdin
+			primary.fallback = soft
 		}
 	}
 	if stdin != nil {
 		primary.sub = h.attachRenditionLocked(f, primary, h.renditionPipe(f, primary, stdin), frame, now)
 	}
-	go h.watchLadder(f, primary, cmd, ladderEncoder(h.Encoder), false)
+	go h.watchLadder(f, primary, cmd, encoder, false)
 	return primary, nil
 }
 
@@ -736,6 +742,7 @@ func (h *Hub) restartLadderLocked(f *feed, primary *rendition, software bool) bo
 		encoder = "libx264"
 		_, args = h.ladderCommandLocked(f, primary.spec, encoder)
 		primary.fallback = true
+		f.markSoft(primary.spec.Key())
 	}
 	cmd, stdin, pipes, err := h.openLadder(args, len(rungs), primary.dir)
 	if err != nil {
@@ -921,7 +928,12 @@ func (h *Hub) rebuildLaddersLocked(f *feed) {
 			continue
 		}
 		seen[r.group] = true
-		_, next := h.ladderCommandLocked(f, r.spec, "")
+		// A ladder that fell back stays on the processor.
+		enc := ""
+		if r.fallback {
+			enc = "libx264"
+		}
+		_, next := h.ladderCommandLocked(f, r.spec, enc)
 		if slices.Equal(r.args, next) {
 			continue
 		}

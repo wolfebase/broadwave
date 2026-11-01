@@ -554,3 +554,83 @@ func TestAChannelWithoutSoundStartsSilent(t *testing.T) {
 		t.Fatalf("the encode starts with sound: %v", r)
 	}
 }
+
+// An encode that fell back to the processor stays there. A rebuild that does
+// not change its graph leaves it running; one that does starts it again on
+// the processor, not on the GPU that just failed. The next tune tries the GPU.
+func TestARebuildKeepsTheFallback(t *testing.T) {
+	h, f, mark := restartHub(t, time.Hour, "once")
+	startRendition(t, h, f, "1080.aac2.broadcast")
+	waitMark(t, mark, ".args.2")
+	h.mu.Lock()
+	r := f.renditions["1080.aac2.broadcast"]
+	if r == nil || !r.fallback {
+		h.mu.Unlock()
+		t.Fatal("no fallback")
+	}
+	h.rebuildRenditionsLocked(f)
+	if f.renditions["1080.aac2.broadcast"] != r {
+		h.mu.Unlock()
+		t.Fatal("a rebuild with the same graph moved the fallback back to the GPU")
+	}
+	f.source.Progressive = false
+	h.rebuildRenditionsLocked(f)
+	now := f.renditions["1080.aac2.broadcast"]
+	h.mu.Unlock()
+	if now == nil || now == r || !now.fallback || now.encoder != "libx264" {
+		t.Fatalf("rebuilt %+v", now)
+	}
+	args := waitMark(t, mark, ".args.3")
+	if strings.Contains(args, "h264_vaapi") || !strings.Contains(args, "libx264") {
+		t.Fatalf("rebuild after a fallback:\n%s", args)
+	}
+	// The next tune is a new feed.
+	h.mu.Lock()
+	m := muxOf(h, f)
+	h.stopFeedLocked(f)
+	m.feeds = map[string]*feed{}
+	h.muxes[m.freq] = m
+	fresh := h.addFeedLocked(m, f.channel)
+	fresh.source = Source{VideoCodec: "MPEG2", Progressive: true}
+	_, err := h.ensureRenditionLocked(fresh, Rendition{Video: "1080", Audio: "aac2"})
+	h.mu.Unlock()
+	if err != nil || fresh == f {
+		t.Fatal(err)
+	}
+	if args := waitMark(t, mark, ".args.4"); !strings.Contains(args, "h264_vaapi") {
+		t.Fatalf("a new tune kept the last tune's fallback:\n%s", args)
+	}
+}
+
+func TestALadderRebuildKeepsTheFallback(t *testing.T) {
+	h, f, mark := restartHub(t, time.Hour, "once")
+	h.mu.Lock()
+	if _, err := h.ensureLadderLocked(f, ladderRung("broadcast", "1080"), time.Time{}); err != nil {
+		h.mu.Unlock()
+		t.Fatal(err)
+	}
+	h.mu.Unlock()
+	waitMark(t, mark, ".args.2")
+	h.mu.Lock()
+	r := f.ladderPrimary("broadcast")
+	if r == nil || !r.fallback {
+		h.mu.Unlock()
+		t.Fatal("no ladder fallback")
+	}
+	h.rebuildLaddersLocked(f)
+	if f.ladderPrimary("broadcast") != r {
+		h.mu.Unlock()
+		t.Fatal("a rebuild with the same graph moved the ladder back to the GPU")
+	}
+	f.source.Progressive = false
+	h.rebuildLaddersLocked(f)
+	now := f.ladderPrimary("broadcast")
+	h.mu.Unlock()
+	if now == nil || now == r || !now.fallback {
+		t.Fatalf("rebuilt ladder %+v", now)
+	}
+	args := waitMark(t, mark, ".args.3")
+	if strings.Contains(args, "h264_vaapi") || !strings.Contains(args, "libx264") {
+		t.Fatalf("ladder rebuild after a fallback:\n%s", args)
+	}
+}
