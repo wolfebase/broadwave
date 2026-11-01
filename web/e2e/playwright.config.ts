@@ -37,7 +37,11 @@ export default defineConfig({
     : [/08-avsync\.spec\.ts/, /10-tab\.spec\.ts/, /11-break\.spec\.ts/, /13-mvsync\.spec\.ts/, /15-playlist\.spec\.ts/, /19-record\.spec\.ts/, /25-readme\.spec\.ts/, /37-atsc3\.spec\.ts/, /38-atsc3-tv\.spec\.ts/, /39-atsc3-mv\.spec\.ts/],
   fullyParallel: false,
   workers: 1,
-  retries: 0,
+  // CI retries a failed spec once. A pass on the retry is reported as flaky in the run's
+  // summary (and the job stays green); one that fails twice still fails. Every flake
+  // mailed a "Run failed" and needed a hand rerun.
+  retries: process.env.CI ? 1 : 0,
+  reporter: process.env.CI ? [["list"], ["github"]] : "list",
   timeout: avsync ? 240_000 : tab ? 1_200_000 : brk ? 420_000 : mv ? 360_000 : playlist ? 240_000 : rec ? 420_000 : readme ? 300_000 : 180_000,
   expect: { timeout: 20_000 },
   outputDir: ".run/test-results",
