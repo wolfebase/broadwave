@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.17.1 — 2026-11-01
 
 ### Added
 
 - Server: DVB-T, T2, and C tuners (Europe, Australia) get a guide from the broadcast with no internet, as antenna tuners in North America already do. The listing scan tunes them again and reads each multiplex's own listings: titles, descriptions, and categories, for the channels on it and the ones it lists for other multiplexes. A downloaded guide still comes first.
 
 ### Fixed
+
+- Apple TV, iPhone, and iPad: an ATSC 3.0 channel's tile shares its 1.0 twin's station color, so it reads as one of that station's channels.
+- Apple TV, iPhone, and iPad: a picture that stops on an HDHomeRun emulator says to check that its app is running, not that a tuner is on.
 
 - Server: listings from the broadcast keep arriving while a channel stays tuned. They stopped once a tune had sent about 256 KB of them, and a read that split a packet in two lost the guide packets around it.
 - Web: live TV paused from picture in picture, a media key, headphones, or the system's controls stays paused. Whole-Home Sync played it again within a quarter second; such a pause now lets sync go for the visit, as the player's own Pause does, and play, skip back, and skip ahead from those places work the same as the player's buttons.
