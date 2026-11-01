@@ -15,17 +15,21 @@ async function passes(page: import("@playwright/test").Page) {
 }
 
 // The server reads the date and time on its own clock.
-let offset = 0;
+let zone = "UTC";
+// In the server's zone, not at its offset now, so a clock change between now and the time
+// read (the first Sunday in November) does not put it an hour off.
 function serverParts(ms: number) {
-  const d = new Date(ms + offset * 1000);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return { date: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, clock: `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`, day: d.getUTCDay() };
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", weekday: "short", hourCycle: "h23",
+  }).formatToParts(new Date(ms));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return { date: `${part("year")}-${part("month")}-${part("day")}`, clock: `${part("hour")}:${part("minute")}`, day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(part("weekday")) };
 }
 
 test("record a time: once, then on days, from the schedule and from a channel", async ({ page }) => {
   expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
   for (const pass of await passes(page)) await page.request.delete(`/api/v1/passes/${pass.id}`);
-  offset = ((await (await page.request.post("/api/v1/passes/preview", { data: { title: "x" } })).json()) as { utcOffset: number }).utcOffset;
+  zone = ((await (await page.request.post("/api/v1/passes/preview", { data: { title: "x" } })).json()) as { timeZone: string }).timeZone || "UTC";
   const ch = runtime.channels.find((c) => c.number === "4.1") ?? runtime.channels[0];
   await page.goto("/schedule");
   await settle(page);

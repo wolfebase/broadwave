@@ -15,20 +15,24 @@ async function passes(page: import("@playwright/test").Page) {
   return ((await (await page.request.get("/api/v1/passes")).json()) as { passes: Pass[] }).passes;
 }
 
-// The server reads days and times on its own clock; the image runs in another zone than the runner.
-let offset = 0;
-function serverDate(ms: number) {
-  return new Date(ms + offset * 1000);
+// The server reads days and times on its own clock; the image runs in another zone than the
+// runner. Read in the server's zone, not at its offset now: across a clock change (the morning
+// of the first Sunday in November) a game two hours ahead is an hour off the offset now.
+let zone = "UTC";
+function serverParts(ms: number) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "2-digit", minute: "2-digit", weekday: "short", hourCycle: "h23" }).formatToParts(new Date(ms));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return { hour: part("hour"), minute: part("minute"), day: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(part("weekday")) };
 }
 function clock(ms: number) {
-  const d = serverDate(ms);
-  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  const p = serverParts(ms);
+  return `${p.hour}:${p.minute}`;
 }
 
 test("passes take keyword, category, day, and time rules, and keep an order", async ({ page }) => {
   expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
   for (const pass of await passes(page)) await page.request.delete(`/api/v1/passes/${pass.id}`);
-  offset = ((await (await page.request.post("/api/v1/passes/preview", { data: { title: "x" } })).json()) as { utcOffset: number }).utcOffset;
+  zone = ((await (await page.request.post("/api/v1/passes/preview", { data: { title: "x" } })).json()) as { timeZone: string }).timeZone || "UTC";
   // The first order save waits until the spec lets it go, so a list read can land before it, as on a slow server.
   let socket: WebSocketRoute | undefined;
   await page.routeWebSocket(/\/api\/v1\/ws$/, (ws) => {
@@ -60,7 +64,7 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   await expect(page.getByText("Sports (category)")).toBeVisible();
 
   // Words in a title, on a day it doesn't air, then on its day.
-  const late = serverDate(seeded + 100 * 60_000).getUTCDay();
+  const late = serverParts(seeded + 100 * 60_000).day;
   const other = (late + 3) % 7;
   const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   await page.getByRole("button", { name: "New series" }).click();
