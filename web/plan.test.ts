@@ -37,6 +37,9 @@ test("the held order waits for a list read after the save, not one from during i
   assert.equal(releaseHeld(held, [...during], [2, 1]), false);
   assert.equal(releaseHeld(held, after, [1, 2]), true);
   assert.equal(releaseHeld(held, after, [1, 3, 2]), true);
+  // Another order long after the save is someone else's change.
+  assert.equal(releaseHeld({ ...held, savedAt: 1000 }, after, [2, 1], 2000), false);
+  assert.equal(releaseHeld({ ...held, savedAt: 1000 }, after, [2, 1], 7000), true);
   // A save that failed shows the server's order on the next list.
   assert.equal(releaseHeld({ ...held, failed: true }, [...during], [2, 1]), true);
 });

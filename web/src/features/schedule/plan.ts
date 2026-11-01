@@ -37,14 +37,23 @@ export function heldOrder(server: number[], held: number[]): number[] {
   return [...kept, ...server.filter((id) => !kept.includes(id))];
 }
 
+/** How long after its save a list with another order can still be from before it. */
+export const heldGrace = 5000;
+
 /**
  * The held order gives way once the last save is done and a new list has come:
  * one that has the saved order, or any one after the save failed. A list with
- * the old order can still land just after the save; it does not count.
+ * the old order can still land just after the save; it does not count, until
+ * `heldGrace` has passed: by then another order is someone else's change.
  */
-export function releaseHeld<T>(held: { ids: number[]; saved: boolean; failed: boolean; list: T } | null, list: T, server: number[]): boolean {
+export function releaseHeld<T>(
+  held: { ids: number[]; saved: boolean; failed: boolean; list: T; savedAt?: number } | null,
+  list: T,
+  server: number[],
+  now = Date.now(),
+): boolean {
   if (held == null || !held.saved || held.list === list) return false;
-  if (held.failed) return true;
+  if (held.failed || (held.savedAt != null && now - held.savedAt > heldGrace)) return true;
   const kept = held.ids.filter((id) => server.includes(id));
   return server.filter((id) => kept.includes(id)).every((id, i) => id === kept[i]);
 }

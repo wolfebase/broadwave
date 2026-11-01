@@ -58,7 +58,7 @@ export function Passes({ passes, onPasses, request, onRequestDone }: { passes: P
   const { channels } = useData();
   // A saved order stays on screen until a list read after the save arrives.
   // A read from before it would move the rows back under the focused button.
-  const [held, setHeld] = useState<{ ids: number[]; saved: boolean; failed: boolean; list: Pass[] } | null>(null);
+  const [held, setHeld] = useState<{ ids: number[]; saved: boolean; failed: boolean; list: Pass[]; savedAt?: number } | null>(null);
   const passesNow = useRef(passes);
   useEffect(() => {
     passesNow.current = passes;
@@ -205,7 +205,7 @@ export function Passes({ passes, onPasses, request, onRequestDone }: { passes: P
     void queue.current.then(() => {
       if (!reloadAfterOrder(mine, orderN.current)) return;
       const list = passesNow.current;
-      setHeld((cur) => (cur ? { ...cur, saved: true, failed, list } : cur));
+      setHeld((cur) => (cur ? { ...cur, saved: true, failed, list, savedAt: Date.now() } : cur));
       onPasses();
     });
   }
