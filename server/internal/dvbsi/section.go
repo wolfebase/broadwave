@@ -2,7 +2,11 @@
 // T2, or C mux carries: the service names (SDT) and the listings (EIT).
 package dvbsi
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"broadwave/internal/psip"
+)
 
 const (
 	pidSDT = 0x11
@@ -25,25 +29,24 @@ type assembly struct {
 func sections(raw []byte) []section {
 	open := map[int]*assembly{}
 	var out []section
-	for i := 0; i+188 <= len(raw); i += 188 {
-		pkt := raw[i : i+188]
-		if pkt[0] != 0x47 || pkt[1]&0x80 != 0 {
-			continue
+	psip.Packets(nil, raw, func(pkt []byte) {
+		if pkt[1]&0x80 != 0 {
+			return
 		}
 		pid := int(pkt[1]&0x1F)<<8 | int(pkt[2])
 		if pid != pidSDT && pid != pidEIT {
-			continue
+			return
 		}
 		afc := (pkt[3] >> 4) & 3
 		if afc&1 == 0 {
-			continue
+			return
 		}
 		cc := int(pkt[3] & 0x0F)
 		off := 4
 		if afc&2 != 0 {
 			off = 5 + int(pkt[4])
 			if off >= 188 {
-				continue
+				return
 			}
 		}
 		payload := pkt[off:]
@@ -53,7 +56,7 @@ func sections(raw []byte) []section {
 			switch {
 			case cc == a.cc:
 				// A repeated packet carries nothing new.
-				continue
+				return
 			case cc != (a.cc+1)&0x0F:
 				a.buf = nil
 			}
@@ -63,7 +66,7 @@ func sections(raw []byte) []section {
 			pointer := int(payload[0])
 			if 1+pointer > len(payload) {
 				delete(open, pid)
-				continue
+				return
 			}
 			if a != nil && a.buf != nil {
 				a.buf = append(a.buf, payload[1:1+pointer]...)
@@ -75,14 +78,14 @@ func sections(raw []byte) []section {
 			}
 			a.buf = append(a.buf[:0:0], payload[1+pointer:]...)
 			out = appendDone(out, pid, a)
-			continue
+			return
 		}
 		if a == nil || a.buf == nil {
-			continue
+			return
 		}
 		a.buf = append(a.buf, payload...)
 		out = appendDone(out, pid, a)
-	}
+	})
 	return out
 }
 

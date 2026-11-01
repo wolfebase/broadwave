@@ -1,6 +1,10 @@
 package dvbsi
 
-import "bytes"
+import (
+	"bytes"
+
+	"broadwave/internal/psip"
+)
 
 // Harvester collects the SDT and EIT packets of a live mux and parses them
 // when a new window of those packets has arrived.
@@ -10,6 +14,8 @@ type Harvester struct {
 	// since counts the mux bytes since the last parse. A station that sends
 	// its listings slowly is still read every few seconds.
 	since int
+	// rest is the start of a packet a read cut off.
+	rest []byte
 }
 
 const (
@@ -25,16 +31,12 @@ const (
 // arrived, once the window holds a listing.
 func (h *Harvester) Add(chunk []byte) (Guide, bool) {
 	h.since += len(chunk)
-	for i := 0; i+188 <= len(chunk); i += 188 {
-		if chunk[i] != 0x47 {
-			continue
+	h.rest = psip.Packets(h.rest, chunk, func(pkt []byte) {
+		pid := int(pkt[1]&0x1F)<<8 | int(pkt[2])
+		if pid == pidSDT || pid == pidEIT {
+			_, _ = h.buf.Write(pkt)
 		}
-		pid := int(chunk[i+1]&0x1F)<<8 | int(chunk[i+2])
-		if pid != pidSDT && pid != pidEIT {
-			continue
-		}
-		_, _ = h.buf.Write(chunk[i : i+188])
-	}
+	})
 	fresh := h.buf.Len() - h.reported
 	if fresh < harvestStep && (fresh == 0 || h.since < harvestSlow) {
 		return Guide{}, false

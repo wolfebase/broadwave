@@ -65,3 +65,25 @@ func TestTheHarvesterReadsASlowStation(t *testing.T) {
 		t.Fatalf("read %d times with one carousel", reads)
 	}
 }
+
+// A tuner read is any number of bytes; a packet it cuts in two still counts.
+func TestTheHarvesterJoinsPacketsSplitAcrossReads(t *testing.T) {
+	eit, sdt := &carrier{pid: pidEIT}, &carrier{pid: pidSDT}
+	var stream []byte
+	for range 100 {
+		stream = append(stream, carousel(eit, sdt)...)
+	}
+	stream = append([]byte{0x12, 0x47}, stream...)
+	var h Harvester
+	ok := false
+	for len(stream) > 0 {
+		n := min(777, len(stream))
+		if g, ready := h.Add(stream[:n]); ready && len(g.Events) == 2 {
+			ok = true
+		}
+		stream = stream[n:]
+	}
+	if !ok {
+		t.Fatal("no guide from reads that split packets")
+	}
+}

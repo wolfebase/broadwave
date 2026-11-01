@@ -122,38 +122,35 @@ func assemble(raw []byte) []section {
 	}
 	open := map[int]*acc{}
 	var out []section
-	for i := 0; i+188 <= len(raw); i += 188 {
-		if raw[i] != 0x47 {
-			continue
-		}
-		pid := int(raw[i+1]&0x1F)<<8 | int(raw[i+2])
+	Packets(nil, raw, func(pkt []byte) {
+		pid := int(pkt[1]&0x1F)<<8 | int(pkt[2])
 		if pid != pidBase && (pid < 0x1300 || pid > 0x1FFF) {
-			continue
+			return
 		}
-		pusi := raw[i+1]&0x40 != 0
-		afc := (raw[i+3] >> 4) & 3
+		pusi := pkt[1]&0x40 != 0
+		afc := (pkt[3] >> 4) & 3
 		off := 4
 		if afc&0x2 != 0 {
-			off = 5 + int(raw[i+4])
+			off = 5 + int(pkt[4])
 			if off > 188 {
-				continue
+				return
 			}
 		}
-		payload := raw[i+off : i+188]
+		payload := pkt[off:]
 		if len(payload) == 0 {
-			continue
+			return
 		}
 		if pusi {
 			pointer := int(payload[0])
 			if pointer+1 > len(payload) {
-				continue
+				return
 			}
 			payload = payload[1+pointer:]
 			open[pid] = &acc{}
 		}
 		a := open[pid]
 		if a == nil {
-			continue
+			return
 		}
 		a.buf = append(a.buf, payload...)
 		for len(a.buf) >= 3 {
@@ -174,7 +171,7 @@ func assemble(raw []byte) []section {
 			}
 			a.buf = a.buf[total:]
 		}
-	}
+	})
 	return out
 }
 
