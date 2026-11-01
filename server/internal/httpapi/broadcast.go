@@ -40,7 +40,6 @@ func (s *Server) ApplyBroadcast(ctx context.Context, g psip.Guide) (int, error) 
 	}
 	var incoming []store.Airing
 	seen := map[string]bool{}
-	var from, to time.Time
 	for _, ev := range g.Events {
 		id, ok := sourceChannel[ev.SourceID]
 		if !ok || ev.Title == "" || !ev.End.After(ev.Start) {
@@ -63,15 +62,23 @@ func (s *Server) ApplyBroadcast(ctx context.Context, g psip.Guide) (int, error) 
 			End:         ev.End,
 		}
 		incoming = append(incoming, row)
-		if from.IsZero() || ev.Start.Before(from) {
-			from = ev.Start
-		}
-		if ev.End.After(to) {
-			to = ev.End
-		}
 	}
+	return s.fillBroadcast(ctx, incoming)
+}
+
+// fillBroadcast stores the listings that fit a gap in what is already held.
+func (s *Server) fillBroadcast(ctx context.Context, incoming []store.Airing) (int, error) {
 	if len(incoming) == 0 {
 		return 0, nil
+	}
+	var from, to time.Time
+	for _, row := range incoming {
+		if from.IsZero() || row.Start.Before(from) {
+			from = row.Start
+		}
+		if row.End.After(to) {
+			to = row.End
+		}
 	}
 	ids := make([]int64, 0, len(incoming))
 	seenID := map[int64]bool{}

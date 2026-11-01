@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"broadwave/internal/disk"
+	"broadwave/internal/dvbsi"
 	"broadwave/internal/fetchguard"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/psip"
@@ -167,6 +168,9 @@ type Hub struct {
 	// OnPSIP is called, outside the read loop, when a tuned mux yields a guide.
 	OnPSIP func(freqHz int, guide psip.Guide)
 
+	// OnDVB is called, outside the read loop, when a tuned DVB mux yields listings.
+	OnDVB func(freqHz int, guide dvbsi.Guide)
+
 	// RenditionIdle is how long a rendition with no viewers keeps running,
 	// so flipping back to a channel is instant.
 	RenditionIdle time.Duration
@@ -304,6 +308,7 @@ type mux struct {
 	leadDone    bool
 	frames      sync.Once
 	psip        psip.Harvester
+	dvb         dvbsi.Harvester
 	picMu       sync.Mutex
 	picBuf      []byte
 	picDone     bool
@@ -3167,6 +3172,10 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 			if g, ok := m.psip.Add(chunk); ok && h.OnPSIP != nil {
 				freq, guide := m.freq, g
 				go h.OnPSIP(freq, guide)
+			}
+			if g, ok := m.dvb.Add(chunk); ok && h.OnDVB != nil {
+				freq, guide := m.freq, g
+				go h.OnDVB(freq, guide)
 			}
 			h.observeMuxPicture(m, chunk)
 			for _, sub := range m.noteLead(chunk) {

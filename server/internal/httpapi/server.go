@@ -103,6 +103,9 @@ type Server struct {
 	guideKickMu sync.Mutex
 	guideKick   *time.Timer
 
+	// dvbMu lets one DVB listing window fill the guide at a time.
+	dvbMu sync.Mutex
+
 	homeMu    sync.Mutex
 	finishMu  sync.Mutex
 	finishRun *finishStatus

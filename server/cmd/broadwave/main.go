@@ -26,6 +26,7 @@ import (
 	"broadwave/internal/cloudflare"
 	"broadwave/internal/discovery"
 	"broadwave/internal/doctor"
+	"broadwave/internal/dvbsi"
 	"broadwave/internal/dvr"
 	"broadwave/internal/guide"
 	"broadwave/internal/httpapi"
@@ -228,6 +229,16 @@ func main() {
 		}
 		if n > 0 {
 			slog.Debug(fmt.Sprintf("guide: broadcast filled %d listings", n))
+		}
+	}
+	hub.OnDVB = func(freq int, g dvbsi.Guide) {
+		n, err := api.ApplyDVB(context.Background(), freq, g)
+		if err != nil {
+			slog.Error(fmt.Sprintf("guide: broadcast: %v", err))
+			return
+		}
+		if n > 0 {
+			slog.Debug(fmt.Sprintf("guide: broadcast filled %d DVB listings", n))
 		}
 	}
 	handler := api.Handler()

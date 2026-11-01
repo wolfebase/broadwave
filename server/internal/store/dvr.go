@@ -418,6 +418,38 @@ WHERE device_id = ? AND frequency_hz = ? AND present = 1 AND hidden = 0`, device
 	return out, rows.Err()
 }
 
+// BroadcastChannel is a tuner's channel as broadcast listings find it: by
+// the frequency and program it was last tuned at, or by its name.
+type BroadcastChannel struct {
+	ID          int64
+	DeviceID    string
+	Name        string
+	FrequencyHz int
+	ProgramNum  int
+	Model       string
+}
+
+// BroadcastChannels lists the present channels of every tuner.
+func (s *Store) BroadcastChannels(ctx context.Context) ([]BroadcastChannel, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT c.id, c.device_id, trim(c.guide_name), c.frequency_hz, c.program_num, d.model_number
+FROM channels c JOIN devices d ON d.device_id = c.device_id
+WHERE d.tuner_count > 0 AND c.present = 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []BroadcastChannel
+	for rows.Next() {
+		var ch BroadcastChannel
+		if err := rows.Scan(&ch.ID, &ch.DeviceID, &ch.Name, &ch.FrequencyHz, &ch.ProgramNum, &ch.Model); err != nil {
+			return nil, err
+		}
+		out = append(out, ch)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ReplaceAirings(ctx context.Context, rows []Airing) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
