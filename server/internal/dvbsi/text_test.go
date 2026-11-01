@@ -14,6 +14,8 @@ func TestTextTables(t *testing.T) {
 		{"6937 cedilla, ring, double acute", []byte{'G', 'a', 'r', 0xCB, 'c', 'o', 'n', ' ', 0xCA, 'A', ' ', 0xCD, 'o'}, "Garçon Å ő"},
 		{"6937 euro, pound, and letters of their own", []byte{0xA4, '5', ' ', 0xA3, '2', ' ', 0xFB, 0xE9, 0xF9, 0xE8}, "€5 £2 ßØøŁ"},
 		{"6937 quotes", []byte{0xAA, 'H', 'i', 0xBA}, "“Hi”"},
+		{"6937 hash, currency sign, and underlined letter", []byte{0xA6, '1', ' ', 0xA8, ' ', 0xCC, 'x'}, "#1 ¤ x"},
+		{"6937 old diaeresis byte", []byte{0xC9, 'o'}, "ö"},
 		{"6937 mark with no letter after it", []byte{'E', 'n', 'd', 0xC2}, "End"},
 		{"8859-5 by its byte", []byte{0x01, 0xB0, 0xD1, 0xD0}, "Аба"},
 		{"8859-7 by its byte", []byte{0x03, 0xC1, 0xE8}, "Αθ"},
