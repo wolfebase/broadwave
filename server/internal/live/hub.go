@@ -352,6 +352,10 @@ type feed struct {
 	// moved names the key a rebuilt rendition runs under now, for viewers
 	// who joined it under its old one.
 	moved map[string]string
+	// soft names the encodes (a rendition or a ladder's primary key) whose
+	// GPU start failed on this tune. A rebuild or a later start of the same
+	// encode stays on the processor; the next tune tries the GPU again.
+	soft map[string]bool
 	// lingerUntil keeps a feed whose viewers left, with no encode, until
 	// then (TunerLinger); linger is the timer that lets it go.
 	lingerUntil time.Time
@@ -1133,7 +1137,11 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 		if r.mute {
 			spec.Audio = "none"
 		}
+		// An encode that fell back stays on the processor: the GPU just failed.
 		_, next := h.pictureArgs(f, spec, keptExtras(f, r))
+		if r.fallback {
+			_, next = h.softArgs(f, spec, keptExtras(f, r))
+		}
 		if slices.Equal(r.args, next) {
 			continue
 		}
@@ -1255,6 +1263,12 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 		spec.Audio, extras = "none", nil
 	}
 	input, args := h.pictureArgs(f, spec, extras)
+	encoder := encoderOf(h.Encoder, want)
+	soft := f.soft[key]
+	if soft {
+		input, args = h.softArgs(f, spec, extras)
+		encoder = "libx264"
+	}
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = dir
 	var stdin io.WriteCloser
@@ -1302,7 +1316,7 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 	}
 	NotePID(h.Dir, cmd.Process.Pid)
 	now := time.Now()
-	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, startAt: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn, log: plog, encoder: encoderOf(h.Encoder, want), mute: mute, lead: lead}
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, startAt: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn, log: plog, encoder: encoder, mute: mute, lead: lead, fallback: soft}
 	if stdin != nil {
 		var w io.WriteCloser = stdin
 		if lead != nil {
@@ -1321,7 +1335,7 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 		}
 	}
 	f.renditions[key] = r
-	go h.watchRendition(f, r, cmd, encoderOf(h.Encoder, want), false)
+	go h.watchRendition(f, r, cmd, encoder, false)
 	return r, nil
 }
 
@@ -1638,6 +1652,7 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 		r.aac = true
 	case planSoftware:
 		r.fallback = true
+		f.markSoft(r.spec.Key())
 	case planSilent:
 		r.mute = true
 		r.extras = nil
@@ -1690,14 +1705,28 @@ func (h *Hub) restartArgsLocked(f *feed, r *rendition) (args []string, encoder s
 		_, args = h.pictureArgs(f, spec, r.extras)
 		return args, encoderOf(h.Encoder, spec)
 	}
+	_, args = h.softArgs(f, spec, r.extras)
+	return args, "libx264"
+}
+
+// softArgs is spec's command line on the processor: H.264 from libx264,
+// for an encode whose GPU start failed.
+func (h *Hub) softArgs(f *feed, spec Rendition, extras []AudioTrack) (string, []string) {
 	spec.Codec = ""
 	input := "pipe:0"
 	if m := muxOf(h, f); m != nil && m.input != "" {
 		input = m.input
 	}
 	src := f.sourceFor(spec)
-	src.Extras = r.extras
-	return renditionArgs(f.program, src, spec, "libx264", "", input), "libx264"
+	src.Extras = extras
+	return input, renditionArgs(f.program, src, spec, "libx264", "", input)
+}
+
+func (f *feed) markSoft(key string) {
+	if f.soft == nil {
+		f.soft = map[string]bool{}
+	}
+	f.soft[key] = true
 }
 
 // renditionTag names an encode in the log.
@@ -2869,13 +2898,20 @@ func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
 	for i, base := range bases {
 		h.mu.Lock()
 		down := h.statusDown != nil && time.Now().Before(h.statusDown[base])
+		plain := h.plain[base]
 		h.mu.Unlock()
-		if down && i < len(bases)-1 {
+		// An emulator has no tuner status to list. That is not a failure.
+		if plain || down && i < len(bases)-1 {
 			continue
 		}
 		// The read runs without h.mu: playlists wait on it.
 		raw, err := fetchTunerStatus(ctx, base)
 		h.mu.Lock()
+		h.noteStatusLocked(base, err)
+		if errors.Is(err, errNoStatus) && h.plain[base] {
+			h.mu.Unlock()
+			continue
+		}
 		if err != nil {
 			if ctx.Err() == nil && h.statusDown != nil {
 				h.statusDown[base] = time.Now().Add(statusDownFor)
@@ -4462,6 +4498,18 @@ func (h *Hub) NoStatus(ctx context.Context, base string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.plain[base]
+}
+
+// PlainStreams reports a device that answers without a tuner status (an
+// HDHomeRun emulator) and how many of its streams this server has open.
+// A device not read yet is asked once.
+func (h *Hub) PlainStreams(ctx context.Context, base, deviceID string) (plain bool, open int) {
+	if !h.NoStatus(ctx, base) {
+		return false, 0
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return true, h.streamsForDeviceLocked(deviceID) + h.plainOpening[deviceID]
 }
 
 // openPlain opens a plain device's channel stream without h.mu: an emulator

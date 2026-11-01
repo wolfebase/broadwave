@@ -204,3 +204,19 @@ func TestATruncatedStatusIsNotAnEmulator(t *testing.T) {
 		t.Fatal("a tuner that answered was marked plain")
 	}
 }
+
+// Diagnostics shows what this server has open on an emulator: every channel
+// tuned from it, and one still opening.
+func TestPlainStreamsCountsWhatIsOpen(t *testing.T) {
+	h, _ := testHub(t)
+	const base = "http://emu.invalid:5004"
+	h.mu.Lock()
+	h.plain = map[string]bool{base: true}
+	h.channels[1] = &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 1, DeviceID: "EMU"}}}
+	h.channels[2] = &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 2, DeviceID: "TUNER"}}}
+	h.plainOpening = map[string]int{"EMU": 1}
+	h.mu.Unlock()
+	if plain, open := h.PlainStreams(context.Background(), base, "EMU"); !plain || open != 2 {
+		t.Fatalf("plain %v open %d", plain, open)
+	}
+}

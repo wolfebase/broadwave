@@ -13,6 +13,12 @@
 - Web: a seek in a recording from media keys, the lock screen, or the browser's own controls plays from that spot, instead of sliding to where the current encode starts.
 - Web: "New … found" and game notices sit under the update and time zone notices instead of covering their words.
 - Web: moving a recording rule up or down no longer snaps the rows back for a moment, losing the focused button, when another change to the schedule arrives while the new order is being saved.
+- Server: an HEVC channel at 25 or 50 Hz (DVB-T2) keeps its own clock. Its small pictures played at 29.97.
+- Server: a 25 or 50 Hz channel plays at its own rate from its first tune, the adaptive ladder included. That tune ran at 59.94, and the ladder kept it until it restarted.
+- Server: an HLS playlist channel at 25 or 50 Hz (most IPTV outside North America) keeps its own clock. Its rate is read beside the first picture and kept for the next tune; it played at 59.94.
+- Diagnostics: an HDHomeRun emulator (Threadfin, xTeVe, Dispatcharr) shows its tuner count and how many this server has open, and says it reports no tuner status. It was missing from Tuners, or listed as a tuner that did not answer, and alone it showed a status error.
+- Player: a picture that stops on an HDHomeRun emulator no longer says the tuner did not answer while the emulator is up. When the emulator is down, it says to check that its app is running, not that a tuner is on.
+- Server: a picture that moved to the processor after its GPU encode failed stays there for the rest of the tune. A later change to the picture (film, sound, frame rate) restarted it on the GPU that had just failed, and a change that needed nothing restarted it anyway.
 
 ## 0.17.0 — 2026-10-31
 

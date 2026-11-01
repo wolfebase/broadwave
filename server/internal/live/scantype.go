@@ -542,7 +542,7 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	sub := h.attachPipeLocked(m, buf)
 	started := time.Now()
 	deadline := started.Add(scanWait)
-	var order, video string
+	var order, video, rate string
 	for time.Now().Before(deadline) {
 		buf.mu.Lock()
 		data := append([]byte(nil), buf.b...)
@@ -550,6 +550,8 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 		if order == "" {
 			if got, ok := scanType(data, f.program); ok {
 				order = got
+				// The header that names the scan names the rate.
+				rate = headerRate(data, f.program)
 			}
 		}
 		if video == "" {
@@ -591,8 +593,10 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	if len(f.tracks) > 0 {
 		slog.Info(fmt.Sprintf("audio tracks for %s: %s", f.channel.GuideNumber, trackLog(f.tracks)))
 	}
-	// No rendition runs yet, so the encode starts on what the stream carries.
+	// No rendition runs yet, so the encode starts on what the stream carries,
+	// at the stream's own clock.
 	h.learnCodecsLocked(f, video, mainCodec(f.tracks))
+	h.takeRateLocked(f, rate)
 	if order != "" {
 		m.detach(sub)
 		slog.Info(fmt.Sprintf("scan type %s for %s in %s", order, f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
@@ -652,15 +656,23 @@ func (h *Hub) finishScanFromPicture(m *mux, f *feed) {
 	video, rate := VideoCodecOf(data, program), headerRate(data, program)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.channels[id] == f && learnedAny(h.learnCodecsLocked(f, video, ""), h.takeRateLocked(f, rate)) {
+	if h.channels[id] == f {
+		h.applyLateLocked(f, order, video, rate, guide)
+	}
+}
+
+// applyLateLocked applies what a read after the encode started learned, and
+// rebuilds a rendition or ladder whose graph changed once for all of it.
+func (h *Hub) applyLateLocked(f *feed, order, video, rate, guide string) {
+	rebuild := learnedAny(h.learnCodecsLocked(f, video, ""), h.takeRateLocked(f, rate))
+	if order != "" && f.headerOrder == "" {
+		slog.Info(fmt.Sprintf("scan type %s for %s after the window", order, guide))
+		f.headerOrder = order
+		rebuild = h.setScanLocked(f, order) || rebuild
+	}
+	if rebuild {
 		h.rebuildRenditionsLocked(f)
 	}
-	if order == "" || f.headerOrder != "" || h.channels[id] != f {
-		return
-	}
-	slog.Info(fmt.Sprintf("scan type %s for %s after the window", order, guide))
-	f.headerOrder = order
-	h.applyScanLocked(f, order)
 }
 
 // deferScanLocked learns audio and a late film header without holding the
@@ -694,39 +706,40 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 			return
 		}
 		data := m.pictureBytes()
+		var order, video, rate string
 		if !headerDone {
-			if order, ok := scanType(data, program); ok {
-				h.mu.Lock()
-				if h.channels[id] == f && f.headerOrder == "" {
-					// Every tune, the idle still sweep's included, learns this: debug, or
-					// it is most of the log.
-					slog.Debug(fmt.Sprintf("scan type %s for %s after the picture starts", order, guide))
-					f.headerOrder = order
-					h.applyScanLocked(f, order)
-				}
-				h.mu.Unlock()
-				headerDone = true
+			if got, ok := scanType(data, program); ok {
+				order, headerDone = got, true
 			}
 		}
 		if !videoDone {
-			if video := VideoCodecOf(data, program); video != "" {
-				h.mu.Lock()
-				if h.channels[id] == f && h.learnCodecsLocked(f, video, "") {
-					h.rebuildRenditionsLocked(f)
-				}
-				h.mu.Unlock()
+			if video = VideoCodecOf(data, program); video != "" {
 				videoDone = true
 			}
 		}
 		if !rateDone {
 			if p, ok := pictureFacts(data, program); ok {
-				h.mu.Lock()
-				if h.channels[id] == f && h.takeRateLocked(f, p.FPS) {
+				rate, rateDone = p.FPS, true
+			}
+		}
+		// The scan, the codec, and the rate usually come from one header: one
+		// rebuild covers them.
+		if order != "" || video != "" || rate != "" {
+			h.mu.Lock()
+			if h.channels[id] == f {
+				rebuild := learnedAny(h.learnCodecsLocked(f, video, ""), h.takeRateLocked(f, rate))
+				if order != "" && f.headerOrder == "" {
+					// Every tune, the idle still sweep's included, learns this: debug, or
+					// it is most of the log.
+					slog.Debug(fmt.Sprintf("scan type %s for %s after the picture starts", order, guide))
+					f.headerOrder = order
+					rebuild = h.setScanLocked(f, order) || rebuild
+				}
+				if rebuild {
 					h.rebuildRenditionsLocked(f)
 				}
-				h.mu.Unlock()
-				rateDone = true
 			}
+			h.mu.Unlock()
 		}
 		if !audioDone {
 			if tracks := AudioTracks(data, program); len(tracks) > 0 {
@@ -822,15 +835,9 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	m.detach(sub)
-	if h.channels[id] == f && learnedAny(h.learnCodecsLocked(f, video, ""), h.takeRateLocked(f, rate)) {
-		h.rebuildRenditionsLocked(f)
+	if h.channels[id] == f {
+		h.applyLateLocked(f, order, video, rate, guide)
 	}
-	if order == "" || f.headerOrder != "" || h.channels[id] != f {
-		return
-	}
-	slog.Info(fmt.Sprintf("scan type %s for %s after the window", order, guide))
-	f.headerOrder = order
-	h.applyScanLocked(f, order)
 }
 
 // learnedAny is || once both sides have run.
@@ -844,12 +851,15 @@ func headerRate(data []byte, program int) string {
 }
 
 // takeRateLocked sets the feed's frame rate and stores it for the next tune.
-// It reports a change, so a running encode on the wrong clock is rebuilt: a
-// 25 Hz station is not stretched to 59.94.
+// It reports a change of clock, so a running encode on the wrong one is
+// rebuilt: a 25 Hz station is not stretched to 59.94. The encode args only
+// tell 25/50 Hz from the rest, so a 59.94 rate read on a channel that had
+// none (every ATSC station) is not a change.
 func (h *Hub) takeRateLocked(f *feed, rate string) bool {
 	if rate == "" || rate == f.source.Rate {
 		return false
 	}
+	changed := FiftyHz(rate) != FiftyHz(f.source.Rate)
 	f.source.Rate = rate
 	if rate != f.channel.PictureRate {
 		f.channel.PictureRate = rate
@@ -858,15 +868,23 @@ func (h *Hub) takeRateLocked(f *feed, rate string) bool {
 			go func() { _ = h.Store.SetChannelPictureRate(context.Background(), id, rate) }()
 		}
 	}
-	return true
+	return changed
 }
 
 // applyScanLocked stores the station scan and sets this tune's picture.
 // Film stays on the tune and is stored as interlaced, so the next program
 // is scanned again. A running rendition whose graph changed is rebuilt.
 func (h *Hub) applyScanLocked(f *feed, order string) {
+	if h.setScanLocked(f, order) {
+		h.rebuildRenditionsLocked(f)
+	}
+}
+
+// setScanLocked is applyScanLocked without the rebuild. It reports a change
+// to the picture graph.
+func (h *Hub) setScanLocked(f *feed, order string) bool {
 	if order == "" {
-		return
+		return false
 	}
 	stored := storedFieldOrder(order)
 	progressive := stored == "progressive"
@@ -885,9 +903,7 @@ func (h *Hub) applyScanLocked(f *feed, order string) {
 			go func() { _ = h.Store.SetFieldOrder(context.Background(), id, stored) }()
 		}
 	}
-	if changed {
-		h.rebuildRenditionsLocked(f)
-	}
+	return changed
 }
 
 // applyProbeLocked is the ffprobe result. It rebuilds a rendition that
@@ -931,84 +947,74 @@ func pictureFacts(data []byte, program int) (notedPicture, bool) {
 	}
 }
 
-// hevcPicture reads the cropped size from an HEVC SPS (NAL type 33).
+// hevcPicture reads the cropped size and the frame rate from an HEVC SPS
+// (NAL type 33). The rate is the SPS timing, or the VPS timing when the SPS
+// has none, and empty when neither says.
 func hevcPicture(es []byte) (notedPicture, bool) {
 	for i := 0; i+6 < len(es); i++ {
 		if es[i] != 0 || es[i+1] != 0 || es[i+2] != 1 || (es[i+3]>>1)&0x3f != 33 {
 			continue
 		}
-		w, h, ok := hevcSize(unescape(es[i+5:]))
-		if ok && w >= 16 && h >= 16 && w <= 7680 && h <= 4320 {
-			return notedPicture{Width: w, Height: h}, true
+		sps, ok := hevcSPS(unescape(es[i+5:]))
+		if !ok || sps.w < 16 || sps.h < 16 || sps.w > 7680 || sps.h > 4320 {
+			continue
 		}
+		fps := ""
+		if sps.vui {
+			units, scale := sps.units, sps.scale
+			if units == 0 {
+				units, scale = hevcVPSTiming(es)
+			}
+			fps = hevcRate(units, scale, sps.fields)
+		}
+		return notedPicture{Width: sps.w, Height: sps.h, FPS: fps}, true
 	}
 	return notedPicture{}, false
 }
 
-// hevcSize walks an HEVC SPS, after its two-byte NAL header, to the
-// conformance-window size (ITU-T H.265 7.3.2.2).
-func hevcSize(rbsp []byte) (int, int, bool) {
-	r := &bitReader{b: rbsp}
-	if _, ok := r.u(4); !ok {
-		return 0, 0, false
+// hevcRate is a frame rate from HEVC timing, where a tick is one picture.
+// A field sequence codes each field as a picture, so a frame is two.
+func hevcRate(units, scale uint, fields bool) string {
+	if units == 0 || scale == 0 {
+		return ""
 	}
-	sub, ok := r.u(3)
-	if !ok {
-		return 0, 0, false
+	fps := float64(scale) / float64(units)
+	if fields {
+		fps /= 2
 	}
-	// temporal_id_nesting, then the general profile, tier, and level.
-	if _, ok := r.u(1 + 88 + 8); !ok {
-		return 0, 0, false
-	}
-	var profile, level [8]uint
-	for i := uint(0); i < sub; i++ {
-		if profile[i], ok = r.u(1); !ok {
-			return 0, 0, false
-		}
-		if level[i], ok = r.u(1); !ok {
-			return 0, 0, false
-		}
-	}
-	if sub > 0 {
-		if _, ok := r.u(int(2 * (8 - sub))); !ok {
-			return 0, 0, false
-		}
-	}
-	for i := uint(0); i < sub; i++ {
-		if _, ok := r.u(int(88*profile[i] + 8*level[i])); !ok {
-			return 0, 0, false
-		}
-	}
-	if _, ok := r.ue(); !ok {
-		return 0, 0, false
-	}
-	chroma, ok := r.ue()
-	if !ok {
-		return 0, 0, false
-	}
+	return rateName(fps)
+}
+
+// hevcSPSFacts is what the picture needs from an HEVC SPS. vui is true when
+// the walk reached the timing (or found no VUI, which means progressive
+// frames with the timing left to the VPS); units is zero when the SPS has
+// no timing of its own.
+type hevcSPSFacts struct {
+	w, h         int
+	vui          bool
+	fields       bool
+	units, scale uint
+}
+
+// hevcSPS walks an HEVC SPS, after its two-byte NAL header, to the
+// conformance-window size and on to the VUI timing (ITU-T H.265 7.3.2.2,
+// E.2.1). A size is returned even when the rest does not parse.
+func hevcSPS(rbsp []byte) (hevcSPSFacts, bool) {
+	r := &hevcBits{r: bitReader{b: rbsp}}
+	r.u(4)
+	sub := r.u(3)
+	r.u(1) // temporal_id_nesting
+	r.skipPTL(sub)
+	r.ue()
+	chroma := r.ue()
 	if chroma == 3 {
-		if _, ok := r.u(1); !ok {
-			return 0, 0, false
-		}
+		r.u(1)
 	}
-	w, ok := r.ue()
-	if !ok {
-		return 0, 0, false
-	}
-	h, ok := r.ue()
-	if !ok {
-		return 0, 0, false
-	}
-	window, ok := r.u(1)
-	if !ok {
-		return 0, 0, false
-	}
-	if window == 1 {
+	w, h := r.ue(), r.ue()
+	if r.u(1) == 1 {
 		var crop [4]uint
 		for i := range crop {
-			if crop[i], ok = r.ue(); !ok {
-				return 0, 0, false
-			}
+			crop[i] = r.ue()
 		}
 		sx, sy := uint(1), uint(1)
 		switch chroma {
@@ -1020,7 +1026,231 @@ func hevcSize(rbsp []byte) (int, int, bool) {
 		w -= sx * (crop[0] + crop[1])
 		h -= sy * (crop[2] + crop[3])
 	}
-	return int(w), int(h), true
+	if r.bad || int(w) <= 0 || int(h) <= 0 {
+		return hevcSPSFacts{}, false
+	}
+	facts := hevcSPSFacts{w: int(w), h: int(h)}
+	r.ue() // bit_depth_luma
+	r.ue() // bit_depth_chroma
+	pocBits := int(r.ue() + 4)
+	first := sub
+	if r.u(1) == 1 {
+		first = 0
+	}
+	for i := first; i <= sub && !r.bad; i++ {
+		r.ue()
+		r.ue()
+		r.ue()
+	}
+	for range 6 { // coding and transform block sizes, hierarchy depths
+		r.ue()
+	}
+	if r.u(1) == 1 && r.u(1) == 1 {
+		r.skipScalingList()
+	}
+	r.u(2) // amp, sample_adaptive_offset
+	if r.u(1) == 1 {
+		r.u(8)
+		r.ue()
+		r.ue()
+		r.u(1)
+	}
+	r.skipShortTermSets(r.ue())
+	if r.u(1) == 1 {
+		n := r.ue()
+		for i := uint(0); i < n && !r.bad; i++ {
+			r.u(pocBits + 1)
+		}
+	}
+	r.u(2) // temporal_mvp, strong_intra_smoothing
+	if r.u(1) == 0 {
+		facts.vui = !r.bad
+		return facts, true
+	}
+	if r.u(1) == 1 && r.u(8) == 255 {
+		r.u(32)
+	}
+	if r.u(1) == 1 {
+		r.u(1)
+	}
+	if r.u(1) == 1 {
+		r.u(4)
+		if r.u(1) == 1 {
+			r.u(24)
+		}
+	}
+	if r.u(1) == 1 {
+		r.ue()
+		r.ue()
+	}
+	r.u(1) // neutral_chroma_indication
+	facts.fields = r.u(1) == 1
+	r.u(1) // frame_field_info_present
+	if r.u(1) == 1 {
+		for range 4 {
+			r.ue()
+		}
+	}
+	if r.u(1) == 1 {
+		facts.units, facts.scale = r.u(32), r.u(32)
+	}
+	if r.bad {
+		return hevcSPSFacts{w: facts.w, h: facts.h}, true
+	}
+	facts.vui = true
+	return facts, true
+}
+
+// hevcVPSTiming reads vps_timing_info from the first VPS (NAL type 32) in es
+// (ITU-T H.265 7.3.2.1). units is zero when there is none.
+func hevcVPSTiming(es []byte) (units, scale uint) {
+	for i := 0; i+6 < len(es); i++ {
+		if es[i] != 0 || es[i+1] != 0 || es[i+2] != 1 || (es[i+3]>>1)&0x3f != 32 {
+			continue
+		}
+		r := &hevcBits{r: bitReader{b: unescape(es[i+5:])}}
+		r.u(12) // id, base layer flags, max_layers
+		sub := r.u(3)
+		r.u(17) // temporal_id_nesting, reserved
+		r.skipPTL(sub)
+		first := sub
+		if r.u(1) == 1 {
+			first = 0
+		}
+		for j := first; j <= sub && !r.bad; j++ {
+			r.ue()
+			r.ue()
+			r.ue()
+		}
+		maxLayer := r.u(6)
+		sets := r.ue()
+		if sets > 1023 {
+			return 0, 0
+		}
+		r.u(int(sets * (maxLayer + 1)))
+		if r.u(1) == 1 {
+			units, scale = r.u(32), r.u(32)
+		}
+		if r.bad {
+			return 0, 0
+		}
+		return units, scale
+	}
+	return 0, 0
+}
+
+// hevcBits is a bitReader that remembers a read past the end, so a long walk
+// checks once.
+type hevcBits struct {
+	r   bitReader
+	bad bool
+}
+
+func (b *hevcBits) u(n int) uint {
+	if b.bad {
+		return 0
+	}
+	if n > 32 {
+		if b.r.off+n > len(b.r.b)*8 {
+			b.bad = true
+			return 0
+		}
+		b.r.off += n
+		return 0
+	}
+	v, ok := b.r.u(n)
+	b.bad = !ok
+	return v
+}
+
+func (b *hevcBits) ue() uint {
+	if b.bad {
+		return 0
+	}
+	v, ok := b.r.ue()
+	b.bad = !ok
+	return v
+}
+
+func (b *hevcBits) se() {
+	if !b.bad {
+		_, ok := b.r.se()
+		b.bad = !ok
+	}
+}
+
+// skipPTL skips profile_tier_level(1, sub) (ITU-T H.265 7.3.3).
+func (b *hevcBits) skipPTL(sub uint) {
+	b.u(88 + 8) // general profile, tier, and level
+	var profile, level [8]uint
+	for i := uint(0); i < sub && i < 8; i++ {
+		profile[i] = b.u(1)
+		level[i] = b.u(1)
+	}
+	if sub > 0 {
+		b.u(int(2 * (8 - sub)))
+	}
+	for i := uint(0); i < sub && i < 8; i++ {
+		b.u(int(88*profile[i] + 8*level[i]))
+	}
+}
+
+// skipScalingList skips scaling_list_data (ITU-T H.265 7.3.4).
+func (b *hevcBits) skipScalingList() {
+	for size := 0; size < 4; size++ {
+		step := 1
+		if size == 3 {
+			step = 3
+		}
+		for matrix := 0; matrix < 6 && !b.bad; matrix += step {
+			if b.u(1) == 0 {
+				b.ue()
+				continue
+			}
+			coefs := min(64, 1<<(4+(size<<1)))
+			if size > 1 {
+				b.se()
+			}
+			for range coefs {
+				b.se()
+			}
+		}
+	}
+}
+
+// skipShortTermSets skips the SPS's st_ref_pic_set list (ITU-T H.265 7.3.7).
+// A set predicted from the one before it lists a flag per picture of that set.
+func (b *hevcBits) skipShortTermSets(n uint) {
+	if n > 64 {
+		b.bad = true
+		return
+	}
+	deltas := make([]uint, n)
+	for i := uint(0); i < n && !b.bad; i++ {
+		if i > 0 && b.u(1) == 1 {
+			b.u(1) // delta_rps_sign
+			b.ue()
+			count := uint(0)
+			for j := uint(0); j <= deltas[i-1] && !b.bad; j++ {
+				used := b.u(1) == 1
+				if used || b.u(1) == 1 {
+					count++
+				}
+			}
+			deltas[i] = count
+			continue
+		}
+		neg, pos := b.ue(), b.ue()
+		if neg > 16 || pos > 16 {
+			b.bad = true
+			return
+		}
+		for j := uint(0); j < neg+pos; j++ {
+			b.ue()
+			b.u(1)
+		}
+		deltas[i] = neg + pos
+	}
 }
 
 func mpeg2Picture(es []byte) (notedPicture, bool) {

@@ -17,6 +17,12 @@ type DeviceHealth struct {
 	FirmwareVersion string      `json:"firmwareVersion"`
 	Tuners          []TunerLock `json:"tuners"`
 	Error           string      `json:"error,omitempty"`
+	// NoStatus is a device with no tuner status, an HDHomeRun emulator
+	// (Threadfin, xTeVe, Dispatcharr). Tuners is empty; TunerCount is what it
+	// lists and Streams is how many of them this server has open.
+	NoStatus   bool `json:"noStatus,omitempty"`
+	TunerCount int  `json:"tunerCount,omitempty"`
+	Streams    int  `json:"streams,omitempty"`
 }
 
 // TunerLock is one tuner's signal lock. Locked is false when the device reports lock=none.

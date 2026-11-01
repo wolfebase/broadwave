@@ -67,6 +67,16 @@ export function DiagnosticsPage() {
             </div>
           ))}
         </div>
+        {(d.emulators ?? []).map((device) => (
+          <dl key={device.deviceId} className="share-urls">
+            <dt>{device.name || device.model || t("diag.unknown")}</dt>
+            <dd>
+              {t("diag.tunerCount", device.tunerCount)}
+              {" · "}
+              {t("diag.noStatus")} {t("diag.inUse", device.streams)}
+            </dd>
+          </dl>
+        ))}
       </section>
 
       <section className="settings-section">
@@ -83,6 +93,16 @@ export function DiagnosticsPage() {
             {(device.tuners ?? []).map((tuner) => (
               <LockLine key={tuner.index} index={tuner.index} locked={tuner.locked} />
             ))}
+            {device.noStatus ? (
+              <>
+                <dt>{t("diag.status")}</dt>
+                <dd>
+                  {t("diag.tunerCount", device.tunerCount ?? 0)}
+                  {" · "}
+                  {t("diag.noStatus")} {t("diag.inUse", device.streams ?? 0)}
+                </dd>
+              </>
+            ) : null}
             {device.error ? (
               <>
                 <dt>{t("diag.status")}</dt>

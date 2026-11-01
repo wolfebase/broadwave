@@ -172,7 +172,7 @@ export function getPlayback() {
 }
 
 export function getReception(channelId: number) {
-  return request<{ freeTuner: boolean; tunerAnswers: boolean; signalLost: boolean }>(`/api/v1/channels/${channelId}/reception`);
+  return request<{ freeTuner: boolean; tunerAnswers: boolean; signalLost: boolean; emulator?: boolean }>(`/api/v1/channels/${channelId}/reception`);
 }
 
 export function getClientMe() {

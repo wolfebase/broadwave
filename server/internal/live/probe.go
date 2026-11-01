@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,9 +30,57 @@ type probeStream struct {
 	CodecType  string `json:"codec_type"`
 	CodecName  string `json:"codec_name"`
 	FieldOrder string `json:"field_order"`
+	Rate       string `json:"r_frame_rate"`
+	AvgRate    string `json:"avg_frame_rate"`
 }
 
-const probeEntries = "program=program_num:program_stream=codec_type,codec_name,field_order:stream=codec_type,codec_name,field_order"
+const probeEntries = "program=program_num:program_stream=codec_type,codec_name,field_order,r_frame_rate,avg_frame_rate:stream=codec_type,codec_name,field_order,r_frame_rate,avg_frame_rate"
+
+// rateFrom is one program's video frame rate from ffprobe JSON, named as the
+// picture headers name it. A rate that is not a broadcast rate is empty.
+func rateFrom(raw []byte, program int) string {
+	var rep probeReport
+	if json.Unmarshal(raw, &rep) != nil {
+		return ""
+	}
+	pick := func(streams []probeStream) string {
+		for _, s := range streams {
+			if s.CodecType != "video" {
+				continue
+			}
+			if rate := rationalRate(s.Rate); rate != "" {
+				return rate
+			}
+			return rationalRate(s.AvgRate)
+		}
+		return ""
+	}
+	for _, p := range rep.Programs {
+		if program == 0 || p.ProgramNum == program {
+			if rate := pick(p.Streams); rate != "" {
+				return rate
+			}
+		}
+	}
+	if program == 0 {
+		return pick(rep.Streams)
+	}
+	return ""
+}
+
+// rationalRate names ffprobe's "25/1" or "30000/1001".
+func rationalRate(r string) string {
+	num, den, ok := strings.Cut(r, "/")
+	if !ok {
+		den = "1"
+	}
+	n, err1 := strconv.ParseFloat(num, 64)
+	d, err2 := strconv.ParseFloat(den, 64)
+	if err1 != nil || err2 != nil || n <= 0 || d <= 0 {
+		return ""
+	}
+	return rateName(n / d)
+}
 
 // codecsFrom reads one program's first video and audio codec from ffprobe JSON.
 func codecsFrom(raw []byte, program int) (video, audio string) {
@@ -189,26 +238,38 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 		_ = cmd.Wait()
 		order := fieldOrderFrom([]byte(out.String()), program)
 		video, audio := codecsFrom([]byte(out.String()), program)
+		rate := rateFrom([]byte(out.String()), program)
 		// The HLS demuxer leaves field_order off the playlist. The segment has it.
 		// The playlist read often uses its whole timeout, so the segment gets
 		// its own. A child of ctx is already cancelled by then.
-		if order == "" && !scanned && hlsURL(input) {
+		if (order == "" && !scanned || rate == "") && hlsURL(input) {
 			if alt := hlsProbeTarget(input, ua, ref); alt != "" {
 				segCtx, segCancel := hlsSegmentProbeContext()
-				order = ffprobeFieldOrder(segCtx, tool, alt, ua, ref, 0)
+				segOrder, segRate := ffprobeVideo(segCtx, tool, alt, ua, ref, 0)
 				segCancel()
+				if order == "" && !scanned {
+					order = segOrder
+				}
+				if rate == "" {
+					rate = segRate
+				}
 			}
 		}
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		f.probes--
 		if cur := h.channels[channelID]; cur == f {
-			if h.learnCodecsLocked(f, video, audio) {
+			// The encode started at the rate stored, or at 59.94 on a first
+			// tune. A 25 or 50 Hz stream rebuilds onto its own clock.
+			if learnedAny(h.learnCodecsLocked(f, video, audio), h.takeRateLocked(f, rate)) {
 				h.rebuildRenditionsLocked(f)
 			}
 		} else {
 			ch := f.channel
 			go h.saveCodecs(ch, video, audio)
+			if rate != "" && h.Store != nil {
+				go func() { _ = h.Store.SetChannelPictureRate(context.Background(), channelID, rate) }()
+			}
 		}
 		if f.headerOrder != "" {
 			return
@@ -225,10 +286,11 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 	}()
 }
 
-// probeInput is a URL input whose field order is not stored, or a link whose
-// codecs are not. A link's stream is the only record of its codecs.
+// probeInput is a URL input whose field order or frame rate is not stored,
+// or a link whose codecs are not. A link's stream is the only record of its
+// codecs.
 func probeInput(ch store.SourceChannel) bool {
-	return ch.FieldOrder == "" || linkChannel(ch) && (ch.VideoCodec == "" || ch.AudioCodec == "")
+	return ch.FieldOrder == "" || ch.PictureRate == "" || linkChannel(ch) && (ch.VideoCodec == "" || ch.AudioCodec == "")
 }
 
 // hlsSegmentProbeContext is a fresh 8s budget for the segment read. It is
@@ -237,7 +299,8 @@ func hlsSegmentProbeContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 8*time.Second)
 }
 
-func ffprobeFieldOrder(ctx context.Context, tool, input, userAgent, referrer string, program int) string {
+// ffprobeVideo reads a media file's video field order and frame rate.
+func ffprobeVideo(ctx context.Context, tool, input, userAgent, referrer string, program int) (order, rate string) {
 	args := []string{"-v", "error", "-probesize", "2000000", "-analyzeduration", "1500000"}
 	args = urlProtocols(args, input)
 	args = append(args, headerArgs(userAgent, referrer)...)
@@ -246,9 +309,9 @@ func ffprobeFieldOrder(ctx context.Context, tool, input, userAgent, referrer str
 		"-of", "json", "-i", input)
 	out, err := exec.CommandContext(ctx, tool, args...).Output()
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	return fieldOrderFrom(out, program)
+	return fieldOrderFrom(out, program), rateFrom(out, program)
 }
 
 // hlsProbeTarget is the media file ffprobe can read a field order from.
