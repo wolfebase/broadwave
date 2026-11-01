@@ -444,6 +444,7 @@ export type Reception = {
   freeTuner: boolean;
   tunerAnswers: boolean;
   signalLost: boolean;
+  emulator?: boolean;
 };
 
 export type Recording = {

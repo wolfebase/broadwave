@@ -7,6 +7,10 @@ import (
 	"broadwave/internal/hdhr"
 )
 
+// emulatorSilent is an HDHomeRun emulator that stopped answering. It is an
+// app on a computer, not a box to switch on.
+const emulatorSilent = "This device did not answer. Check that its app is running."
+
 // deviceHealth is model, firmware, and signal lock. It does not install firmware.
 func (s *Server) deviceHealth(w http.ResponseWriter, r *http.Request) {
 	devices, err := s.Store.Devices(r.Context())
@@ -27,7 +31,7 @@ func (s *Server) deviceHealth(w http.ResponseWriter, r *http.Request) {
 		// call it a tuner that did not answer.
 		if s.Hub != nil && device.TunerCount > 0 {
 			if plain, open := s.Hub.PlainStreams(r.Context(), device.BaseURL, device.DeviceID); plain {
-				out = append(out, hdhr.DeviceHealth{
+				health := hdhr.DeviceHealth{
 					DeviceID:        device.DeviceID,
 					Model:           device.ModelNumber,
 					FirmwareVersion: device.FirmwareVersion,
@@ -35,7 +39,11 @@ func (s *Server) deviceHealth(w http.ResponseWriter, r *http.Request) {
 					NoStatus:        true,
 					TunerCount:      device.TunerCount,
 					Streams:         open,
-				})
+				}
+				if _, err := client.FetchDevice(r.Context(), device.BaseURL); err != nil {
+					health.Error = emulatorSilent
+				}
+				out = append(out, health)
 				continue
 			}
 		}

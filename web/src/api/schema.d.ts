@@ -2588,10 +2588,12 @@ export interface components {
         Reception: {
             /** @description A tuner has no channel on it. */
             freeTuner: boolean;
-            /** @description An HDHomeRun answered, or this house has none. */
+            /** @description An HDHomeRun or an HDHomeRun emulator answered, or this house has none. An emulator has no tuner status; it answers when its discover.json does. */
             tunerAnswers: boolean;
             /** @description This channel is tuned right now and the tuner locked nothing. */
             signalLost: boolean;
+            /** @description tunerAnswers is false and every device that did not answer is an HDHomeRun emulator (an app such as Threadfin), not a tuner to switch on. */
+            emulator?: boolean;
         };
         Tuner: {
             index: number;

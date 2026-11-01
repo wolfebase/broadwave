@@ -22,7 +22,7 @@ func (s *Server) reception(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	answers, err := s.tunerAnswers(r.Context())
+	answers, emulator, err := s.tunerAnswers(r.Context())
 	if err != nil {
 		writeError(w, err)
 		return
@@ -35,6 +35,7 @@ func (s *Server) reception(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{
 		"freeTuner":    free,
 		"tunerAnswers": answers,
+		"emulator":     !answers && emulator,
 		"signalLost":   lost,
 	})
 }
@@ -55,28 +56,42 @@ func (s *Server) tunerIsFree(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-// tunerAnswers is true when an HDHomeRun answers, or this house has none.
-// A playlist-only server has nothing to blame.
-func (s *Server) tunerAnswers(ctx context.Context) (bool, error) {
+// tunerAnswers is true when an HDHomeRun or an emulator answers, or this
+// house has none. A playlist-only server has nothing to blame. emulator is
+// true when every device that did not answer is an emulator: an app, not a
+// box to switch on.
+func (s *Server) tunerAnswers(ctx context.Context) (answers, emulator bool, err error) {
 	devices, err := s.Store.Devices(ctx)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	client := s.HDHR
 	if client == nil {
 		client = &hdhr.Client{}
 	}
 	saw := false
+	emulator = true
 	for _, device := range devices {
 		if !strings.HasPrefix(device.BaseURL, "http://") && !strings.HasPrefix(device.BaseURL, "https://") {
 			continue
 		}
 		saw = true
-		if _, err := client.ReadHealth(ctx, device.BaseURL); err == nil {
-			return true, nil
+		// An emulator has no tuner status to read. It answers when its device
+		// description does.
+		if s.Hub != nil && device.TunerCount > 0 {
+			if plain, _ := s.Hub.PlainStreams(ctx, device.BaseURL, device.DeviceID); plain {
+				if _, err := client.FetchDevice(ctx, device.BaseURL); err == nil {
+					return true, false, nil
+				}
+				continue
+			}
 		}
+		if _, err := client.ReadHealth(ctx, device.BaseURL); err == nil {
+			return true, false, nil
+		}
+		emulator = false
 	}
-	return !saw, nil
+	return !saw, saw && emulator, nil
 }
 
 // channelSignalLost matches the player: only a live Lost row, not a stored reading.

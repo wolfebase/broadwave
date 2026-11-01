@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,7 +19,13 @@ import (
 func TestDiagnosticsShowsAnEmulatorHonestly(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
-	emu := httptest.NewServer(http.NotFoundHandler())
+	emu := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/discover.json" {
+			_, _ = w.Write([]byte(`{"FriendlyName":"Threadfin","ModelNumber":"HDTC-2US","DeviceID":"EMU","TunerCount":4}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
 	defer emu.Close()
 	if err := st.UpsertDevice(ctx, hdhr.Device{DeviceID: "EMU", FriendlyName: "Threadfin", ModelNumber: "HDTC-2US", FirmwareVersion: "20190621", BaseURL: emu.URL, TunerCount: 4},
 		[]hdhr.Channel{{GuideNumber: "1", GuideName: "News", StreamURL: emu.URL + "/auto/v1"}}); err != nil {
@@ -101,5 +108,51 @@ func TestDiagnosticsShowsAnEmulatorHonestly(t *testing.T) {
 	rec = get(t, h, "/api/v1/tuners")
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &tuners) != nil || len(tuners.Tuners) != dev.TunerCount {
 		t.Fatalf("tuners beside an emulator %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// The player asks why a picture stopped. A working emulator is not a tuner
+// that did not answer; a stopped one is an app to check, not a box.
+func TestReceptionIsHonestAboutAnEmulator(t *testing.T) {
+	ctx := context.Background()
+	st := testStore(t)
+	emu := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/discover.json" {
+			_, _ = w.Write([]byte(`{"FriendlyName":"Threadfin","ModelNumber":"HDTC-2US","DeviceID":"EMU","TunerCount":2}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	if err := st.UpsertDevice(ctx, hdhr.Device{DeviceID: "EMU", FriendlyName: "Threadfin", ModelNumber: "HDTC-2US", BaseURL: emu.URL, TunerCount: 2},
+		[]hdhr.Channel{{GuideNumber: "1", GuideName: "News", StreamURL: emu.URL + "/auto/v1"}}); err != nil {
+		t.Fatal(err)
+	}
+	chs, err := st.Channels(ctx, false)
+	if err != nil || len(chs) != 1 {
+		t.Fatal(err, chs)
+	}
+	hub := live.New(st, t.TempDir(), "ffmpeg", "libx264")
+	defer hub.Shutdown()
+	h := (&Server{Store: st, Hub: hub}).Handler()
+	path := fmt.Sprintf("/api/v1/channels/%d/reception", chs[0].ID)
+	var got struct {
+		TunerAnswers bool `json:"tunerAnswers"`
+		Emulator     bool `json:"emulator"`
+	}
+	rec := get(t, h, path)
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &got) != nil || !got.TunerAnswers || got.Emulator {
+		t.Fatalf("a working emulator: %d %s", rec.Code, rec.Body.String())
+	}
+	emu.Close()
+	rec = get(t, h, path)
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &got) != nil || got.TunerAnswers || !got.Emulator {
+		t.Fatalf("a stopped emulator: %d %s", rec.Code, rec.Body.String())
+	}
+	var health struct {
+		Devices []hdhr.DeviceHealth `json:"devices"`
+	}
+	rec = get(t, h, "/api/v1/devices/health")
+	if json.Unmarshal(rec.Body.Bytes(), &health) != nil || len(health.Devices) != 1 || !health.Devices[0].NoStatus || health.Devices[0].Error != emulatorSilent {
+		t.Fatalf("a stopped emulator's health: %s", rec.Body.String())
 	}
 }

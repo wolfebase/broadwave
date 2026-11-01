@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { apiFailure, unreadBody } from "./src/api.ts";
 import { setLocaleMode } from "./src/i18n/runtime.ts";
-import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, frozenMs, FrozenPicture, hiddenInventory, holdPictureMessage, inventoryHidden, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageTearsDown, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryEdge, recoveryReady, requestFailed, restartDelayMs, restartFollowUp, serverStopped, shownOutage, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, emulatorStopped, onlyEmulatorsSilent, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, frozenMs, FrozenPicture, hiddenInventory, holdPictureMessage, inventoryHidden, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageTearsDown, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryEdge, recoveryReady, requestFailed, restartDelayMs, restartFollowUp, serverStopped, shownOutage, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -306,4 +306,15 @@ test("coming back from a hidden tab still holds a fatal that is not the one stal
   assert.equal(tried.network, false);
   // The quiet window does not spend the recovery the picture gets once it is back.
   assert.equal(liveFatalStep("networkError", { on: false, recovered: false }, tried), "start-load");
+});
+
+test("an emulator that stopped is an app to check, not a tuner to switch on", () => {
+  const snap = { health: true, freeTuner: false, tunerAnswers: false, online: true, signalLost: false };
+  assert.equal(classifySnap({ ...snap, emulator: true }).message, emulatorStopped);
+  assert.equal(classifySnap({ ...snap, emulator: true }).recovery, "tuner");
+  assert.equal(classifySnap(snap).message, tunerStopped);
+  assert.equal(shownOutage(emulatorStopped), emulatorStopped);
+  assert.equal(onlyEmulatorsSilent([{ error: "x", noStatus: true }]), true);
+  assert.equal(onlyEmulatorsSilent([{ error: "x", noStatus: true }, { error: "y" }]), false);
+  assert.equal(onlyEmulatorsSilent([{ noStatus: true }]), false);
 });

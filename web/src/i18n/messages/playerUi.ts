@@ -156,6 +156,7 @@ export const playerUiMessages = {
   "player.outage.serverStopped": "The server stopped. It will try again when it's back.",
   "player.outage.connectionDropped": "The connection dropped. It will try again when it's back.",
   "player.outage.tunerStopped": "This tuner did not answer. Check that it is on.",
+  "player.outage.emulatorStopped": "The tuner app did not answer. Check that it is running.",
   "player.outage.noSignal": "This channel isn't coming in. Check the antenna.",
   "player.outage.pictureStopped": "The picture stopped. Trying again usually fixes it.",
   "player.outage.pictureRestarting": "The picture stopped. Starting it again.",

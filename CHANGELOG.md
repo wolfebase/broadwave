@@ -12,6 +12,7 @@
 - Server: a 25 or 50 Hz channel plays at its own rate from its first tune, the adaptive ladder included. That tune ran at 59.94, and the ladder kept it until it restarted.
 - Server: an HLS playlist channel at 25 or 50 Hz (most IPTV outside North America) keeps its own clock. Its rate is read beside the first picture and kept for the next tune; it played at 59.94.
 - Diagnostics: an HDHomeRun emulator (Threadfin, xTeVe, Dispatcharr) shows its tuner count and how many this server has open, and says it reports no tuner status. It was missing from Tuners, or listed as a tuner that did not answer, and alone it showed a status error.
+- Player: a picture that stops on an HDHomeRun emulator no longer says the tuner did not answer while the emulator is up. When the emulator is down, it says to check that its app is running, not that a tuner is on.
 
 ## 0.17.0 — 2026-10-31
 

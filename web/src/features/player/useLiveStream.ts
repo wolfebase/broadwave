@@ -16,6 +16,7 @@ import { soundFor, type Sound } from "./sounds";
 import { awayBeforeSeekMs, comeBackAction, playOnShortReturn, resumeOnReturn, resumePlan, returnHeld } from "./resume";
 import {
   aTunerAnswers,
+  onlyEmulatorsSilent,
   aTunerIsFree,
   autoplayRetry,
   classifySnap,
@@ -939,7 +940,7 @@ async function readRecoverySnap(channelId: number, assumeLost: boolean): Promise
   if (!health) return { health: false, freeTuner: false, tunerAnswers: false, online, signalLost: false };
   try {
     const body = await getReception(channelId);
-    return { health, freeTuner: body.freeTuner, tunerAnswers: body.tunerAnswers, online, signalLost: body.signalLost };
+    return { health, freeTuner: body.freeTuner, tunerAnswers: body.tunerAnswers, online, signalLost: body.signalLost, emulator: body.emulator };
   } catch (err) {
     // A watch token cannot see tuner inventory. Falling through would call the
     // admin routes and treat the refusal as a tuner that is off.
@@ -947,6 +948,7 @@ async function readRecoverySnap(channelId: number, assumeLost: boolean): Promise
   }
   let freeTuner: boolean;
   let tunerAnswers: boolean;
+  let emulator = false;
   try {
     const body = await getTuners();
     freeTuner = aTunerIsFree(body.tuners ?? []);
@@ -956,6 +958,7 @@ async function readRecoverySnap(channelId: number, assumeLost: boolean): Promise
   try {
     const body = await getDeviceHealth();
     tunerAnswers = aTunerAnswers(body.devices ?? []);
+    emulator = onlyEmulatorsSilent(body.devices ?? []);
   } catch (err) {
     tunerAnswers = inventoryHidden(err);
   }
@@ -967,5 +970,5 @@ async function readRecoverySnap(channelId: number, assumeLost: boolean): Promise
   } catch {
     signalLost = assumeLost;
   }
-  return { health, freeTuner, tunerAnswers, online, signalLost };
+  return { health, freeTuner, tunerAnswers, online, signalLost, emulator };
 }

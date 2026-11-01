@@ -12,6 +12,7 @@ export type Recovery = "" | "busy" | "server" | "tuner" | "signal" | "restart";
 export const serverStopped = playerUiMessages["player.outage.serverStopped"];
 export const connectionDropped = playerUiMessages["player.outage.connectionDropped"];
 export const tunerStopped = playerUiMessages["player.outage.tunerStopped"];
+export const emulatorStopped = playerUiMessages["player.outage.emulatorStopped"];
 export const noSignal = playerUiMessages["player.outage.noSignal"];
 export const pictureStopped = playerUiMessages["player.outage.pictureStopped"];
 export const pictureRestarting = playerUiMessages["player.outage.pictureRestarting"];
@@ -24,6 +25,7 @@ export function shownOutage(message: string): string {
   if (message === serverStopped) return t("player.outage.serverStopped");
   if (message === connectionDropped) return t("player.outage.connectionDropped");
   if (message === tunerStopped) return t("player.outage.tunerStopped");
+  if (message === emulatorStopped) return t("player.outage.emulatorStopped");
   if (message === noSignal) return t("player.outage.noSignal");
   if (message === pictureStopped) return t("player.outage.pictureStopped");
   if (message === pictureRestarting) return t("player.outage.pictureRestarting");
@@ -98,6 +100,8 @@ export type RecoverySnap = {
   tunerAnswers: boolean;
   online: boolean;
   signalLost: boolean;
+  // Every device that did not answer is an HDHomeRun emulator: an app, not a box.
+  emulator?: boolean;
   // A restarted server answers 404 for every playlist it had, with /health fine.
   watchGone?: boolean;
 };
@@ -110,7 +114,7 @@ export function classifySnap(snap: RecoverySnap): { message: string; recovery: R
   // A dark tune the server gave back also leaves its playlist gone.
   if (snap.signalLost && snap.tunerAnswers) return { message: noSignal, recovery: "signal" };
   if (snap.watchGone) return { message: pictureRestarting, recovery: "restart" };
-  if (!snap.tunerAnswers) return { message: tunerStopped, recovery: "tuner" };
+  if (!snap.tunerAnswers) return { message: snap.emulator ? emulatorStopped : tunerStopped, recovery: "tuner" };
   return { message: pictureStopped, recovery: "" };
 }
 
@@ -121,6 +125,12 @@ export function aTunerIsFree(tuners: { target?: string; guide?: string }[]): boo
 // A home with no HDHomeRun (only playlists) has no tuner to blame.
 export function aTunerAnswers(devices: { error?: string }[]): boolean {
   return devices.length === 0 || devices.some((device) => !device.error);
+}
+
+// Every device that did not answer is an emulator (it has no tuner status).
+export function onlyEmulatorsSilent(devices: { error?: string; noStatus?: boolean }[]): boolean {
+  const silent = devices.filter((device) => device.error);
+  return silent.length > 0 && silent.every((device) => device.noStatus);
 }
 
 /**
