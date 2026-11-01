@@ -10,6 +10,7 @@
 - Web: moving a recording rule up or down no longer snaps the rows back for a moment, losing the focused button, when another change to the schedule arrives while the new order is being saved.
 - Server: an HEVC channel at 25 or 50 Hz (DVB-T2) keeps its own clock. Its small pictures played at 29.97.
 - Server: a 25 or 50 Hz channel plays at its own rate from its first tune, the adaptive ladder included. That tune ran at 59.94, and the ladder kept it until it restarted.
+- Server: an HLS playlist channel at 25 or 50 Hz (most IPTV outside North America) keeps its own clock. Its rate is read beside the first picture and kept for the next tune; it played at 59.94.
 - Diagnostics: an HDHomeRun emulator (Threadfin, xTeVe, Dispatcharr) shows its tuner count and how many this server has open, and says it reports no tuner status. It was missing from Tuners, or listed as a tuner that did not answer, and alone it showed a status error.
 
 ## 0.17.0 — 2026-10-31

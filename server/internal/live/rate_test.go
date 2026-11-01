@@ -415,3 +415,91 @@ func TestUSRateKeepsTheLadder(t *testing.T) {
 		t.Fatal("a 29.97 rate restarted the ladder")
 	}
 }
+
+// An HLS playlist is read by ffmpeg itself, so the packet scan never sees its
+// headers. The input probe names the rate, and the channel keeps it.
+func TestHLSPlaylistLearnsItsRate(t *testing.T) {
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not on PATH")
+	}
+	dir := t.TempDir()
+	seg := filepath.Join(dir, "seg.ts")
+	build := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc2=s=320x180:r=50:d=1",
+		"-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-g", "25", "-f", "mpegts", seg)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("fixture: %v %s", err, out)
+	}
+	playlist := filepath.Join(dir, "live.m3u8")
+	body := "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXTINF:1.0,\nseg.ts\n#EXT-X-ENDLIST\n"
+	if err := os.WriteFile(playlist, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, m := testHub(t)
+	h.FFmpeg = "ffmpeg"
+	m.input = playlist
+	// Field order and codecs are stored from before rates were read: the rate
+	// alone is reason to probe.
+	ch := store.SourceChannel{Channel: store.Channel{ID: 31, GuideNumber: "31", DeviceID: "src-1", VideoCodec: "H264", AudioCodec: "AAC"}, FieldOrder: "progressive"}
+	if !probeInput(ch) {
+		t.Fatal("a channel with no stored rate is not probed")
+	}
+	f := &feed{channel: ch, source: sourceOf(ch), renditions: map[string]*rendition{}}
+	m.feeds["31"] = f
+	h.channels[31] = f
+	h.mu.Lock()
+	h.probeInputLocked(m, f)
+	h.mu.Unlock()
+	deadline := time.Now().Add(8 * time.Second)
+	var rate string
+	for time.Now().Before(deadline) {
+		h.mu.Lock()
+		rate = f.channel.PictureRate
+		h.mu.Unlock()
+		if rate != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if rate != "50" || f.source.Rate != "50" {
+		t.Fatalf("playlist rate %q source %q", rate, f.source.Rate)
+	}
+	if line := strings.Join(RenditionArgs(0, f.source, Rendition{Video: "360", Audio: "aac2"}, "libx264", ""), " "); !strings.Contains(line, "fps=25") {
+		t.Fatalf("a 50p playlist's small picture: %s", line)
+	}
+	ch.PictureRate = "50"
+	if probeInput(ch) {
+		t.Fatal("a channel with every fact stored is probed again")
+	}
+}
+
+func TestRationalRate(t *testing.T) {
+	for in, want := range map[string]string{"25/1": "25", "50/1": "50", "30000/1001": "29.97", "60000/1001": "59.94", "90000/1": "", "0/0": "", "": "", "25": "25"} {
+		if got := rationalRate(in); got != want {
+			t.Fatalf("%q: %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A playlist's transport stream is read by the server like a tuner's, so its
+// first tune reads the rate with the scan.
+func TestPlaylistStreamFirstTuneTakesTheRate(t *testing.T) {
+	h, m, _ := ladderHub(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	m.body = pr
+	go h.readLoop(ctx, m)
+	defer func() {
+		cancel()
+		_ = pw.Close()
+	}()
+	go writeUntil(ctx, pw, mpeg2RateTS(1, 3))
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f := h.addFeedLocked(m, store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "12", DeviceID: "src-2", VideoCodec: "MPEG2"}, ProgramNum: 1})
+	if f.source.Rate != "25" {
+		t.Fatalf("playlist first tune rate %q", f.source.Rate)
+	}
+}

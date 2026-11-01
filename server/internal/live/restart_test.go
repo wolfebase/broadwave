@@ -82,8 +82,9 @@ func restartHub(t *testing.T, window time.Duration, mode string) (*Hub, *feed, s
 	m.input = "sample.ts"
 	h.mu.Lock()
 	f := h.addFeedLocked(m, store.SourceChannel{
-		Channel:    store.Channel{ID: 1, GuideNumber: "4.1"},
-		FieldOrder: "progressive",
+		Channel:     store.Channel{ID: 1, GuideNumber: "4.1"},
+		FieldOrder:  "progressive",
+		PictureRate: "59.94",
 	})
 	f.source = Source{VideoCodec: "MPEG2", Progressive: true}
 	h.mu.Unlock()
