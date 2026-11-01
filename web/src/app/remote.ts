@@ -139,7 +139,8 @@ export function focusPastNotice(event: { detail: number; currentTarget: EventTar
       pageStart?.() ??
       // The shell's own start on the guide and Home (App.tsx), then the first control.
       document.querySelector<HTMLElement>("main .guide-canvas, main .hero-actions .btn") ??
-      [...document.querySelectorAll<HTMLElement>("main button:not([disabled]), main a[href]")].find(
+      // A field counts too: Search's only control is its field, and focus was left nowhere.
+      [...document.querySelectorAll<HTMLElement>("main button:not([disabled]), main a[href], main input:not([disabled]):not([type='hidden'])")].find(
         (el) => !el.closest(".banner-update, .banner-home, [inert]") && el.getBoundingClientRect().height > 1,
       );
     focusRing(next);
