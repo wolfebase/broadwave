@@ -10,7 +10,7 @@ Broadwave tries listings in this order:
 - Schedules Direct, if you add an account under Settings. The hint there is "Fills channels the tuner guide skips. Fourteen days when the account allows it."
 - An XMLTV address you paste under Guide address. The hint is "An XMLTV link for channels the tuner guide skips."
 
-While a channel is tuned, the broadcast's own listings fill times none of those already list. That is not another download. A later guide pull replaces the broadcast rows that sit inside what it brought.
+While a channel is tuned, the broadcast's own listings fill times none of those already list. ATSC antenna tuners and DVB-T, T2, and C tuners send them; a CableCARD tuner does not. That is not another download. A later guide pull replaces the broadcast rows that sit inside what it brought.
 
 With no guide key, a channel matches on its number, then its name, then its call sign. A trailing DT, DT1, HD, TV, or LD still counts. Guide match, on the channel in Settings, pins a listing when the names differ. Leave it blank to use the number, the name, and the call sign.
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Server: DVB-T, T2, and C tuners (Europe, Australia) get a guide from the broadcast with no internet, as antenna tuners in North America already do. The listing scan tunes them again and reads each multiplex's own listings: titles, descriptions, and categories, for the channels on it and the ones it lists for other multiplexes. A downloaded guide still comes first.
+
 ### Fixed
 
 - Web: two quick Forward 30 presses in a recording land where the second one says; the spots they saved could arrive out of order.
