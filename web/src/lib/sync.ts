@@ -35,6 +35,10 @@ const GROUP_REWIND_MS = 2000;
 // WebKit resumes about a tenth of a second late after a pause. Learned per screen.
 const MAX_RESUME_LAG_S = 0.5;
 
+// Pauses an engine made, by video. Kept outside the engine: a room change
+// starts a new engine before the old one's pause event arrives.
+const ownPauses = new WeakSet<HTMLVideoElement>();
+
 /**
  * Holds a live <video> on a room's shared timeline. Every rendition stamps
  * segments with the same program date-time, so the target is the same frame on
@@ -68,13 +72,26 @@ export class SyncEngine {
   private room: string;
   private channelId: number;
   private onStatus: (s: SyncStatus) => void;
+  private onViewerPause: (() => void) | null;
 
-  constructor(video: HTMLVideoElement, hls: Hls | null, room: string, channelId: number, onStatus: (s: SyncStatus) => void) {
+  /**
+   * onViewerPause hears a pause this engine did not make: picture in picture,
+   * a media key, the system. Without it the engine plays the picture again.
+   */
+  constructor(
+    video: HTMLVideoElement,
+    hls: Hls | null,
+    room: string,
+    channelId: number,
+    onStatus: (s: SyncStatus) => void,
+    onViewerPause?: () => void,
+  ) {
     this.video = video;
     this.hls = hls;
     this.room = room;
     this.channelId = channelId;
     this.onStatus = onStatus;
+    this.onViewerPause = onViewerPause ?? null;
   }
 
   start() {
@@ -93,7 +110,24 @@ export class SyncEngine {
     this.setStatus({ state: "waiting", drift: 0, members: this.state?.members ?? 0 });
     this.timer = window.setInterval(() => this.apply(), 250);
     this.video.addEventListener("waiting", this.onWaiting);
+    this.video.addEventListener("pause", this.onPause);
   }
+
+  /** Every pause the engine makes goes through here, so its pause event is told apart from the viewer's. */
+  private pause() {
+    if (this.video.paused) return;
+    ownPauses.add(this.video);
+    this.video.pause();
+  }
+
+  private onPause = () => {
+    const video = this.video;
+    if (ownPauses.delete(video)) return;
+    // A picture that ended, lost its source, or left the page did not pause for the viewer.
+    if (!this.onViewerPause || video.ended || video.readyState < 2 || video.isConnected === false) return;
+    if (this.state?.rate === 0) return;
+    this.onViewerPause();
+  };
 
   /** Out of picture while playing: the room sits too close to this channel's live edge. */
   private onWaiting = () => {
@@ -118,6 +152,7 @@ export class SyncEngine {
     this.pauses.stop();
     window.clearInterval(this.timer);
     this.video.removeEventListener("waiting", this.onWaiting);
+    this.video.removeEventListener("pause", this.onPause);
     this.unsubscribe?.();
     events().leave(this.room);
     this.video.playbackRate = 1;
@@ -203,7 +238,7 @@ export class SyncEngine {
       this.resumeExpect = drift - hold - lag;
       this.holdUntil = now + hold;
       this.rateProbe = null;
-      this.video.pause();
+      this.pause();
       this.pauses.arm(hold, () => {
         this.holdUntil = 0;
         this.resumeAt = performance.now();
@@ -286,7 +321,7 @@ export class SyncEngine {
     if (st.rate === 0) {
       this.rateProbe = null;
       this.trimBy = 0;
-      if (!video.paused) video.pause();
+      this.pause();
       if (Math.abs(drift) > TRIM_MS * 2) this.seekTo(target, false);
       this.setStatus({ state: "locked", drift, members: st.members, room: st });
       return;

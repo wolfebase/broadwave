@@ -319,8 +319,10 @@ function installClock() {
 
 function fakeVideo(currentTime: number, bufferedStart: number, bufferedEnd: number) {
   const calls: string[] = [];
+  const listeners = new Map<string, Set<() => void>>();
   let end = bufferedEnd;
   const video = {
+    ended: false,
     paused: false,
     seeking: false,
     currentTime,
@@ -338,8 +340,13 @@ function fakeVideo(currentTime: number, bufferedStart: number, bufferedEnd: numb
       calls.push("play");
       return Promise.resolve();
     },
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(type: string, fn: () => void) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type)!.add(fn);
+    },
+    removeEventListener(type: string, fn: () => void) {
+      listeners.get(type)?.delete(fn);
+    },
     getStartDate() {
       return new Date(SERVER);
     },
@@ -347,6 +354,10 @@ function fakeVideo(currentTime: number, bufferedStart: number, bufferedEnd: numb
   return {
     video,
     calls,
+    // A media element fires pause a task after pause() returns.
+    fire: (type: string) => {
+      for (const fn of [...(listeners.get(type) ?? [])]) fn();
+    },
     setBufferedEnd: (value: number) => {
       end = value;
     },
@@ -465,6 +476,87 @@ test("a group rewind during the resume window seeks back", async () => {
     clock.setNow(21_000);
     await postRoom("group:ch6", 6, { anchorMedia: SERVER + 4_000, rate: 1 });
     assert.equal(video.currentTime, 4);
+    engine.stop();
+  } finally {
+    clock.restore();
+  }
+});
+
+test("a pause the engine did not make is the viewer's, and lets sync go", async () => {
+  const clock = installClock();
+  try {
+    const { SyncEngine } = await import("./src/lib/sync.ts");
+    const { video, calls, fire } = fakeVideo(10, 8, 14);
+    let heard = 0;
+    const engine = new SyncEngine(video as unknown as HTMLVideoElement, null, "channel:7", 7, () => undefined, () => {
+      heard += 1;
+      engine.stop();
+    });
+    engine.start();
+    const local = SERVER + 10_000;
+    await postRoom("channel:7", 7, { anchorMedia: local, rate: 1 });
+    assert.deepEqual(calls, []);
+    // Picture in picture, a media key, or the system pauses the element.
+    video.pause();
+    fire("pause");
+    assert.equal(heard, 1);
+    await postRoom("channel:7", 7, { anchorMedia: local, rate: 1 });
+    assert.equal(video.paused, true);
+    assert.deepEqual(calls, ["pause"]);
+  } finally {
+    clock.restore();
+  }
+});
+
+test("the engine's own pause for drift is not the viewer's", async () => {
+  const clock = installClock();
+  try {
+    const { SyncEngine } = await import("./src/lib/sync.ts");
+    const { video, calls, fire } = fakeVideo(10, 8, 14);
+    let heard = 0;
+    const engine = new SyncEngine(video as unknown as HTMLVideoElement, null, "channel:8", 8, () => undefined, () => {
+      heard += 1;
+    });
+    engine.start();
+    const local = SERVER + 10_000;
+    await postRoom("channel:8", 8, { anchorMedia: local - 800, rate: 1 });
+    const pause = clock.jobs.find((job) => job.ms === 800);
+    assert.ok(pause, "a picture that is ahead pauses for the drift");
+    fire("pause");
+    assert.equal(heard, 0);
+    pause.fn();
+    assert.deepEqual(calls, ["pause", "play"]);
+    // The next pause from outside is the viewer's again.
+    video.pause();
+    fire("pause");
+    assert.equal(heard, 1);
+    engine.stop();
+  } finally {
+    clock.restore();
+  }
+});
+
+test("a group's pause, and a picture that lost its source, are not the viewer's", async () => {
+  const clock = installClock();
+  try {
+    const { SyncEngine } = await import("./src/lib/sync.ts");
+    const { video, fire } = fakeVideo(10, 8, 14);
+    let heard = 0;
+    const engine = new SyncEngine(video as unknown as HTMLVideoElement, null, "group:ch9", 9, () => undefined, () => {
+      heard += 1;
+    });
+    engine.start();
+    const local = SERVER + 10_000;
+    await postRoom("group:ch9", 9, { anchorMedia: local, rate: 0 });
+    assert.equal(video.paused, true);
+    fire("pause");
+    assert.equal(heard, 0);
+    await postRoom("group:ch9", 9, { anchorMedia: local, rate: 1 });
+    assert.equal(video.paused, false);
+    video.readyState = 0;
+    video.pause();
+    fire("pause");
+    assert.equal(heard, 0);
     engine.stop();
   } finally {
     clock.restore();

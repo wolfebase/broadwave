@@ -35,10 +35,9 @@ test("captions and audio are labelled and a remote can change them", async ({ pa
   ).toBe(true);
   const video = page.locator("video.stage-video");
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.videoWidth > 0), { timeout: 45_000 }).toBe(true);
-  // Pause as the remote does: the player's pause drops sync for the visit. Sync
-  // plays a pause made on the element again on its next tick, or when its own
-  // hold ends, so Play showed for a moment and a slow runner missed it. A press
-  // inside a hold plays instead, and keeps sync, so press again until it lets go.
+  // Pause as the remote does: the player's pause drops sync for the visit. A
+  // press inside sync's own hold (the picture already paused) plays instead and
+  // keeps sync, so press again until it lets go.
   const syncPill = page.getByRole("button", { name: /^Whole-Home Sync/ });
   await expect(async () => {
     await expect.poll(() => video.evaluate((el: HTMLVideoElement) => !el.paused), { timeout: 5_000 }).toBe(true);
