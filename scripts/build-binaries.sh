@@ -21,6 +21,9 @@ fi
 
 rm -rf "$out"
 mkdir -p "$out"
+# Absolute: the Windows zip runs from the staging folder, where a relative
+# OUT_DIR (the release workflow passes "dist") does not exist.
+out="$(cd "$out" && pwd)"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 
