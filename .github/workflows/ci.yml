@@ -21,12 +21,15 @@ jobs:
       - run: go test ./server/...
       - run: go test -race ./server/internal/live/ ./server/internal/hdhr/fake/
       - run: go run ./server/cmd/apigen -check
-      - name: The release platforms build
-        working-directory: server
+      # The release packages, built by the same script and arguments release.yml uses, so a
+      # packaging break shows here and not first on a tag (the Windows zip failed five releases).
+      # The web app is a stub; the web job builds the real one.
+      - name: The release packages build
         run: |
-          for t in linux/arm64 darwin/arm64 darwin/amd64 windows/amd64; do
-            CGO_ENABLED=0 GOOS="${t%/*}" GOARCH="${t#*/}" go build -o /dev/null ./cmd/broadwave
-          done
+          mkdir -p server/cmd/broadwave/assets/web
+          test -f server/cmd/broadwave/assets/web/index.html || echo stub > server/cmd/broadwave/assets/web/index.html
+          SKIP_WEB=1 scripts/build-binaries.sh v0.0.0-ci dist
+          test "$(ls dist/broadwave-* | wc -l)" -eq 5
       - run: FAKE=1 scripts/relay-smoke.sh
 
   docs:
