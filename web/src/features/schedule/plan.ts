@@ -26,3 +26,25 @@ export function takeScheduleWrite<T>(
 export function reloadAfterOrder(mine: number, latest: number): boolean {
   return mine === latest;
 }
+
+/**
+ * The rows show the order being saved, with any pass added since at the end and
+ * any removed left out. A list read while the save was under way still has the
+ * old order; showing it moved the rows back and lost the focused button.
+ */
+export function heldOrder(server: number[], held: number[]): number[] {
+  const kept = held.filter((id) => server.includes(id));
+  return [...kept, ...server.filter((id) => !kept.includes(id))];
+}
+
+/**
+ * The held order gives way once the last save is done and a new list has come:
+ * one that has the saved order, or any one after the save failed. A list with
+ * the old order can still land just after the save; it does not count.
+ */
+export function releaseHeld<T>(held: { ids: number[]; saved: boolean; failed: boolean; list: T } | null, list: T, server: number[]): boolean {
+  if (held == null || !held.saved || held.list === list) return false;
+  if (held.failed) return true;
+  const kept = held.ids.filter((id) => server.includes(id));
+  return server.filter((id) => kept.includes(id)).every((id, i) => id === kept[i]);
+}

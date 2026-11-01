@@ -8,7 +8,7 @@ import { bind, weekdayShortNames } from "../../i18n/runtime.ts";
 import { dismissesLayer, pageCovered } from "../../lib/dialogFocus";
 import { copy } from "../../strings";
 import { PreviewLines, clockLabel, formatDay } from "./PreviewLines";
-import { reloadAfterOrder } from "./plan";
+import { heldOrder, releaseHeld, reloadAfterOrder } from "./plan";
 import { TimedEditor } from "./TimedEditor";
 import { timedEnd } from "./manual";
 
@@ -56,9 +56,19 @@ export type TimedStart = { channelId: number; start?: Date; minutes?: number };
 
 export function Passes({ passes, onPasses, request, onRequestDone }: { passes: Pass[]; onPasses: () => void; request?: TimedStart | null; onRequestDone?: () => void }) {
   const { channels } = useData();
+  // A saved order stays on screen until a list read after the save arrives.
+  // A read from before it would move the rows back under the focused button.
+  const [held, setHeld] = useState<{ ids: number[]; saved: boolean; failed: boolean; list: Pass[] } | null>(null);
+  const passesNow = useRef(passes);
+  useEffect(() => {
+    passesNow.current = passes;
+  }, [passes]);
+  const serverOrder = passes.map((p) => p.id);
+  if (releaseHeld(held, passes, serverOrder)) setHeld(null);
+  const base = held ? heldOrder(serverOrder, held.ids) : serverOrder;
   // A drag reorders here first; a new list from the server replaces it.
   const [local, setLocal] = useState<{ from: Pass[]; ids: number[] } | null>(null);
-  const order = local && local.from === passes ? local.ids : passes.map((p) => p.id);
+  const order = local && local.from === passes ? local.ids : base;
   const setOrder = (ids: number[]) => setLocal({ from: passes, ids });
   // "timed" is a new timed recording; a guide link opens one for its channel.
   const [editing, setEditing] = useState<number | "new" | "timed" | null>(() => (request ? "timed" : null));
@@ -180,14 +190,23 @@ export function Passes({ passes, onPasses, request, onRequestDone }: { passes: P
   function saveOrder(ids: number[]) {
     const mine = ++orderN.current;
     setNote("");
+    setLocal(null);
+    setHeld({ ids, saved: false, failed: false, list: passes });
+    let failed = false;
     queue.current = queue.current
       .then(() => orderPasses(ids))
       .then(
         () => undefined,
-        (err: unknown) => setNote(err instanceof Error ? err.message : t("schedule.orderFailed")),
+        (err: unknown) => {
+          failed = true;
+          setNote(err instanceof Error ? err.message : t("schedule.orderFailed"));
+        },
       );
     void queue.current.then(() => {
-      if (reloadAfterOrder(mine, orderN.current)) onPasses();
+      if (!reloadAfterOrder(mine, orderN.current)) return;
+      const list = passesNow.current;
+      setHeld((cur) => (cur ? { ...cur, saved: true, failed, list } : cur));
+      onPasses();
     });
   }
 
@@ -199,7 +218,6 @@ export function Passes({ passes, onPasses, request, onRequestDone }: { passes: P
     next.splice(at, 1);
     next.splice(to, 0, id);
     focusAfter.current = { id, up: by < 0 };
-    setOrder(next);
     saveOrder(next);
   }
 

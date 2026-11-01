@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./fixture";
 import { settle } from "./snap";
 
@@ -28,6 +29,18 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
   for (const pass of await passes(page)) await page.request.delete(`/api/v1/passes/${pass.id}`);
   offset = ((await (await page.request.post("/api/v1/passes/preview", { data: { title: "x" } })).json()) as { utcOffset: number }).utcOffset;
+  // The first order save waits until the spec lets it go, so a list read can land before it, as on a slow server.
+  let socket: WebSocketRoute | undefined;
+  await page.routeWebSocket(/\/api\/v1\/ws$/, (ws) => {
+    ws.connectToServer();
+    socket = ws;
+  });
+  let letOrderGo = () => {};
+  const orderHeld = new Promise<void>((resolve) => (letOrderGo = resolve));
+  await page.route("**/api/v1/passes/order", async (route) => {
+    await orderHeld;
+    await route.continue();
+  });
   await page.goto("/schedule");
   await settle(page);
 
@@ -75,6 +88,15 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   await expect(rows.nth(0)).toContainText("Titles with “late local”");
   await page.getByRole("button", { name: "Move Sports up" }).click();
   await expect(rows.nth(0)).toContainText("Sports (category)");
+  // Another change on the server sends schedule.changed while the order is still on its way.
+  // That read has the old order; the rows stay put, and so does the focus.
+  const staleRead = page.waitForResponse((res) => res.request().method() === "GET" && new URL(res.url()).pathname === "/api/v1/passes");
+  await expect.poll(() => Boolean(socket)).toBe(true);
+  socket?.send(JSON.stringify({ type: "schedule.changed", data: { version: 0 } }));
+  expect(((await (await staleRead).json()) as { passes: Pass[] }).passes.map((p) => p.title)).toEqual(["late local", "Sports"]);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(rows.nth(0)).toContainText("Sports (category)");
+  letOrderGo();
   await expect.poll(async () => (await passes(page)).map((p) => p.title)).toEqual(["Sports", "late local"]);
   await expect(page.getByRole("button", { name: "Move Sports up" })).toBeDisabled();
   // At the top Up turns off, so focus moves to Down.
