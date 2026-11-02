@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.3 — 2026-11-02
+
+### Fixed
+
+- Whole-Home Sync: a screen that can't reach its channel's room (it plays further behind live, like an iPhone on the plain home address) brings the room back to its frame even when the room sits on its latency target. Such a room ignored the screen, which played out of step with the others for good.
+
 ## 0.17.2 — 2026-11-01
 
 ### Added
