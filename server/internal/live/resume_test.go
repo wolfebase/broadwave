@@ -99,24 +99,34 @@ func TestOffsetPlaylistUsesTheRecordingClock(t *testing.T) {
 	if string(OffsetPlaylist([]byte(src), 0)) != src {
 		t.Fatal("a play from the start grew gaps")
 	}
+	// A copy on the two-second grid lists what is before it as fill segments,
+	// which a player loads like any other.
 	got := string(OffsetPlaylist([]byte(src), 4))
-	if !strings.Contains(got, "#EXT-X-VERSION:8\n") {
-		t.Fatalf("version: %s", got)
+	if strings.Contains(got, "#EXT-X-GAP") || strings.Contains(got, "#EXT-X-VERSION:8") {
+		t.Fatalf("fill is not a gap: %s", got)
 	}
 	if !strings.Contains(got, "#EXT-X-START:TIME-OFFSET=4.000,PRECISE=YES\n") {
 		t.Fatalf("start: %s", got)
 	}
-	want := "#EXT-X-GAP\n#EXTINF:2.000,\ngap00000.ts\n#EXT-X-GAP\n#EXTINF:2.000,\ngap00001.ts\n"
-	if !strings.Contains(got, want) {
-		t.Fatalf("gaps: %s", got)
+	if want := "#EXTINF:2.000,\nfill00000.ts\n#EXTINF:2.000,\nfill00001.ts\n"; !strings.Contains(got, want) {
+		t.Fatalf("fill: %s", got)
 	}
 	if at := mediaTime(got, "seg00000.ts"); at < 3.99 || at > 4.01 {
 		t.Fatalf("first real segment at %v, want 4", at)
 	}
 	// The discontinuity ffmpeg writes in front of the first segment now sits
-	// between the gap and that segment, which is where a discontinuity belongs.
-	if strings.Index(got, "#EXT-X-DISCONTINUITY") < strings.Index(got, "gap00001.ts") {
+	// between the fill and that segment, which is where a discontinuity belongs.
+	if strings.Index(got, "#EXT-X-DISCONTINUITY") < strings.Index(got, "fill00001.ts") {
 		t.Fatalf("discontinuity still leads: %s", got)
+	}
+	// A copy made before the grid keeps its gaps.
+	got = string(OffsetPlaylist([]byte(src), 5))
+	if !strings.Contains(got, "#EXT-X-VERSION:8\n") {
+		t.Fatalf("version: %s", got)
+	}
+	want := "#EXT-X-GAP\n#EXTINF:2.000,\ngap00000.ts\n#EXT-X-GAP\n#EXTINF:2.000,\ngap00001.ts\n#EXT-X-GAP\n#EXTINF:1.000,\ngap00002.ts\n"
+	if !strings.Contains(got, want) {
+		t.Fatalf("gaps: %s", got)
 	}
 }
 
@@ -177,17 +187,15 @@ func TestPlayFileSeeksAndReuses(t *testing.T) {
 	if _, err := os.Stat(argsPath); err == nil {
 		t.Fatal("a second resume at the same point started another encode")
 	}
+	// Start over keeps the copy: fill segments cover what is before it, and
+	// a second viewer at 40 s plays on.
 	if _, err := h.PlayFile(7, path, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
 	}
-	args, err = os.ReadFile(argsPath)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(argsPath); err == nil {
+		t.Fatal("start over replaced the copy")
 	}
-	if strings.Contains(string(args), "-ss") {
-		t.Fatalf("start over sought: %s", args)
-	}
-	if got := FileOffset(filepath.Join(dir, "file", "7")); got != 0 {
+	if got := FileOffset(filepath.Join(dir, "file", "7")); got != 40 {
 		t.Fatalf("start over offset %v", got)
 	}
 }

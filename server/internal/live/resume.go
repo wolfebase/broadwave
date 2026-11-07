@@ -89,8 +89,9 @@ func filePlaylistCovers(dir string, at float64) bool {
 	if from < resumeMin {
 		from = 0
 	}
+	// Before the start, fill segments cover it.
 	if from > at+0.05 {
-		return false
+		return fillable(from)
 	}
 	path := filepath.Join(dir, "index.m3u8")
 	if playlistEnded(path) {
@@ -138,15 +139,15 @@ func fileSpan(path string) float64 {
 }
 
 // OffsetPlaylist puts a resume on the recording's clock. The encode input-seeks,
-// so its first segment is that many seconds in. Gap segments cover the part
-// that was not encoded, and playback starts at the resume point. The player's
-// seek to that time then lands on the first real segment. A zero offset leaves
-// the playlist as ffmpeg wrote it.
+// so its first segment is that many seconds in. Fill segments cover the part
+// before it, made when a player asks (gap segments for a copy that started off
+// the two-second grid), and playback starts at the resume point. A zero offset
+// leaves the playlist as ffmpeg wrote it.
 func OffsetPlaylist(body []byte, offset float64) []byte {
 	if offset < 0.05 || !bytes.Contains(body, []byte("#EXTINF:")) {
 		return body
 	}
-	if bytes.Contains(body, []byte("#EXT-X-START:")) && bytes.Contains(body, []byte("gap00000.ts")) {
+	if bytes.Contains(body, []byte("#EXT-X-START:")) && (bytes.Contains(body, []byte("gap00000.ts")) || bytes.Contains(body, []byte(fillName(0)))) {
 		return body
 	}
 	text := strings.ReplaceAll(string(body), "\r\n", "\n")
@@ -163,7 +164,10 @@ func OffsetPlaylist(body []byte, offset float64) []byte {
 			head = append(head, line)
 		}
 	}
-	head = withPlaylistVersion(head, 8)
+	fill := fillable(offset)
+	if !fill {
+		head = withPlaylistVersion(head, 8)
+	}
 	head = insertStartTag(head, offset)
 	var b strings.Builder
 	for _, line := range head {
@@ -173,7 +177,13 @@ func OffsetPlaylist(body []byte, offset float64) []byte {
 		b.WriteString(line)
 		b.WriteByte('\n')
 	}
-	writeGaps(&b, offset)
+	if fill {
+		for n := 0; 2*n < int(offset+0.5); n++ {
+			fmt.Fprintf(&b, "#EXTINF:2.000,\n%s\n", fillName(n))
+		}
+	} else {
+		writeGaps(&b, offset)
+	}
 	for _, line := range tail {
 		b.WriteString(line)
 		b.WriteByte('\n')

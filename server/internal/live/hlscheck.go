@@ -237,10 +237,10 @@ func (pl mediaPlaylist) issues(dir string) []PlaylistIssue {
 		if s.pdt != "" && !rfc3339Date(s.pdt) {
 			out = append(out, PlaylistIssue{Rule: "date", Detail: s.pdt})
 		}
-		if i > 0 && gapURI(pl.segs[i-1].uri) && !gapURI(s.uri) && !s.discont {
+		if i > 0 && onDemandURI(pl.segs[i-1].uri) && !onDemandURI(s.uri) && !s.discont {
 			out = append(out, PlaylistIssue{Rule: "discontinuity", Detail: "missing after a gap"})
 		}
-		if dir != "" && !gapURI(s.uri) && !segmentReady(dir, s.uri) {
+		if dir != "" && !onDemandURI(s.uri) && !segmentReady(dir, s.uri) {
 			out = append(out, PlaylistIssue{Rule: "file", Detail: s.uri})
 		}
 	}
@@ -278,7 +278,7 @@ func normalizeRecording(pl mediaPlaylist, dir string, hold int) (mediaPlaylist, 
 		if i == 0 {
 			s.discont = false
 		}
-		if dir != "" && !gapURI(s.uri) && !segmentReady(dir, s.uri) {
+		if dir != "" && !onDemandURI(s.uri) && !segmentReady(dir, s.uri) {
 			pl.ended = false
 			break
 		}
@@ -297,7 +297,7 @@ func normalizeRecording(pl mediaPlaylist, dir string, hold int) (mediaPlaylist, 
 		return mediaPlaylist{}, false
 	}
 	for i := 1; i < len(segs); i++ {
-		if gapURI(segs[i-1].uri) && !gapURI(segs[i].uri) {
+		if onDemandURI(segs[i-1].uri) && !onDemandURI(segs[i].uri) {
 			segs[i].discont = true
 		}
 	}
@@ -348,7 +348,7 @@ func mergeRecording(prev, cur mediaPlaylist, dir string) (mediaPlaylist, bool) {
 		if s.uri == "" || s.dur <= 0 {
 			break
 		}
-		if dir != "" && !gapURI(s.uri) && !segmentReady(dir, s.uri) {
+		if dir != "" && !onDemandURI(s.uri) && !segmentReady(dir, s.uri) {
 			break
 		}
 		if extinfExceeds(s.dur, out.target) {
@@ -367,7 +367,7 @@ func mergeRecording(prev, cur mediaPlaylist, dir string) (mediaPlaylist, bool) {
 			}
 		}
 		s.pdt = canonicalDate(s.pdt)
-		if n := len(out.segs); n > 0 && gapURI(out.segs[n-1].uri) && !gapURI(s.uri) {
+		if n := len(out.segs); n > 0 && onDemandURI(out.segs[n-1].uri) && !onDemandURI(s.uri) {
 			s.discont = true
 		}
 		if len(out.segs) == 0 {
@@ -399,7 +399,7 @@ func mergeRecording(prev, cur mediaPlaylist, dir string) (mediaPlaylist, bool) {
 
 func hasRealSegment(segs []mediaSeg) bool {
 	for _, s := range segs {
-		if s.uri != "" && !s.gap && !gapURI(s.uri) {
+		if s.uri != "" && !s.gap && !onDemandURI(s.uri) {
 			return true
 		}
 	}
@@ -585,6 +585,17 @@ func segmentKind(uri string) string {
 	default:
 		return ""
 	}
+}
+
+// onDemandURI is a segment that is not a file the encode wrote: a gap, or a
+// fill segment made when a player asks for it.
+func onDemandURI(uri string) bool {
+	return gapURI(uri) || fillURI(uri)
+}
+
+func fillURI(uri string) bool {
+	base := filepath.Base(strings.SplitN(uri, "?", 2)[0])
+	return strings.HasPrefix(base, "fill") && strings.HasSuffix(strings.ToLower(base), ".ts")
 }
 
 func gapURI(uri string) bool {

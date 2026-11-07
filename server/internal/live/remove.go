@@ -22,6 +22,7 @@ import (
 func (h *Hub) RemoveRecordingFiles(rec store.Recording) error {
 	defer h.lockFileStart(rec.ID)()
 	h.stopFileEncode(rec.ID)
+	h.stopFill(rec.ID)
 	h.forgetFileCopy(rec.ID)
 	h.stopRecordingReaders(rec.ID, filepath.Dir(rec.Path))
 	root := h.Recordings()

@@ -714,7 +714,9 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	gap := strings.HasPrefix(name, "gap") && strings.HasSuffix(name, ".ts")
-	if name != "index.m3u8" && name != "captions.vtt" && !gap && !(strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".ts")) {
+	fill, fillErr := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(name, "fill"), ".ts"))
+	isFill := strings.HasPrefix(name, "fill") && strings.HasSuffix(name, ".ts") && fillErr == nil
+	if name != "index.m3u8" && name != "captions.vtt" && !gap && !isFill && !(strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".ts")) {
 		http.NotFound(w, r)
 		return
 	}
@@ -722,7 +724,25 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if recID, err := strconv.ParseInt(id, 10, 64); err == nil {
+	recID, idErr := strconv.ParseInt(id, 10, 64)
+	if isFill {
+		// The stretch before a resume, encoded when a player asks for it. One
+		// that can't be made in time is empty packets, as a gap is.
+		var made string
+		if idErr == nil {
+			made = s.Hub.FillSegment(recID, fill)
+		}
+		if made == "" {
+			w.Header().Set("Content-Type", "video/mp2t")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write(nullPackets())
+			return
+		}
+		w.Header().Set("Cache-Control", "no-cache")
+		http.ServeFile(w, r, made)
+		return
+	}
+	if idErr == nil {
 		s.Hub.FileRequested(recID)
 	}
 	path := filepath.Join(s.Hub.Dir, "file", id, filepath.Base(name))

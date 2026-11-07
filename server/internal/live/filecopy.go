@@ -119,6 +119,8 @@ func (h *Hub) forgetFileCopy(id int64) {
 	delete(h.fileSeen, id)
 	delete(h.fileSoft, id)
 	delete(h.fileList, dir)
+	delete(h.fillSrc, id)
+	delete(h.fillSeen, id)
 	h.playMu.Unlock()
 }
 
@@ -201,8 +203,10 @@ func (h *Hub) SweepFileCopies(now time.Time) {
 		dir := filepath.Join(root, entry.Name())
 		c := fileCopy{id: id, dir: dir, size: copyBytes(dir), last: info.ModTime()}
 		h.playMu.Lock()
-		if seen := h.fileSeen[id]; seen.After(c.last) {
-			c.last = seen
+		for _, seen := range []time.Time{h.fileSeen[id], h.fillSeen[id]} {
+			if seen.After(c.last) {
+				c.last = seen
+			}
 		}
 		h.playMu.Unlock()
 		copies = append(copies, c)
@@ -247,7 +251,7 @@ func fileCopiesLimit(root string, total uint64) uint64 {
 func (h *Hub) removeFileCopy(c fileCopy) bool {
 	defer h.lockFileStart(c.id)()
 	h.playMu.Lock()
-	busy := h.fileEnc[c.id] != nil || h.fileSeen[c.id].After(c.last)
+	busy := h.fileEnc[c.id] != nil || h.fillRuns[c.id] != nil || h.fileSeen[c.id].After(c.last) || h.fillSeen[c.id].After(c.last)
 	h.playMu.Unlock()
 	if busy {
 		return false

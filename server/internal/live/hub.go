@@ -263,6 +263,13 @@ type Hub struct {
 	fileSoft map[int64]bool
 	// fileSeen is when a player last asked for a recording's copy.
 	fileSeen map[int64]time.Time
+	// fillSrc is how to encode the stretch before a copy's start, fillRuns the
+	// encode writing it, fillSeen when a player last asked for it, and
+	// fillLock holds one decision about a recording's fill at a time.
+	fillSrc  map[int64]fillSource
+	fillRuns map[int64]*fillRun
+	fillSeen map[int64]time.Time
+	fillLock map[int64]*sync.Mutex
 	// fileReaders is the scans reading a recording's file.
 	fileReaders map[int64][]*fileReader
 	// fileClosed is set by Shutdown. The HTTP server is still up then, and a

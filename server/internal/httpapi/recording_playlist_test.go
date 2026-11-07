@@ -134,7 +134,8 @@ func TestResumePlaylistKeepsTheRecordingClock(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(playDir, "index.m3u8"), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(playDir, "offset.txt"), []byte("4.000\n"), 0o644); err != nil {
+	// Off the two-second grid: a copy made before fill segments keeps its gaps.
+	if err := os.WriteFile(filepath.Join(playDir, "offset.txt"), []byte("5.000\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"seg00000.ts", "seg00001.ts"} {
@@ -149,14 +150,14 @@ func TestResumePlaylistKeepsTheRecordingClock(t *testing.T) {
 		t.Fatal(rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "#EXT-X-START:TIME-OFFSET=4.000,PRECISE=YES\n") {
+	if !strings.Contains(body, "#EXT-X-START:TIME-OFFSET=5.000,PRECISE=YES\n") {
 		t.Fatalf("start: %s", body)
 	}
 	first := "#EXT-X-PROGRAM-DATE-TIME:2026-10-05T01:26:54.000Z\n#EXT-X-GAP\n#EXTINF:2.000,\ngap00000.ts\n"
 	if !strings.Contains(body, first) {
 		t.Fatalf("gap date: %s", body)
 	}
-	real := "#EXT-X-PROGRAM-DATE-TIME:2026-10-05T01:26:58.000Z\n#EXTINF:2.000,\nseg00000.ts\n"
+	real := "#EXT-X-PROGRAM-DATE-TIME:2026-10-05T01:26:59.000Z\n#EXTINF:2.000,\nseg00000.ts\n"
 	if !strings.Contains(body, real) {
 		t.Fatalf("resume date: %s", body)
 	}

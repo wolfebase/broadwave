@@ -223,28 +223,36 @@ func (h *Hub) playRecording(id int64, job *fileJob, at float64) (string, error) 
 	stamp := graphStamp(job.graph)
 	playlist := filepath.Join(dir, "index.m3u8")
 	url := fmt.Sprintf("/media/file/%d/index.m3u8", id)
+	reused := func() (string, error) {
+		h.setFillSource(id, fillSource{path: job.path, graph: job.graph, offset: FileOffset(dir)})
+		return url, nil
+	}
 	if playlistFresh(dir, stamp) && playlistSound(dir) && filePlaylistCovers(dir, at) {
 		if playlistEnded(playlist) {
-			return url, nil
+			return reused()
 		}
 		h.playMu.Lock()
 		running := h.fileEnc[id] != nil
 		prev := h.fileJobs[id]
 		h.playMu.Unlock()
 		if running {
-			return url, nil
+			return reused()
 		}
 		if prev != nil && prev.path == job.path && prev.clock.safe(prev.follow) {
 			h.carryOn(id, dir, prev)
-			return url, nil
+			return reused()
 		}
 	}
 	h.stopFileEncode(id)
+	h.stopFill(id)
 	_ = os.RemoveAll(dir)
 	h.forgetRecordingPlaylist(dir)
+	h.setFillSource(id, fillSource{})
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
+	// The copy starts on the two-second grid, so what is before it can be filled.
+	at = gridStart(at)
 	if err := writeFileOffset(dir, at); err != nil {
 		return "", err
 	}
@@ -294,8 +302,9 @@ func (h *Hub) playRecording(id int64, job *fileJob, at float64) (string, error) 
 			slog.Warn(fmt.Sprintf("recording %d did not start on the processor either, so the GPU was not the cause.", id))
 		}
 		h.setFileSoft(id, false)
+		return url, err
 	}
-	return url, err
+	return reused()
 }
 
 // runFileEncode starts one ffmpeg writing the recording's playlist in dir. A
@@ -573,6 +582,7 @@ func (h *Hub) stopFileEncodes() {
 	for _, id := range ids {
 		h.stopFileEncode(id)
 	}
+	h.stopFills()
 }
 
 // stopFileEncode kills the ffmpeg writing this recording and waits until it
