@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,10 +18,12 @@ func (s *Server) reception(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid channel", http.StatusBadRequest)
 		return
 	}
+	// A tuner whose status can't be read is the stall this is asked about.
+	// That is an answer: no free tuner we know of, and tunerAnswers says why.
 	free, err := s.tunerIsFree(r.Context())
 	if err != nil {
-		writeError(w, err)
-		return
+		slog.Debug("reception: tuner status: " + err.Error())
+		free = false
 	}
 	answers, emulator, err := s.tunerAnswers(r.Context())
 	if err != nil {

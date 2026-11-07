@@ -1720,7 +1720,9 @@ export interface paths {
         /**
          * Why a picture stalled, without tuner inventory.
          * @description Whether a tuner is free, whether a tuner answered, and whether this channel's signal is lost.
-         *     Tuner addresses, firmware, and frequency stay on the admin routes.
+         *     Tuner addresses, firmware, and frequency stay on the admin routes. Any paired screen can read it,
+         *     so a stall on a Watch token can tell a silent tuner from a lost signal and notice when it comes back.
+         *     A tuner that doesn't answer is a 200 with `tunerAnswers` false, not an error.
          */
         get: operations["channelReception"];
         put?: never;
@@ -2590,7 +2592,7 @@ export interface components {
             layout: "auto" | "desktop" | "tv" | "phone";
         };
         Reception: {
-            /** @description A tuner has no channel on it. */
+            /** @description A tuner has no channel on it. False when no tuner's status can be read. */
             freeTuner: boolean;
             /** @description An HDHomeRun or an HDHomeRun emulator answered, or this house has none. An emulator has no tuner status; it answers when its discover.json does. */
             tunerAnswers: boolean;
