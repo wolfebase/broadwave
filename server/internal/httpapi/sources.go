@@ -552,6 +552,15 @@ func (s *Server) setKeep(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) skipAiring(w http.ResponseWriter, r *http.Request) {
+	s.changeSkip(w, r, s.Store.SkipAiring)
+}
+
+func (s *Server) unskipAiring(w http.ResponseWriter, r *http.Request) {
+	s.changeSkip(w, r, s.Store.UnskipAiring)
+}
+
+// changeSkip reads an airing the way the planner names it and changes its skip row.
+func (s *Server) changeSkip(w http.ResponseWriter, r *http.Request, change func(ctx context.Context, key, starts string) error) {
 	var body struct {
 		ProgramID string `json:"programId"`
 		Title     string `json:"title"`
@@ -582,7 +591,7 @@ func (s *Server) skipAiring(w http.ResponseWriter, r *http.Request) {
 			key = dvr.ManualSkipKey(pass.ID)
 		}
 	}
-	if err := s.Store.SkipAiring(r.Context(), key, start); err != nil {
+	if err := change(r.Context(), key, start); err != nil {
 		writeError(w, err)
 		return
 	}

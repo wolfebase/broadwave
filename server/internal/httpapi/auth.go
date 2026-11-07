@@ -306,7 +306,7 @@ func recordScope(method, path string) (string, bool) {
 	}
 	if method == http.MethodPost {
 		switch path {
-		case "/recordings", "/schedule/skip", "/schedule/fix", "/passes", "/passes/preview", "/virtuals":
+		case "/recordings", "/schedule/skip", "/schedule/unskip", "/schedule/fix", "/passes", "/passes/preview", "/virtuals":
 			return store.ScopeRecord, true
 		}
 		if _, action, ok := recordingAction(path); ok {

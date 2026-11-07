@@ -1171,6 +1171,11 @@ func (s *Store) SkipAiring(ctx context.Context, key, starts string) error {
 	return err
 }
 
+func (s *Store) UnskipAiring(ctx context.Context, key, starts string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM skipped_airings WHERE program_key = ? AND starts_at = ?`, key, starts)
+	return err
+}
+
 func (s *Store) Skips(ctx context.Context) (map[string]bool, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT program_key, starts_at FROM skipped_airings`)
 	if err != nil {

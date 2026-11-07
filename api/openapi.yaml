@@ -1744,6 +1744,34 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }
+  /schedule/unskip:
+    post:
+      tags: [dvr]
+      operationId: unskipAiring
+      description: Takes back a skip, so the rule that wanted the airing records it. Naming an airing with no skip is fine. Adding a one-time pass for an airing does this too.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start]
+              properties:
+                programId: { type: string }
+                title: { type: string }
+                subtitle: { type: string }
+                channelId: { type: integer, format: int64 }
+                passId:
+                  type: integer
+                  format: int64
+                  description: The planned item's passId, as sent to /schedule/skip.
+                start:
+                  type: string
+                  format: date-time
+                  description: As sent to /schedule/skip. A missing or unreadable time is 400.
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
   /schedule/fix:
     post:
       tags: [dvr]
