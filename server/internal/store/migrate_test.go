@@ -215,3 +215,17 @@ func TestWaitsTableGetsToldAfterTheFirstForm(t *testing.T) {
 		t.Fatalf("waits %+v %v", waits, err)
 	}
 }
+
+// A database that ran the edited 0045 already has the column. It must still start.
+func TestWaitsTableMigratesWhenToldIsThere(t *testing.T) {
+	st := openTestStore(t)
+	if _, err := st.db.ExecContext(context.Background(), `DELETE FROM schema_migrations WHERE version >= 46`); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(st.db); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RecordingWaits(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}

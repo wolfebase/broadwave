@@ -2522,8 +2522,9 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 
 // RecordIfFree is RecordMeta for a recording past its start window, trying
 // again on a clock. It takes a free tuner or a frequency already tuned, and
-// disturbs nothing: no viewer stopped, no scan or sweep, no room made on the
-// disk. A viewer who got a tuner first was given no warning, and keeps it.
+// stops nothing: no viewer, scan, or sweep. A viewer who got a tuner first was
+// given no warning, and keeps it. Room on the disk is made only once a tuner is
+// free, so a try that can't start removes no recording.
 func (h *Hub) RecordIfFree(ctx context.Context, minutes int, meta store.Recording) (store.Recording, error) {
 	ch, err := h.Store.SourceChannel(ctx, meta.ChannelID)
 	if err != nil {

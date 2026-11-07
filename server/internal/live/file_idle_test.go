@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -547,6 +548,107 @@ func TestACarryOnAtTheEndRunsNoEncode(t *testing.T) {
 	awaitEncode(t, h, 7, false)
 	h.FileRequested(7)
 	playlist := filepath.Join(dir, "file", "7", "index.m3u8")
+	deadline := time.Now().Add(3 * time.Second)
+	for !playlistEnded(playlist) {
+		if time.Now().After(deadline) {
+			t.Fatal("the list never ended")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	raw, _ := os.ReadFile(starts)
+	if n := strings.Count(string(raw), "x"); n != 1 {
+		t.Fatalf("%d encodes", n)
+	}
+}
+
+// Back out of a game in progress, the game finishes, press play. The copy only
+// read as far as it had fed, so that is not the end of the file: the rest of the
+// game still has to encode. The list used to close there.
+func TestACarryOnAfterAGameFinishedPlaysTheRest(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	starts := filepath.Join(dir, "starts")
+	pids := filepath.Join(dir, "pids")
+	second := filepath.Join(dir, "second.bin")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho x >> " + starts + "\necho $$ >> " + pids + "\n" +
+		"if [ -f index.m3u8 ]; then\nexec cat > " + second + "\nfi\n" +
+		"printf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:7.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nexec cat > /dev/null\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { killPids(pids) })
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 8)
+	var on atomic.Bool
+	on.Store(true)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 500 * time.Millisecond, FFmpeg: bin}
+	t.Cleanup(h.stopFileEncodes)
+	if _, err := h.PlayFollow(8, rec, "mpeg2video", "broadcast", "progressive", 0, on.Load); err != nil {
+		t.Fatal(err)
+	}
+	awaitEncode(t, h, 8, false)
+	// The copy notices within a moment. Bytes after that, it never read.
+	time.Sleep(time.Second)
+	// The game goes on after the copy stopped, then finishes.
+	f, err := os.OpenFile(rec, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for s := uint64(8); s < 60; s++ {
+		if _, err := f.Write(pcrTS(0x100, s*90000)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = f.Close()
+	on.Store(false)
+	if _, err := h.PlayFile(8, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+		t.Fatal(err)
+	}
+	playlist := filepath.Join(dir, "file", "8", "index.m3u8")
+	if playlistEnded(playlist) {
+		t.Fatal("the list closed with the rest of the game unplayed")
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		info, err := os.Stat(second)
+		if err == nil && info.Size() == 53*188 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("second copy: %v %v, want the rest of the game", info, err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if playlistEnded(playlist) {
+		t.Fatal("an encode that wrote nothing closed the list with show left")
+	}
+}
+
+// A follow copy that fed the whole finished file has no more to encode either.
+func TestAFollowThatReadTheWholeFileClosesTheList(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	starts := filepath.Join(dir, "starts")
+	pids := filepath.Join(dir, "pids")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho x >> " + starts + "\necho $$ >> " + pids + "\n" +
+		"printf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:7.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nexec cat > /dev/null\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { killPids(pids) })
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 8)
+	var on atomic.Bool
+	on.Store(true)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 500 * time.Millisecond, FFmpeg: bin}
+	t.Cleanup(h.stopFileEncodes)
+	if _, err := h.PlayFollow(8, rec, "mpeg2video", "broadcast", "progressive", 0, on.Load); err != nil {
+		t.Fatal(err)
+	}
+	awaitEncode(t, h, 8, false)
+	on.Store(false)
+	h.FileRequested(8)
+	playlist := filepath.Join(dir, "file", "8", "index.m3u8")
 	deadline := time.Now().Add(3 * time.Second)
 	for !playlistEnded(playlist) {
 		if time.Now().After(deadline) {

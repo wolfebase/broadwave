@@ -149,6 +149,18 @@ func (c *fileClock) end() float64 {
 	return c.base + float64(c.elapsed)/90000
 }
 
+// readTo reports a clock that has read path to its end, not just as far as a
+// follow copy got. Less than a packet can be left over.
+func (c *fileClock) readTo(path string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.complete {
+		return true
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.Size()-c.next < 188
+}
+
 // before is the last mark at or before at.
 func (c *fileClock) before(at float64) (clockMark, bool) {
 	c.mu.Lock()

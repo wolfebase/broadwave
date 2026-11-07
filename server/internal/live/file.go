@@ -346,8 +346,9 @@ func (h *Hub) carryOn(id int64, dir string, job *fileJob) {
 		g.Carry = span
 	}
 	// ffmpeg seeking this close to the end can find no picture, and still lists a
-	// segment. The clock has read this far, so there is nothing left to encode.
-	if g.Carry > 0 && (job.still == nil || !job.still()) && at >= job.clock.end()-resumeMin {
+	// segment. The clock has read the whole file, so there is nothing left to
+	// encode. A follow clock stops where its copy stopped, which may not be the end.
+	if g.Carry > 0 && (job.still == nil || !job.still()) && job.clock.readTo(job.path) && at >= job.clock.end()-resumeMin {
 		closePlaylist(playlist)
 		h.forgetFileJob(id, job)
 		return
@@ -407,7 +408,7 @@ func (h *Hub) fileEncodeEnded(id int64, dir string, job *fileJob, at float64, be
 		return
 	}
 	growing := job.still != nil && job.still()
-	if before > 0 && !growing && at >= job.clock.end()-fileEndMargin {
+	if before > 0 && !growing && job.clock.readTo(job.path) && at >= job.clock.end()-fileEndMargin {
 		closePlaylist(playlist)
 		h.forgetFileJob(id, job)
 		return
