@@ -1,6 +1,8 @@
 package breaks
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -8,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func blackLog(spans ...[2]float64) string {
@@ -140,7 +143,7 @@ func TestComskipWritesItsEDLOutsideTheRecordings(t *testing.T) {
 	if err := os.WriteFile(path, []byte("ts"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, ok := comskipBreaks(path)
+	got, ok := comskipBreaks(context.Background(), path)
 	if !ok || len(got) != 2 || got[0] != (Break{Start: 129.11, End: 256.31}) || got[1] != (Break{Start: 1500.5, End: 1620}) {
 		t.Fatalf("breaks %v ok %v", got, ok)
 	}
@@ -156,7 +159,36 @@ func TestComskipThatFailsFallsBack(t *testing.T) {
 	if err := os.WriteFile(path, []byte("ts"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := comskipBreaks(path); ok {
+	if got, ok := comskipBreaks(context.Background(), path); ok {
 		t.Fatalf("a failed comskip gave %v", got)
+	}
+}
+
+// A scan of a recording someone deleted stops when asked, and says it was stopped.
+func TestAScanStopsWhenItsContextEnds(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexec sleep 60\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "show.ts")
+	if err := os.WriteFile(path, make([]byte, 188), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := Index(ctx, bin, path, nil)
+		done <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("err %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the scan kept going")
 	}
 }

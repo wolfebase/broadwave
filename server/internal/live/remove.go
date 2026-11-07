@@ -17,11 +17,13 @@ import (
 // a file that is already gone is not an error.
 // Its playback encode stops first: an ffmpeg still reading the file would
 // write into the work folder after it goes, and on a FUSE share (Unraid's
-// /mnt/user) the open file keeps its season folder from emptying.
+// /mnt/user) the open file keeps its season folder from emptying. A scan
+// reading the file stops too, and if it outlasts the wait its end prunes the folder.
 func (h *Hub) RemoveRecordingFiles(rec store.Recording) error {
 	defer h.lockFileStart(rec.ID)()
 	h.stopFileEncode(rec.ID)
 	h.forgetFileCopy(rec.ID)
+	h.stopRecordingReaders(rec.ID, filepath.Dir(rec.Path))
 	root := h.Recordings()
 	workDir := h.Dir
 	if err := removeInside(root, rec.Path); err != nil {

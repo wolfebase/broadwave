@@ -1,6 +1,7 @@
 package breaks
 
 import (
+	"context"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -119,7 +120,7 @@ func TestScanFindsABreakInARecording(t *testing.T) {
 	if out, err := exec.Command("ffmpeg", args...).CombinedOutput(); err != nil {
 		t.Fatalf("make clip: %v %s", err, out)
 	}
-	cues, err := Scan("", path)
+	cues, err := Scan(context.Background(), "", path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +290,7 @@ func TestScanWithoutSound(t *testing.T) {
 		"-c:v", "libx264", "-preset", "ultrafast", "-f", "mpegts", path).CombinedOutput(); err != nil {
 		t.Fatalf("make clip: %v %s", err, out)
 	}
-	cues, err := Scan("", path)
+	cues, err := Scan(context.Background(), "", path)
 	if err != nil || cues.Length < 19 {
 		t.Fatalf("%v %v", cues.Length, err)
 	}

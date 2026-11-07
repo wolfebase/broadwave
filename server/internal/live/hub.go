@@ -260,6 +260,8 @@ type Hub struct {
 	fileJobs map[int64]*fileJob
 	// fileSeen is when a player last asked for a recording's copy.
 	fileSeen map[int64]time.Time
+	// fileReaders is the scans reading a recording's file.
+	fileReaders map[int64][]*fileReader
 	// fileIdle replaces fileIdleAfter in a test.
 	fileIdle time.Duration
 	ringSeq  int

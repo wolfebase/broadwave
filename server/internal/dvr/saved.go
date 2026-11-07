@@ -95,7 +95,7 @@ func IndexBreaks(ctx context.Context, st *store.Store, ffmpeg string, rec store.
 	for i, sp := range library {
 		known[i] = breaks.Spot{Prints: sp.Prints, Start: -1}
 	}
-	res, err := indexFile(ffmpeg, rec.Path, known)
+	res, err := indexFile(ctx, ffmpeg, rec.Path, known)
 	if err != nil {
 		return nil, err
 	}

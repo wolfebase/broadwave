@@ -76,9 +76,13 @@ type libraryRead struct {
 // NewBreakQueue scans with the hub's ffmpeg and waits while anyone watches.
 func NewBreakQueue(st *store.Store, hub *live.Hub) *BreakQueue {
 	q := newBreakQueue(st, func(ctx context.Context, rec store.Recording) error {
+		ctx, release := hub.ReadingRecording(ctx, rec.ID)
+		defer release()
 		_, err := IndexBreaks(ctx, st, hub.FFmpeg, rec, true)
 		return err
 	}, func(ctx context.Context, rec store.Recording) error {
+		ctx, release := hub.ReadingRecording(ctx, rec.ID)
+		defer release()
 		return FindEpisodeEnds(ctx, st, hub.FFmpeg, rec)
 	}, hub.Watching)
 	q.root = hub.Recordings()
@@ -195,6 +199,10 @@ func (q *BreakQueue) Run(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
+			// Deleted while it was read. There is nothing left to scan.
+			if errors.Is(err, context.Canceled) {
+				continue
+			}
 			slog.Warn(fmt.Sprintf("breaks: %s: %v", rec.Title, err))
 			// A share that was away or an ffmpeg that was stopped gets
 			// another try at the next backfill; a file that fails three
@@ -225,7 +233,7 @@ func (q *BreakQueue) work(ctx context.Context, rec store.Recording, scan, listen
 			_ = q.st.MarkBreaksScanned(ctx, rec.ID)
 		}
 	}
-	if listen && q.listen != nil && ctx.Err() == nil {
+	if listen && q.listen != nil && ctx.Err() == nil && !errors.Is(errors.Join(errs...), context.Canceled) {
 		errs = append(errs, q.listen(ctx, rec))
 	}
 	return errors.Join(errs...)

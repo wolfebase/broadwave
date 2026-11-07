@@ -28,16 +28,20 @@ type Result struct {
 // Index finds a recording's breaks with comskip, when it is installed, and
 // with its own scan, and scores each break by how well the two agree. Known
 // spots, and the spots of its own sure breaks, mark breaks where they play
-// again. It does not modify the file.
-func Index(ffmpeg, path string, known []Spot) (Result, error) {
+// again. It does not modify the file. Ending ctx stops the ffmpeg and comskip
+// reading it.
+func Index(ctx context.Context, ffmpeg, path string, known []Spot) (Result, error) {
 	if _, err := os.Stat(path); err != nil {
 		return Result{}, err
 	}
-	cues, err := Scan(ffmpeg, path)
+	cues, err := Scan(ctx, ffmpeg, path)
 	if err != nil {
 		return Result{}, err
 	}
-	skipped, ok := comskipBreaks(path)
+	skipped, ok := comskipBreaks(ctx, path)
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
+	}
 	return score(cues, known, skipped, ok), nil
 }
 
@@ -161,23 +165,23 @@ func scanArgs(path string, sound bool) []string {
 // Scan reads a recording's cues with ffmpeg at low priority: it runs when a
 // recording ends, maybe while others play. A recording with no sound track
 // is read for its picture alone.
-func Scan(ffmpeg, path string) (Cues, error) {
-	c, err := scan(ffmpeg, path, true)
+func Scan(ctx context.Context, ffmpeg, path string) (Cues, error) {
+	c, err := scan(ctx, ffmpeg, path, true)
 	if err != nil && errors.Is(err, errNoSound) {
-		return scan(ffmpeg, path, false)
+		return scan(ctx, ffmpeg, path, false)
 	}
 	return c, err
 }
 
 var errNoSound = errors.New("no sound track")
 
-func scan(ffmpeg, path string, sound bool) (Cues, error) {
+func scan(ctx context.Context, ffmpeg, path string, sound bool) (Cues, error) {
 	if ffmpeg == "" {
 		ffmpeg = "ffmpeg"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), scanLimit)
+	limit, cancel := context.WithTimeout(ctx, scanLimit)
 	defer cancel()
-	cmd := lowPriority(ctx, ffmpeg, scanArgs(path, sound))
+	cmd := lowPriority(limit, ffmpeg, scanArgs(path, sound))
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return Cues{}, err
@@ -202,6 +206,9 @@ func scan(ffmpeg, path string, sound bool) (Cues, error) {
 	_, _ = io.Copy(io.Discard, out)
 	<-logged
 	if err := cmd.Wait(); err != nil {
+		if ctx.Err() != nil {
+			return Cues{}, ctx.Err()
+		}
 		if sound && tail.noSound {
 			return Cues{}, errNoSound
 		}
@@ -232,7 +239,7 @@ var comskipLimit = 2 * time.Hour
 // comskipBreaks runs comskip with its output in a temporary folder, so the
 // recordings folder gets no logo, log, or .txt files. It runs at low priority
 // on two threads.
-func comskipBreaks(path string) ([]Break, bool) {
+func comskipBreaks(ctx context.Context, path string) ([]Break, bool) {
 	exe, err := exec.LookPath("comskip")
 	if err != nil {
 		return nil, false
@@ -246,9 +253,9 @@ func comskipBreaks(path string) ([]Break, bool) {
 	if err := os.WriteFile(ini, []byte(comskipINI), 0o600); err != nil {
 		return nil, false
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), comskipLimit)
+	limit, cancel := context.WithTimeout(ctx, comskipLimit)
 	defer cancel()
-	cmd := lowPriority(ctx, exe, []string{"--quiet", "--threads=2", "--ini=" + ini, "--output=" + dir, path})
+	cmd := lowPriority(limit, exe, []string{"--quiet", "--threads=2", "--ini=" + ini, "--output=" + dir, path})
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

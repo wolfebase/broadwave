@@ -1,6 +1,7 @@
 package breaks
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -436,7 +437,7 @@ func TestSyntheticBroadcastScoresSignals(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "broadcast.ts")
 	writeBroadcast(t, path, b)
 	started := time.Now()
-	cues, err := Scan("", path)
+	cues, err := Scan(context.Background(), "", path)
 	elapsed := time.Since(started)
 	if err != nil {
 		t.Fatal(err)

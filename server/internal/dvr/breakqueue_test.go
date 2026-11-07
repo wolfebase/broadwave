@@ -8,12 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
 	"broadwave/internal/breaks"
+	"broadwave/internal/live"
 	"broadwave/internal/store"
 )
 
@@ -672,4 +676,79 @@ func dirListing(t *testing.T, root string) []string {
 	}
 	slices.Sort(names)
 	return names
+}
+
+// Stop a long recording, delete it straight away: the scan ffmpeg used to read
+// the deleted file to its end, and on a share kept its folder from emptying.
+func TestDeletingARecordingStopsItsScanAndEmptiesTheFolder(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "pid")
+	bin := filepath.Join(dir, "ffmpeg")
+	script := "#!/bin/sh\necho $$ > " + pidFile + "\nexec sleep 60\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hub := live.New(st, t.TempDir(), bin, "libx264")
+	t.Cleanup(hub.Shutdown)
+	folder := filepath.Join(hub.Recordings(), "TV", "Game")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(folder, "Game - 2026-10-08 - 1730.ts")
+	if err := os.WriteFile(path, make([]byte, 188*8), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.CreateRecording(ctx, store.Recording{Title: "Game", Path: path, Status: "complete", StartedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := st.Recording(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queue := NewBreakQueue(st, hub)
+	queue.busy = func() bool { return false }
+	go queue.Run(ctx)
+
+	var pid int
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		raw, _ := os.ReadFile(pidFile)
+		pid, _ = strconv.Atoi(strings.TrimSpace(string(raw)))
+		if pid > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the scan never started")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+
+	if err := hub.RemoveRecordingFiles(rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteRecording(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(3 * time.Second)
+	for syscall.Kill(pid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the scan still reads the deleted recording")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := os.Stat(folder); !os.IsNotExist(err) {
+		t.Fatalf("the emptied folder stayed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(hub.Recordings(), "TV")); !os.IsNotExist(err) {
+		t.Fatalf("the emptied parent stayed: %v", err)
+	}
 }

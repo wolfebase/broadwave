@@ -245,9 +245,11 @@ func (s *Server) detectBreaks(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "player is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	list, err := dvr.IndexBreaks(r.Context(), s.Store, s.Hub.FFmpeg, rec, false)
+	ctx, release := s.Hub.ReadingRecording(r.Context(), id)
+	defer release()
+	list, err := dvr.IndexBreaks(ctx, s.Store, s.Hub.FFmpeg, rec, false)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(ctx.Err(), context.Canceled) {
 			httpError(w, "recording not found", http.StatusNotFound)
 			return
 		}

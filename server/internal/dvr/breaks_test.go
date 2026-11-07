@@ -14,7 +14,9 @@ import (
 func scanFinds(t *testing.T, found ...breaks.Break) {
 	t.Helper()
 	old := indexFile
-	indexFile = func(string, string, []breaks.Spot) (breaks.Result, error) { return breaks.Result{Breaks: found}, nil }
+	indexFile = func(context.Context, string, string, []breaks.Spot) (breaks.Result, error) {
+		return breaks.Result{Breaks: found}, nil
+	}
 	t.Cleanup(func() { indexFile = old })
 }
 
@@ -75,7 +77,7 @@ func TestIndexBreaksLearnsSpots(t *testing.T) {
 	rec, _ := st.Recording(ctx, id)
 	var handed []breaks.Spot
 	old := indexFile
-	indexFile = func(_, _ string, known []breaks.Spot) (breaks.Result, error) {
+	indexFile = func(_ context.Context, _, _ string, known []breaks.Spot) (breaks.Result, error) {
 		handed = known
 		return breaks.Result{Seen: []bool{false, true}, Spots: []breaks.Spot{{Prints: []uint64{31, 32, 33}, Start: 100}}}, nil
 	}
@@ -150,7 +152,7 @@ func TestIndexBreaksSkipsItsOwnSpots(t *testing.T) {
 	rec, _ := st.Recording(ctx, id)
 	var handed []breaks.Spot
 	old := indexFile
-	indexFile = func(_, _ string, known []breaks.Spot) (breaks.Result, error) {
+	indexFile = func(_ context.Context, _, _ string, known []breaks.Spot) (breaks.Result, error) {
 		handed = known
 		return breaks.Result{}, nil
 	}
