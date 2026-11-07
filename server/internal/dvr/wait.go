@@ -61,8 +61,8 @@ func MarkWaits(items []Planned, waits []store.RecordingWait) {
 }
 
 // noteRefused keeps the retry's place. Activity hears on the second refusal: a
-// guide scan being stopped for the recording refuses the first try, and the
-// next tick starts it, so that one is not news.
+// tuner just let go, or a guide scan just stopped for the recording, can refuse
+// the first try, and the next tick starts it, so that one is not news.
 func noteRefused(ctx context.Context, st *store.Store, open map[waitKey]store.RecordingWait, pass store.Pass, air store.Airing, err error, now time.Time) {
 	key := keyOfWait(air.ChannelID, air.Start)
 	prev, known := open[key]
