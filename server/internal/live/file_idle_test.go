@@ -662,6 +662,136 @@ func TestAFollowThatReadTheWholeFileClosesTheList(t *testing.T) {
 	}
 }
 
+// gpuRefuses is an ffmpeg stand-in the GPU encoder fails on before it writes
+// anything, as a stream the GPU can't decode does. Anything else plays.
+func gpuRefuses(t *testing.T, dir string, softwareToo bool) (bin, argsLog string) {
+	t.Helper()
+	bin = filepath.Join(dir, "ffmpeg")
+	argsLog = filepath.Join(dir, "args.log")
+	pids := filepath.Join(dir, "pids.log")
+	refuse := ""
+	if softwareToo {
+		refuse = "exit 1\n"
+	}
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho \"$*\" >> " + argsLog + "\n" +
+		"case \" $* \" in\n*h264_vaapi*) exit 1 ;;\nesac\n" + refuse +
+		"echo $$ >> " + pids + "\n" +
+		"if [ ! -f index.m3u8 ]; then\nprintf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:2.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nfi\n" +
+		"case \" $* \" in\n*pipe:0*) exec cat > /dev/null ;;\nesac\nexec sleep 60\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { killPids(pids) })
+	return bin, argsLog
+}
+
+// Live moves to the processor when the GPU can't take a stream. A recording
+// used to fail, for good, with no way to play it.
+func TestARecordingTheGPUCantTakePlaysOnTheProcessor(t *testing.T) {
+	dir := t.TempDir()
+	bin, argsLog := gpuRefuses(t, dir, false)
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "h264_vaapi", DeintBroadcast: "motion_adaptive", FileIdle: 200 * time.Millisecond, FFmpeg: bin}
+	t.Cleanup(h.stopFileEncodes)
+	got, err := h.PlayFile(7, rec, "MPEG2", "broadcast", "tt", 0)
+	if err != nil {
+		t.Fatalf("the recording did not play: %v", err)
+	}
+	if got != "/media/file/7/index.m3u8" {
+		t.Fatalf("playlist %s", got)
+	}
+	lines := argLines(t, argsLog, 2)
+	if !strings.Contains(lines[0], "h264_vaapi") {
+		t.Fatalf("first try: %s", lines[0])
+	}
+	if strings.Contains(lines[1], "vaapi") || !strings.Contains(lines[1], "libx264") {
+		t.Fatalf("second try is not on the processor: %s", lines[1])
+	}
+	// A carry-on stays on the processor, and so does opening it again.
+	awaitEncode(t, h, 7, false)
+	h.FileRequested(7)
+	lines = argLines(t, argsLog, 3)
+	if strings.Contains(lines[2], "vaapi") || !strings.Contains(lines[2], "append_list") {
+		t.Fatalf("carry-on: %s", lines[2])
+	}
+	if _, err := h.PlayFile(7, rec, "MPEG2", "broadcast", "tt", 0); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(argLines(t, argsLog, 3)); n != 3 {
+		t.Fatalf("opening it again replaced the copy: %d encodes", n)
+	}
+}
+
+func TestARecordingBeingWrittenFallsBackToo(t *testing.T) {
+	// A copy at the end of the file has nothing to write, so it finds out late.
+	shortenPlayStart(t, 2*time.Second)
+	dir := t.TempDir()
+	bin, argsLog := gpuRefuses(t, dir, false)
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "h264_vaapi", DeintBroadcast: "motion_adaptive", FileIdle: time.Minute, FFmpeg: bin}
+	t.Cleanup(h.stopFileEncodes)
+	if _, err := h.PlayFollow(8, rec, "MPEG2", "broadcast", "tt", 0, func() bool { return true }); err != nil {
+		t.Fatalf("the recording did not play: %v", err)
+	}
+	lines := argLines(t, argsLog, 2)
+	if strings.Contains(lines[1], "vaapi") || !strings.Contains(lines[1], "pipe:0") {
+		t.Fatalf("second try: %s", lines[1])
+	}
+}
+
+// A file nothing can read fails: one try on each, not a loop. Pressing play again
+// is a person asking, and the GPU gets another try.
+func TestAFallbackThatFailsDoesNotLoop(t *testing.T) {
+	dir := t.TempDir()
+	bin, argsLog := gpuRefuses(t, dir, true)
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "h264_vaapi", DeintBroadcast: "motion_adaptive", FFmpeg: bin}
+	if _, err := h.PlayFile(7, rec, "MPEG2", "broadcast", "tt", 0); err == nil {
+		t.Fatal("nothing could play it, and it said it did")
+	}
+	if n := len(argLines(t, argsLog, 2)); n != 2 {
+		t.Fatalf("%d tries", n)
+	}
+	for range 5 {
+		h.FileRequested(7)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if n := len(argLines(t, argsLog, 2)); n != 2 {
+		t.Fatalf("requests started more encodes: %d", n)
+	}
+	if _, err := h.PlayFile(7, rec, "MPEG2", "broadcast", "tt", 0); err == nil {
+		t.Fatal("nothing could play it, and it said it did")
+	}
+	lines := argLines(t, argsLog, 4)
+	if !strings.Contains(lines[2], "h264_vaapi") {
+		t.Fatalf("a new press stayed off the GPU: %s", lines[2])
+	}
+}
+
+// A software encoder has nothing to fall back to.
+func TestASoftwareFailureIsNotRetried(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	starts := filepath.Join(dir, "starts")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho x >> " + starts + "\nexit 1\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "libx264", FFmpeg: bin}
+	if _, err := h.PlayFile(7, rec, "MPEG2", "broadcast", "tt", 0); err == nil {
+		t.Fatal("it said it played")
+	}
+	raw, _ := os.ReadFile(starts)
+	if n := strings.Count(string(raw), "x"); n != 1 {
+		t.Fatalf("%d starts", n)
+	}
+}
+
 // A recording still being written restarts its copy at the clock of the last
 // whole segment, and the bytes before it are not sent again.
 func TestAStoppedFollowCarriesOnAtTheClock(t *testing.T) {

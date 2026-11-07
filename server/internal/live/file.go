@@ -157,8 +157,7 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 	if err != nil {
 		return "", err
 	}
-	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
-	g.Live = false
+	g := h.recordingGraph(id, path, videoCodec, mode, fieldOrder)
 	return h.playRecording(id, &fileJob{path: abs, graph: g}, at)
 }
 
@@ -174,9 +173,41 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 	if err != nil {
 		return "", err
 	}
+	g := h.recordingGraph(id, path, videoCodec, mode, fieldOrder)
+	return h.playRecording(id, &fileJob{path: abs, graph: g, still: still, follow: true}, at)
+}
+
+// recordingGraph is the picture for this recording: on the processor when the
+// GPU has failed on its copy, so opening it again finds the same copy.
+func (h *Hub) recordingGraph(id int64, path, videoCodec, mode, fieldOrder string) Graph {
 	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
 	g.Live = false
-	return h.playRecording(id, &fileJob{path: abs, graph: g, still: still, follow: true}, at)
+	h.playMu.Lock()
+	soft := h.fileSoft[id]
+	h.playMu.Unlock()
+	if soft {
+		return softwareGraph(g)
+	}
+	return g
+}
+
+// softwareGraph is g on the processor.
+func softwareGraph(g Graph) Graph {
+	g.Encoder, g.Deint = "libx264", ""
+	return g
+}
+
+func (h *Hub) setFileSoft(id int64, soft bool) {
+	h.playMu.Lock()
+	defer h.playMu.Unlock()
+	if !soft {
+		delete(h.fileSoft, id)
+		return
+	}
+	if h.fileSoft == nil {
+		h.fileSoft = map[int64]bool{}
+	}
+	h.fileSoft[id] = true
 }
 
 // playRecording reuses the copy in the recording's folder when it can show at,
@@ -241,6 +272,16 @@ func (h *Hub) playRecording(id int64, job *fileJob, at float64) (string, error) 
 		// A follow copy sees the encode is no longer current and stops.
 		h.stopFileEncode(id)
 		h.forgetFileJob(id, job)
+		// A stream the GPU can't take gets one try on the processor, as live does.
+		// That failing too is not the GPU, and the next press tries it again.
+		if gpuEncoder(job.graph.Encoder) {
+			slog.Warn(fmt.Sprintf("recording %d: the GPU did not start it, trying the processor", id))
+			h.setFileSoft(id, true)
+			// A new job: the failed encode's exit still marks the old one.
+			next := &fileJob{path: job.path, graph: softwareGraph(job.graph), follow: job.follow, still: job.still}
+			return h.playRecording(id, next, at)
+		}
+		h.setFileSoft(id, false)
 	}
 	return url, err
 }

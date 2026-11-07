@@ -258,6 +258,9 @@ type Hub struct {
 	fileEnc map[int64]*fileEncode
 	// fileJobs says how to carry on a recording's copy with no encode running.
 	fileJobs map[int64]*fileJob
+	// fileSoft holds recordings whose copy moved to the processor after the GPU
+	// failed before its first segment. The next run tries the GPU again.
+	fileSoft map[int64]bool
 	// fileSeen is when a player last asked for a recording's copy.
 	fileSeen map[int64]time.Time
 	// fileReaders is the scans reading a recording's file.

@@ -117,6 +117,7 @@ func (h *Hub) forgetFileCopy(id int64) {
 	h.playMu.Lock()
 	delete(h.fileJobs, id)
 	delete(h.fileSeen, id)
+	delete(h.fileSoft, id)
 	delete(h.fileList, dir)
 	h.playMu.Unlock()
 }
