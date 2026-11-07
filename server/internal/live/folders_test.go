@@ -277,3 +277,104 @@ func TestDeletingARecordingStopsItsPlayback(t *testing.T) {
 		t.Fatalf("emptied show folders stayed: %v", err)
 	}
 }
+
+func seasonHub(t *testing.T) (*Hub, string) {
+	t.Helper()
+	h := &Hub{}
+	root := t.TempDir()
+	h.RecordingsDir = root
+	return h, root
+}
+
+// A library's season folder is used in whatever spelling it has, and what is
+// in it stays where it is.
+func TestARecordingUsesTheSeasonFolderTheShowHas(t *testing.T) {
+	rec := store.Recording{Title: "Harbor Watch", Season: 2, Episode: 6, Subtitle: "Pilot"}
+	at := time.Date(2026, 10, 8, 17, 30, 0, 0, time.Local)
+	rec.StartedAt = at
+	var ch store.SourceChannel
+	ch.DisplayName = "KBWV"
+	for _, have := range []string{"Season 2", "Season 02", "season 2", "SEASON 002", "Season2", "S02", "s2", "Series 2", "Season.2", "Season_02", "Saison 2"} {
+		h, root := seasonHub(t)
+		dir := filepath.Join(root, "TV", "Harbor Watch", have)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		old := filepath.Join(dir, "Harbor Watch - S02E01.mkv")
+		if err := os.WriteFile(old, []byte("library"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		got := h.recordingPath(rec, ch, true)
+		if filepath.Dir(got) != dir {
+			t.Errorf("with %q: %s", have, got)
+		}
+		entries, err := os.ReadDir(filepath.Join(root, "TV", "Harbor Watch"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Errorf("with %q a second folder appeared: %v", have, entries)
+		}
+		if body, err := os.ReadFile(old); err != nil || string(body) != "library" {
+			t.Errorf("with %q the library's file changed: %q %v", have, body, err)
+		}
+	}
+}
+
+func TestANewSeasonGetsItsOwnFolder(t *testing.T) {
+	rec := store.Recording{Title: "Harbor Watch", Season: 2, Episode: 6}
+	var ch store.SourceChannel
+	ch.DisplayName = "KBWV"
+	h, root := seasonHub(t)
+	show := filepath.Join(root, "TV", "Harbor Watch")
+	// None of these is season 2: another number, words after it, a file, a link.
+	for _, other := range []string{"Season 12", "Season 20", "Season 1", "Season 2 Extras", "Specials"} {
+		if err := os.MkdirAll(filepath.Join(show, other), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(show, "S02"), []byte("a file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(show, "Season 2")); err != nil {
+		t.Fatal(err)
+	}
+	got := h.recordingPath(rec, ch, true)
+	want := filepath.Join(show, "Season 02")
+	if filepath.Dir(got) != want {
+		t.Fatalf("path %s, want it in %s", got, want)
+	}
+}
+
+// Our own spelling wins when both are there, and two folders stay two folders.
+func TestBothSpellingsThereLeavesThemAlone(t *testing.T) {
+	rec := store.Recording{Title: "Harbor Watch", Season: 2, Episode: 6}
+	var ch store.SourceChannel
+	ch.DisplayName = "KBWV"
+	h, root := seasonHub(t)
+	show := filepath.Join(root, "TV", "Harbor Watch")
+	for _, name := range []string{"Season 2", "Season 02"} {
+		if err := os.MkdirAll(filepath.Join(show, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := h.recordingPath(rec, ch, true); filepath.Dir(got) != filepath.Join(show, "Season 02") {
+		t.Fatalf("path %s", got)
+	}
+}
+
+// A movie or an unnumbered show named like a season is not a season.
+func TestOnlyAnEpisodeLooksForASeasonFolder(t *testing.T) {
+	var ch store.SourceChannel
+	ch.DisplayName = "KBWV"
+	h, root := seasonHub(t)
+	other := filepath.Join(root, "Movies", "S1")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := h.recordingPath(store.Recording{Title: "Season 1", Category: "Movie", Season: 1, Episode: 1}, ch, true)
+	if filepath.Dir(got) != filepath.Join(root, "Movies", "Season 1") {
+		t.Fatalf("movie path %s", got)
+	}
+}

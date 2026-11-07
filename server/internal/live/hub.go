@@ -28,6 +28,7 @@ import (
 	"broadwave/internal/dvbsi"
 	"broadwave/internal/fetchguard"
 	"broadwave/internal/hdhr"
+	"broadwave/internal/nfo"
 	"broadwave/internal/psip"
 	"broadwave/internal/ring"
 	"broadwave/internal/store"
@@ -2718,6 +2719,9 @@ func (h *Hub) recordingPath(rec store.Recording, ch store.SourceChannel, byShow 
 	}
 	if byShow {
 		path := filepath.Join(root, showName(rec, ch.DisplayName, rec.StartedAt)+".ts")
+		if rec.Season > 0 && rec.Episode > 0 && !nfo.IsMovie(rec.Category) {
+			path = useShowSeason(path, rec.Season)
+		}
 		if err := insideReal(root, filepath.Dir(path)); err == nil {
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err == nil && insideReal(root, filepath.Dir(path)) == nil {
 				return freePath(path, taken)

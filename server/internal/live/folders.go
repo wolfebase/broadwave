@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +55,34 @@ func showName(rec store.Recording, channel string, started time.Time) string {
 		subtitle = started.Format("1504")
 	}
 	return filepath.Join("TV", title, title+" - "+started.Format("2006-01-02")+" - "+subtitle)
+}
+
+// seasonFolder matches the common spellings of a season folder.
+var seasonFolder = regexp.MustCompile(`(?i)^(?:season|series|saison|staffel|temporada|s)[ ._-]*0*([0-9]+)$`)
+
+// useShowSeason moves a new episode's path into the season folder the show
+// already has, in whatever spelling, so a library's "Season 2" does not get a
+// "Season 02" beside it. Our own spelling wins when it is there. Nothing that
+// exists moves. A link is passed over: it may leave the recordings folder.
+func useShowSeason(path string, season int) string {
+	dir := filepath.Dir(path)
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		return path
+	}
+	entries, err := os.ReadDir(filepath.Dir(dir))
+	if err != nil {
+		return path
+	}
+	for _, entry := range entries {
+		match := seasonFolder.FindStringSubmatch(entry.Name())
+		if match == nil || !entry.IsDir() {
+			continue
+		}
+		if n, err := strconv.Atoi(match[1]); err == nil && n == season {
+			return filepath.Join(filepath.Dir(dir), entry.Name(), filepath.Base(path))
+		}
+	}
+	return path
 }
 
 // folderPart makes one file or folder name from guide text: no separators,
