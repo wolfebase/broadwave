@@ -29,6 +29,9 @@ type Message struct {
 // Bus fans server events out to connected clients and hosts sync rooms.
 type Bus struct {
 	Rooms *Rooms
+	// LogEveryReport keeps every sync report at Info, for a harness that
+	// measures sync from the log.
+	LogEveryReport bool
 	// MediaStart is the earliest program time (Unix ms) a channel can play.
 	// The hub sets it. A miss leaves the room on the latency target.
 	MediaStart func(channelID int64) (float64, bool)
@@ -71,6 +74,9 @@ type client struct {
 	// said is the channel the screen says it plays, for a screen that joins no
 	// room (sync off). A room it is in wins.
 	said int64
+	// reportedAt and reportedState are its last sync report the log showed.
+	reportedAt    time.Time
+	reportedState string
 }
 
 // offer queues msg without blocking. A full queue drops the client rather
@@ -86,6 +92,25 @@ func (c *client) offer(msg []byte) bool {
 		}
 		return false
 	}
+}
+
+// syncReportEvery is how often a screen's routine report reaches the log. A
+// report comes every 10 s, which was most of the log on a quiet server.
+const syncReportEvery = 10 * time.Minute
+
+// syncReportFlap is the least time between the lines of a screen changing state.
+const syncReportFlap = time.Minute
+
+// reportLevel keeps a screen's first report, a change of its state, and a
+// periodic one at Info. The rest are Debug. Called with b.mu held.
+func (b *Bus) reportLevel(c *client, state string, now time.Time) slog.Level {
+	since := now.Sub(c.reportedAt)
+	changed := state != c.reportedState && since >= syncReportFlap
+	if !b.LogEveryReport && !c.reportedAt.IsZero() && !changed && since < syncReportEvery {
+		return slog.LevelDebug
+	}
+	c.reportedAt, c.reportedState = now, state
+	return slog.LevelInfo
 }
 
 func NewBus() *Bus {
@@ -512,7 +537,11 @@ func (b *Bus) handle(c *client, m Message) {
 				attrs = append(attrs, k, cleanLabel(v.(string)))
 			}
 		}
-		slog.Info("sync report", attrs...)
+		state, _ := req["state"].(string)
+		b.mu.Lock()
+		level := b.reportLevel(c, state, b.now())
+		b.mu.Unlock()
+		slog.Log(context.Background(), level, "sync report", attrs...)
 	case "sync.leave":
 		var req struct {
 			Room string `json:"room"`

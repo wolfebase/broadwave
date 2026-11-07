@@ -198,6 +198,7 @@ func main() {
 		slog.Warn(fmt.Sprintf("recordings: %s (%s)", err, hub.Recordings()))
 	}
 	bus := realtime.NewBus()
+	bus.LogEveryReport = os.Getenv("BROADWAVE_E2E") == "1"
 	bus.MediaStart = hub.EarliestMedia
 	bus.LongHold = hub.LongGroups
 	hub.OnLongGroups = bus.LongGroupsFound
