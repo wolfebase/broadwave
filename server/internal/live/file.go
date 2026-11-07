@@ -345,6 +345,13 @@ func (h *Hub) carryOn(id int64, dir string, job *fileJob) {
 		at += span
 		g.Carry = span
 	}
+	// ffmpeg seeking this close to the end can find no picture, and still lists a
+	// segment. The clock has read this far, so there is nothing left to encode.
+	if g.Carry > 0 && (job.still == nil || !job.still()) && at >= job.clock.end()-resumeMin {
+		closePlaylist(playlist)
+		h.forgetFileJob(id, job)
+		return
+	}
 	mark, ok := job.clock.before(at)
 	if job.follow && !ok {
 		h.markFileJobFailed(job)
@@ -401,14 +408,18 @@ func (h *Hub) fileEncodeEnded(id int64, dir string, job *fileJob, at float64, be
 	}
 	growing := job.still != nil && job.still()
 	if before > 0 && !growing && at >= job.clock.end()-fileEndMargin {
-		if f, err := os.OpenFile(playlist, os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-			_, _ = f.WriteString("#EXT-X-ENDLIST\n")
-			_ = f.Close()
-		}
+		closePlaylist(playlist)
 		h.forgetFileJob(id, job)
 		return
 	}
 	h.markFileJobFailed(job)
+}
+
+func closePlaylist(path string) {
+	if f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+		_, _ = f.WriteString("#EXT-X-ENDLIST\n")
+		_ = f.Close()
+	}
 }
 
 func extractCaptions(ctx context.Context, ffmpeg, path, dest string) {

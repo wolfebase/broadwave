@@ -524,6 +524,42 @@ func TestAResumeAtTheEndClosesTheList(t *testing.T) {
 	}
 }
 
+// ffmpeg seeking at or past the end exits 0 and lists a segment with no pictures
+// in it. With the end known, there is nothing to run: the list closes.
+func TestACarryOnAtTheEndRunsNoEncode(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	starts := filepath.Join(dir, "starts")
+	pids := filepath.Join(dir, "pids")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho x >> " + starts + "\necho $$ >> " + pids + "\n" +
+		"printf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:7.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nexec sleep 60\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { killPids(pids) })
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 8)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 200 * time.Millisecond, FFmpeg: bin}
+	t.Cleanup(h.stopFileEncodes)
+	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+		t.Fatal(err)
+	}
+	awaitEncode(t, h, 7, false)
+	h.FileRequested(7)
+	playlist := filepath.Join(dir, "file", "7", "index.m3u8")
+	deadline := time.Now().Add(3 * time.Second)
+	for !playlistEnded(playlist) {
+		if time.Now().After(deadline) {
+			t.Fatal("the list never ended")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	raw, _ := os.ReadFile(starts)
+	if n := strings.Count(string(raw), "x"); n != 1 {
+		t.Fatalf("%d encodes", n)
+	}
+}
+
 // A recording still being written restarts its copy at the clock of the last
 // whole segment, and the bytes before it are not sent again.
 func TestAStoppedFollowCarriesOnAtTheClock(t *testing.T) {
