@@ -21,10 +21,15 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		slog.Debug(fmt.Sprintf("manual passes: %v", err))
 	}
 	passes, err := st.Passes(ctx)
-	if err != nil || len(passes) == 0 || hub == nil {
+	if err != nil || hub == nil {
 		return
 	}
 	now := time.Now()
+	waits, _ := st.RecordingWaits(ctx)
+	if len(passes) == 0 {
+		settleWaits(ctx, st, waits, nil, nil, nil, now)
+		return
+	}
 	lead := 2 * time.Minute
 	for _, pass := range passes {
 		if extra := time.Duration(pass.PadBefore)*time.Minute + time.Minute; extra > lead {
@@ -40,6 +45,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 	seen, _ := st.SeenDeleted(ctx)
 	skips, _ := st.Skips(ctx)
 	planned := PlanLibrary(passes, rows, TunerCount(ctx, st, now), now.Add(-time.Minute), now.Add(lead), active, seen, skips)
+	open := settleWaits(ctx, st, waits, passes, planned, active, now)
 	hold := 0
 	for _, item := range planned {
 		if item.Skipped || already(active, item.Airing) {
@@ -57,6 +63,11 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		if !start && RetryDue(active, pass, item.Airing, now) {
 			start, minutes, retry = true, recordMinutes(pass, item.Airing, now), true
 		}
+		// Refused on time, it keeps trying while the airing is on.
+		_, waiting := open[keyOfWait(item.Airing.ChannelID, item.Airing.Start)]
+		if !start && waiting {
+			start, minutes = true, recordMinutes(pass, item.Airing, now)
+		}
 		if !start {
 			hold++
 			continue
@@ -69,8 +80,11 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 			StartedAt: item.Airing.Start.Add(-time.Duration(pass.PadBefore) * time.Minute), PassID: pass.ID,
 		})
 		if err != nil {
-			slog.Error(fmt.Sprintf("pass record: %v", err))
+			noteRefused(ctx, st, open, pass, item.Airing, err, now)
 			continue
+		}
+		if waiting {
+			noteStarted(ctx, st, rec, item.Airing)
 		}
 		if retry {
 			slog.Info(fmt.Sprintf("recording: trying %s on channel %d again for the %d min left", item.Airing.Title, item.Airing.ChannelID, minutes))

@@ -662,6 +662,8 @@ func (s *Server) planWith(ctx context.Context, passes []store.Pass) (scheduleSna
 	skips, _ := s.Store.Skips(ctx)
 	items := dvr.PlanLibrary(passes, airings, count, now, end, recs, seen, skips)
 	items = dvr.AttachSuggestions(items, passes, airings, count, now, end, s.guideNumbers(ctx))
+	waits, _ := s.Store.RecordingWaits(ctx)
+	dvr.MarkWaits(items, waits)
 	s.nameManual(ctx, items)
 	if items == nil {
 		items = []dvr.Planned{}

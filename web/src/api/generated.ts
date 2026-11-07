@@ -418,6 +418,7 @@ export type PlannedAiring = {
   conflict: boolean;
   skipped: boolean;
   reason?: string;
+  waiting?: boolean;
   suggestion?: Suggestion;
   manual?: boolean;
 };

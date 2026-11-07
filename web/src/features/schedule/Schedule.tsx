@@ -153,6 +153,8 @@ export function Schedule({
                         <>
                           <span className="tag sched-skip">{t("schedule.skippedTag")}</span> {item.reason || t("schedule.lowerPriority", tunerCount)}
                         </>
+                      ) : item.waiting ? (
+                        <span className="tag sched-skip">{item.reason}</span>
                       ) : ch ? (
                         t("schedule.recordsWindow", { number: ch, start: formatClock(window.start), end: formatClock(window.end) })
                       ) : (

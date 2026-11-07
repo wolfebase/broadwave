@@ -19,11 +19,12 @@ func (s *Store) AddEvent(ctx context.Context, kind, message string) error {
 	if kind == "" || message == "" {
 		return nil
 	}
-	if kind == "guide" {
+	// A refused recording is tried every 20 s; a guide refresh can repeat too.
+	if kind == "guide" || kind == "disk" {
 		recent, err := s.Events(ctx, 5)
 		if err == nil {
 			for _, ev := range recent {
-				if ev.Kind == "guide" && ev.Message == message && time.Since(ev.At) < 15*time.Minute {
+				if ev.Kind == kind && ev.Message == message && time.Since(ev.At) < 15*time.Minute {
 					return nil
 				}
 			}

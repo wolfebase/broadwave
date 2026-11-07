@@ -24,6 +24,9 @@ type Planned struct {
 	// Manual is a slot a manual pass records by the clock; its airing id is
 	// negative and its title is the guide's, the pass's, or the channel's.
 	Manual bool `json:"manual,omitempty"`
+	// Waiting is an airing that should be recording and could not start. The
+	// retry is running, and Reason says what it is waiting for.
+	Waiting bool `json:"waiting,omitempty"`
 	// runsUntil is a recording of this airing already running past its
 	// planned end: a game that went long.
 	runsUntil time.Time

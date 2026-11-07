@@ -1,0 +1,17 @@
+CREATE TABLE recording_waits (
+	channel_id INTEGER NOT NULL,
+	airing_start INTEGER NOT NULL,
+	airing_end INTEGER NOT NULL,
+	until_at INTEGER NOT NULL,
+	pass_id INTEGER NOT NULL,
+	title TEXT NOT NULL DEFAULT '',
+	subtitle TEXT NOT NULL DEFAULT '',
+	description TEXT NOT NULL DEFAULT '',
+	category TEXT NOT NULL DEFAULT '',
+	program_id TEXT NOT NULL DEFAULT '',
+	game_id TEXT NOT NULL DEFAULT '',
+	reason TEXT NOT NULL DEFAULT '',
+	failure TEXT NOT NULL DEFAULT '',
+	since INTEGER NOT NULL,
+	PRIMARY KEY (channel_id, airing_start)
+);
