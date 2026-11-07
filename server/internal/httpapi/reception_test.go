@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -82,5 +83,45 @@ func TestReceptionAnswersAWatchTokenWhileTheTunerIsSilent(t *testing.T) {
 	srv.Answer()
 	if status, answers := read(); status != http.StatusOK || !answers {
 		t.Fatalf("a tuner that came back: %d answers=%v", status, answers)
+	}
+}
+
+// The client gives up at 30 s. A device that hangs costs up to 20 s of its own,
+// so the answer has a limit of its own: no tuner answered in time.
+func TestReceptionHasAnOverallLimit(t *testing.T) {
+	prev := receptionLimit
+	receptionLimit = 300 * time.Millisecond
+	t.Cleanup(func() { receptionLimit = prev })
+	release := make(chan struct{})
+	hung := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	t.Cleanup(hung.Close)
+	t.Cleanup(func() { close(release) })
+	ctx := context.Background()
+	st := testStore(t)
+	for i, id := range []string{"AAA", "BBB"} {
+		if err := st.UpsertDevice(ctx, hdhr.Device{DeviceID: id, BaseURL: hung.URL, TunerCount: 2}, []hdhr.Channel{{GuideNumber: fmt.Sprintf("%d.1", i+4)}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	chs, err := st.Channels(ctx, false)
+	if err != nil || len(chs) == 0 {
+		t.Fatal(err, chs)
+	}
+	hub := live.New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(hub.Shutdown)
+	h := (&Server{Store: st, Hub: hub}).Handler()
+	start := time.Now()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/channels/%d/reception", chs[0].ID), nil))
+	if took := time.Since(start); took > 2*time.Second {
+		t.Fatalf("the read took %s", took)
+	}
+	var snap struct {
+		TunerAnswers bool `json:"tunerAnswers"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &snap) != nil || snap.TunerAnswers {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}
 }

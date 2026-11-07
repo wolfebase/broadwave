@@ -6,26 +6,33 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"broadwave/internal/hdhr"
 )
 
 // reception tells a watching device why a picture stalled, without tuner
 // addresses, firmware, or the frequency the channel is on.
+// receptionLimit bounds the read, under the 30 s a client gives a request. Each
+// hung device could otherwise cost 20 s.
+var receptionLimit = 15 * time.Second
+
 func (s *Server) reception(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
 		httpError(w, "invalid channel", http.StatusBadRequest)
 		return
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), receptionLimit)
+	defer cancel()
 	// A tuner whose status can't be read is the stall this is asked about.
 	// That is an answer: no free tuner we know of, and tunerAnswers says why.
-	free, err := s.tunerIsFree(r.Context())
+	free, err := s.tunerIsFree(ctx)
 	if err != nil {
 		slog.Debug("reception: tuner status: " + err.Error())
 		free = false
 	}
-	answers, emulator, err := s.tunerAnswers(r.Context())
+	answers, emulator, err := s.tunerAnswersWithin(ctx)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -57,6 +64,26 @@ func (s *Server) tunerIsFree(ctx context.Context) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// tunerAnswersWithin is tunerAnswers cut off at ctx's end: no tuner answered in
+// time. Some of a device's read doesn't watch ctx, so it can't be left to end by itself.
+func (s *Server) tunerAnswersWithin(ctx context.Context) (answers, emulator bool, err error) {
+	type result struct {
+		answers, emulator bool
+		err               error
+	}
+	done := make(chan result, 1)
+	go func() {
+		answers, emulator, err := s.tunerAnswers(ctx)
+		done <- result{answers, emulator, err}
+	}()
+	select {
+	case r := <-done:
+		return r.answers, r.emulator, r.err
+	case <-ctx.Done():
+		return false, false, nil
+	}
 }
 
 // tunerAnswers is true when an HDHomeRun or an emulator answers, or this
