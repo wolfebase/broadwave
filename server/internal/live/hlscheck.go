@@ -1,6 +1,7 @@
 package live
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"os"
@@ -141,6 +142,9 @@ func RepairRecordingPlaylist(raw, prev []byte, dir string) []byte {
 // StableRecordingPlaylist is the playlist served for this encode. A reload
 // keeps the prefix the player has already accepted.
 func (h *Hub) StableRecordingPlaylist(dir string, raw []byte) []byte {
+	// Only an encode that carried on writes this tag, and its clock runs on
+	// across the join. A list that was served without it must not gain it.
+	raw = bytes.ReplaceAll(raw, []byte("#EXT-X-DISCONTINUITY\n"), nil)
 	h.playMu.Lock()
 	defer h.playMu.Unlock()
 	var prev []byte

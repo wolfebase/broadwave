@@ -255,7 +255,13 @@ type Hub struct {
 	// fileEnc is the ffmpeg writing a recording playlist. A new resume stops
 	// it before deleting the segments it is still writing.
 	fileEnc map[int64]*fileEncode
-	ringSeq int
+	// fileJobs says how to carry on a recording's copy with no encode running.
+	fileJobs map[int64]*fileJob
+	// fileSeen is when a player last asked for a recording's copy.
+	fileSeen map[int64]time.Time
+	// fileIdle replaces fileIdleAfter in a test.
+	fileIdle time.Duration
+	ringSeq  int
 	// cuts keeps recent view cuts, so screens on one view share one copy.
 	cuts cutCache
 	// starts are the last pictures a watch started, newest last. Under mu.

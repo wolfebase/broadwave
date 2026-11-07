@@ -228,3 +228,49 @@ func TestASegmentThatIsStillOpeningDoesNot404(t *testing.T) {
 		t.Fatalf("cache %q", rec.Header().Get("Cache-Control"))
 	}
 }
+
+// A player's next request is what carries on a stopped encode. Without it the
+// list stops growing and the viewer stalls at what was written.
+func TestAPlaylistRequestCarriesOnAStoppedEncode(t *testing.T) {
+	st := testStore(t)
+	id, err := st.CreateRecording(t.Context(), store.Recording{Title: "News", Status: "complete", Path: "news.ts"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	starts := filepath.Join(dir, "starts")
+	pids := filepath.Join(dir, "pids")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho x >> " + starts + "\necho $$ >> " + pids + "\n" +
+		"if [ ! -f index.m3u8 ]; then\nprintf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:2.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nfi\nexec sleep 60\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(dir, "news.ts")
+	if err := os.WriteFile(src, make([]byte, 188*4), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hub := &live.Hub{Dir: dir, FFmpeg: bin, Encoder: "libx264"}
+	t.Cleanup(hub.Shutdown)
+	if _, err := hub.PlayFile(id, src, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+		t.Fatal(err)
+	}
+	hub.Shutdown()
+	h := (&Server{Store: st, Hub: hub}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/"+strconv.FormatInt(id, 10)+"/index.m3u8", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatal(rec.Code, rec.Body.String())
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		raw, _ := os.ReadFile(starts)
+		if strings.Count(string(raw), "x") == 2 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("starts %q, want the request to start the encode again", raw)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}

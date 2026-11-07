@@ -109,6 +109,14 @@ func playlistEnded(path string) bool {
 	return err == nil && bytes.Contains(body, []byte("#EXT-X-ENDLIST"))
 }
 
+func segmentCount(path string) int {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	return bytes.Count(body, []byte("#EXTINF:"))
+}
+
 func fileSpan(path string) float64 {
 	body, err := os.ReadFile(path)
 	if err != nil {

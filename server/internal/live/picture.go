@@ -28,6 +28,9 @@ type Graph struct {
 	// Start is an input seek, in seconds. A recording resume begins here so
 	// the encode does not play the file from the beginning.
 	Start float64
+	// Carry is the seconds of playlist an earlier encode of this recording
+	// wrote. This encode's clock starts there and it appends to that list.
+	Carry float64
 	// SD is a source the last tune read as 576 lines or shorter. Its frames
 	// are decoded on the processor so sdCaptionCrop can run on them.
 	SD bool
@@ -134,6 +137,11 @@ func PictureArgs(g Graph) []string {
 	default:
 		args = append(args, "-af", "aresample=async=1000:first_pts=0", "-c:a", "aac", "-ac", "2", "-b:a", "160k")
 	}
+	// The clock carries on from the segments an earlier encode wrote. It applies
+	// after the encoder, so the key frames stay on this encode's two seconds.
+	if g.Carry > 0 {
+		args = append(args, "-output_ts_offset", strconv.FormatFloat(g.Carry, 'f', 3, 64))
+	}
 	args = append(args, "-f", "hls", "-hls_time", "2", "-hls_segment_filename", "seg%05d.ts")
 	if g.Live {
 		args = append(args,
@@ -141,13 +149,18 @@ func PictureArgs(g Graph) []string {
 			"-hls_flags", "delete_segments+independent_segments+omit_endlist+program_date_time",
 		)
 	} else {
-		// No append_list. That flag marks the first segment with a discontinuity
-		// even when the encode is new, and AVPlayer fails the item when a
-		// reload's discontinuity count does not match.
+		// No append_list on a new encode. That flag marks the first segment with
+		// a discontinuity, and AVPlayer fails the item when a reload's
+		// discontinuity count does not match. An encode that carries on needs it
+		// to keep the list and the numbering, and the served list drops its tag.
+		flags := "independent_segments+program_date_time"
+		if g.Carry > 0 {
+			flags += "+append_list"
+		}
 		args = append(args,
 			"-hls_list_size", "0",
 			"-hls_playlist_type", "event",
-			"-hls_flags", "independent_segments+program_date_time",
+			"-hls_flags", flags,
 		)
 	}
 	args = append(args, "index.m3u8")

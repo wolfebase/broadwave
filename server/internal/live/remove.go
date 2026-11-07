@@ -21,6 +21,7 @@ import (
 func (h *Hub) RemoveRecordingFiles(rec store.Recording) error {
 	defer h.lockFileStart(rec.ID)()
 	h.stopFileEncode(rec.ID)
+	h.forgetFileCopy(rec.ID)
 	root := h.Recordings()
 	workDir := h.Dir
 	if err := removeInside(root, rec.Path); err != nil {

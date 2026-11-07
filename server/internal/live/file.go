@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -124,6 +126,9 @@ func graphStamp(g Graph) string {
 	return strings.Join(parts, "|")
 }
 
+// mpegtsDelay is what ffmpeg's muxer adds to every timestamp of a segment.
+const mpegtsDelay = 1.4
+
 // playStart is how long playback waits for the recording playlist.
 // A test shortens it. The encode is stopped when the wait ends.
 var playStart = 20 * time.Second
@@ -148,57 +153,13 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 	if at < resumeMin {
 		at = 0
 	}
-	dir := filepath.Join(h.Dir, "file", fmt.Sprintf("%d", id))
-	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
-	g.Live = false
-	stamp := graphStamp(g)
-	playlist := filepath.Join(dir, "index.m3u8")
-	if playlistFresh(dir, stamp) && filePlaylistCovers(dir, at) {
-		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
-	}
-	h.stopFileEncode(id)
-	_ = os.RemoveAll(dir)
-	h.forgetRecordingPlaylist(dir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
-	g.Input = abs
-	g.Start = at
-	if err := writeFileOffset(dir, at); err != nil {
-		return "", err
-	}
-	cmd := exec.Command(h.FFmpeg, PictureArgs(g)...)
-	cmd.Dir = dir
-	logCommand(cmd, "playback "+filepath.Base(dir))
-	if err := os.WriteFile(filepath.Join(dir, "graph.txt"), []byte(stamp), 0o644); err != nil {
-		return "", err
-	}
-	if err := cmd.Start(); err != nil {
-		return "", err
-	}
-	// The caption pass is a second ffmpeg. A stop of this encode, a new
-	// picture, or shutdown ends it too.
-	capCtx, capCancel := context.WithTimeout(context.Background(), captionSpan)
-	done := h.trackFileEncode(id, cmd, capCancel)
-	go func() {
-		_ = cmd.Wait()
-		h.dropFileEncode(id, cmd)
-		close(done)
-	}()
-	go func() {
-		defer capCancel()
-		extractCaptions(capCtx, h.FFmpeg, abs, filepath.Join(dir, "captions.vtt"))
-	}()
-	url, err := waitPlaylistFile(playlist, id, done)
-	if err != nil {
-		capCancel()
-		h.stopFileEncode(id)
-	}
-	return url, err
+	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
+	g.Live = false
+	return h.playRecording(id, &fileJob{path: abs, graph: g}, at, false)
 }
 
 // PlayFollow transcodes a recording that is still being written.
@@ -209,13 +170,25 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 	if at < resumeMin {
 		at = 0
 	}
-	dir := filepath.Join(h.Dir, "file", fmt.Sprintf("%d", id))
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
 	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
-	g.Input = "pipe:0"
 	g.Live = false
-	stamp := graphStamp(g)
+	return h.playRecording(id, &fileJob{path: abs, graph: g, still: still}, at, true)
+}
+
+// playRecording reuses the copy in the recording's folder when it can show at,
+// and otherwise replaces it with an encode from there. The caller holds the
+// recording's start lock.
+func (h *Hub) playRecording(id int64, job *fileJob, at float64, follow bool) (string, error) {
+	dir := filepath.Join(h.Dir, "file", fmt.Sprintf("%d", id))
+	stamp := graphStamp(job.graph)
 	playlist := filepath.Join(dir, "index.m3u8")
 	if playlistFresh(dir, stamp) && filePlaylistCovers(dir, at) {
+		h.keepFileJob(id, job)
+		h.carryOn(id, dir, job)
 		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
 	}
 	h.stopFileEncode(id)
@@ -224,46 +197,163 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
 	if err := writeFileOffset(dir, at); err != nil {
 		return "", err
 	}
-	cmd := exec.Command(h.FFmpeg, PictureArgs(g)...)
-	cmd.Dir = dir
-	logCommand(cmd, "playback "+filepath.Base(dir))
 	if err := os.WriteFile(filepath.Join(dir, "graph.txt"), []byte(stamp), 0o644); err != nil {
 		return "", err
 	}
-	stdin, err := cmd.StdinPipe()
+	h.keepFileJob(id, job)
+	done, cancel, err := h.runFileEncode(id, dir, job, job.graph, at, follow, func() {
+		// The clock never reached the resume. The bytes that follow are
+		// the start of the file, so the playlist clock has to say that
+		// before the first segment is published.
+		_ = writeFileOffset(dir, 0)
+	})
 	if err != nil {
 		return "", err
 	}
-	if err := cmd.Start(); err != nil {
-		return "", err
-	}
-	done := h.trackFileEncode(id, cmd, nil)
-	go func() {
-		gone := func() bool { return !h.fileEncodeCurrent(id, cmd) }
-		current := func() bool { return !gone() && still() }
-		followFile(abs, stdin, current, gone, at, func() {
-			// The clock never reached the resume. The bytes that follow are
-			// the start of the file, so the playlist clock has to say that
-			// before the first segment is published.
-			_ = writeFileOffset(dir, 0)
-		})
-		_ = cmd.Wait()
-		h.dropFileEncode(id, cmd)
-		close(done)
-	}()
 	url, err := waitPlaylistFile(playlist, id, done)
 	if err != nil {
-		// The follow copy sees the encode is no longer current and stops.
+		if cancel != nil {
+			cancel()
+		}
+		// A follow copy sees the encode is no longer current and stops.
 		h.stopFileEncode(id)
 	}
 	return url, err
+}
+
+// runFileEncode starts one ffmpeg writing the recording's playlist in dir.
+// follow feeds it the growing file from at; otherwise it seeks there, and the
+// caption pass runs beside it. missed runs when a follow's clock never reaches
+// at, and the copy then starts over at the first byte. Without it the copy ends.
+func (h *Hub) runFileEncode(id int64, dir string, job *fileJob, g Graph, at float64, follow bool, missed func()) (<-chan struct{}, context.CancelFunc, error) {
+	if follow {
+		g.Input = "pipe:0"
+	} else {
+		g.Input = job.path
+		g.Start = at
+	}
+	before := segmentCount(filepath.Join(dir, "index.m3u8"))
+	cmd := exec.Command(h.FFmpeg, PictureArgs(g)...)
+	cmd.Dir = dir
+	logCommand(cmd, "playback "+filepath.Base(dir))
+	var stdin io.WriteCloser
+	if follow {
+		pipe, err := cmd.StdinPipe()
+		if err != nil {
+			return nil, nil, err
+		}
+		stdin = pipe
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, nil, err
+	}
+	// The caption pass is a second ffmpeg. A stop of this encode, a new
+	// picture, or shutdown ends it too.
+	var capCtx context.Context
+	var capCancel context.CancelFunc
+	if !follow {
+		capCtx, capCancel = context.WithTimeout(context.Background(), captionSpan)
+	}
+	idle := h.fileIdle
+	if idle <= 0 {
+		idle = fileIdleAfter
+	}
+	done := h.trackFileEncode(id, cmd, capCancel)
+	go h.watchFileRequests(id, cmd, done, idle)
+	go func() {
+		if follow {
+			var over atomic.Bool
+			gone := func() bool { return over.Load() || !h.fileEncodeCurrent(id, cmd) }
+			current := func() bool { return !gone() && job.still() }
+			if missed == nil {
+				missed = func() { over.Store(true) }
+			}
+			followFile(job.path, stdin, current, gone, at, missed)
+		}
+		_ = cmd.Wait()
+		ended := h.dropFileEncode(id, cmd)
+		close(done)
+		if ended {
+			h.fileEncodeEnded(id, dir, job, at, before)
+		}
+	}()
+	if !follow {
+		go func() {
+			defer capCancel()
+			extractCaptions(capCtx, h.FFmpeg, job.path, filepath.Join(dir, "captions.vtt"))
+		}()
+	}
+	return done, capCancel, nil
+}
+
+// carryOn starts an encode after the last whole segment of the copy in dir,
+// unless one is running or the copy is complete. The caller holds the start
+// lock. Numbering and clock continue, so a list that already names later
+// segments stays right. The bytes of a segment the stop cut short are overwritten.
+func (h *Hub) carryOn(id int64, dir string, job *fileJob) {
+	h.playMu.Lock()
+	running := h.fileEnc[id] != nil
+	job.failed = false
+	h.playMu.Unlock()
+	if running {
+		return
+	}
+	playlist := filepath.Join(dir, "index.m3u8")
+	if playlistEnded(playlist) {
+		h.forgetFileJob(id, job)
+		return
+	}
+	g := job.graph
+	at := FileOffset(dir)
+	if span := fileSpan(playlist); segmentCount(playlist) > 0 && at+span >= resumeMin {
+		span += fileLead(dir)
+		at += span
+		g.Carry = span
+	}
+	follow := job.still != nil && job.still()
+	if _, _, err := h.runFileEncode(id, dir, job, g, at, follow, nil); err != nil {
+		slog.Warn(fmt.Sprintf("recording %d: carry on: %v", id, err))
+		h.markFileJobFailed(job)
+	}
+}
+
+// fileLead is how far into its own clock the copy's first picture sits. A file
+// whose sound starts first begins its picture late, and the seek and the clock
+// that carry on both have to count that, or the join repeats those pictures.
+func fileLead(dir string) float64 {
+	pts, ok := SegmentPTS(filepath.Join(dir, "seg00000.ts"))
+	if !ok {
+		return 0
+	}
+	return max(float64(pts)/90000-mpegtsDelay, 0)
+}
+
+// fileEncodeEnded runs when an ffmpeg exited by itself, not by a stop. A list
+// left open with no progress is the end of the file when the seek landed
+// within a few seconds of it, and otherwise waits for someone to press play,
+// so a broken encode is not restarted by every player request.
+func (h *Hub) fileEncodeEnded(id int64, dir string, job *fileJob, at float64, before int) {
+	playlist := filepath.Join(dir, "index.m3u8")
+	if playlistEnded(playlist) {
+		h.forgetFileJob(id, job)
+		return
+	}
+	if segmentCount(playlist) > before {
+		return
+	}
+	growing := job.still != nil && job.still()
+	if end, ok := mediaSpan(job.path); before > 0 && !growing && ok && at >= end-fileEndMargin {
+		if f, err := os.OpenFile(playlist, os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			_, _ = f.WriteString("#EXT-X-ENDLIST\n")
+			_ = f.Close()
+		}
+		h.forgetFileJob(id, job)
+		return
+	}
+	h.markFileJobFailed(job)
 }
 
 func extractCaptions(ctx context.Context, ffmpeg, path, dest string) {
@@ -282,6 +372,17 @@ type fileEncode struct {
 	cancel context.CancelFunc
 }
 
+// fileJob is how a recording's copy is encoded, kept so a stopped encode can
+// carry on. Its failed and resuming are under playMu.
+type fileJob struct {
+	path  string
+	graph Graph
+	// still reports a recording being written. A finished recording has none.
+	still    func() bool
+	failed   bool
+	resuming bool
+}
+
 func (h *Hub) trackFileEncode(id int64, cmd *exec.Cmd, cancel context.CancelFunc) chan struct{} {
 	done := make(chan struct{})
 	h.playMu.Lock()
@@ -289,6 +390,7 @@ func (h *Hub) trackFileEncode(id int64, cmd *exec.Cmd, cancel context.CancelFunc
 		h.fileEnc = map[int64]*fileEncode{}
 	}
 	h.fileEnc[id] = &fileEncode{cmd: cmd, done: done, cancel: cancel}
+	h.noteFileRequestLocked(id)
 	h.playMu.Unlock()
 	return done
 }
@@ -317,12 +419,15 @@ func (h *Hub) fileEncodeCurrent(id int64, cmd *exec.Cmd) bool {
 	return cur != nil && cur.cmd == cmd
 }
 
-func (h *Hub) dropFileEncode(id int64, cmd *exec.Cmd) {
+// dropFileEncode forgets cmd. True means nothing had stopped it: it exited by itself.
+func (h *Hub) dropFileEncode(id int64, cmd *exec.Cmd) bool {
 	h.playMu.Lock()
+	defer h.playMu.Unlock()
 	if cur := h.fileEnc[id]; cur != nil && cur.cmd == cmd {
 		delete(h.fileEnc, id)
+		return true
 	}
-	h.playMu.Unlock()
+	return false
 }
 
 // stopFileEncodes ends every recording playback. The caller is not holding
@@ -551,6 +656,9 @@ func followFile(path string, dst io.WriteCloser, still, gone func() bool, skip f
 		}
 		if missed != nil {
 			missed()
+		}
+		if gone != nil && gone() {
+			return
 		}
 	}
 	buf := make([]byte, 64*1024)

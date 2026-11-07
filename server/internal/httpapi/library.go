@@ -720,6 +720,9 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if recID, err := strconv.ParseInt(id, 10, 64); err == nil {
+		s.Hub.FileRequested(recID)
+	}
 	path := filepath.Join(s.Hub.Dir, "file", id, filepath.Base(name))
 	switch {
 	case gap:
