@@ -660,9 +660,17 @@ func (s *Server) planWith(ctx context.Context, passes []store.Pass) (scheduleSna
 	recs, _ := s.Store.Recordings(ctx)
 	seen, _ := s.Store.SeenDeleted(ctx)
 	skips, _ := s.Store.Skips(ctx)
-	items := dvr.PlanLibrary(passes, airings, count, now, end, recs, seen, skips)
-	items = dvr.AttachSuggestions(items, passes, airings, count, now, end, s.guideNumbers(ctx))
 	waits, _ := s.Store.RecordingWaits(ctx)
+	items := dvr.PlanOnAir(passes, airings, count, now, end, recs, seen, skips, dvr.OnAir{
+		Now: now, Waits: waits,
+		Held: func(id int64) time.Time {
+			if s.Hub == nil {
+				return time.Time{}
+			}
+			return s.Hub.BufferedSince(ctx, id)
+		},
+	})
+	items = dvr.AttachSuggestions(items, passes, airings, count, now, end, s.guideNumbers(ctx))
 	dvr.MarkWaits(items, waits)
 	s.nameManual(ctx, items)
 	if items == nil {

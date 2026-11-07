@@ -59,10 +59,58 @@ func Plan(passes []store.Pass, airings []store.Airing, tunerCount int, from, to 
 // limit, skipped once) applied first, so an airing that won't record never
 // takes a tuner from one that will.
 func PlanLibrary(passes []store.Pass, airings []store.Airing, tunerCount int, from, to time.Time, recs []store.Recording, seen, skips map[string]bool) []Planned {
+	return PlanOnAir(passes, airings, tunerCount, from, to, recs, seen, skips, OnAir{})
+}
+
+// OnAir is what the plan reads to be honest about airings already on.
+type OnAir struct {
+	Now   time.Time
+	Waits []store.RecordingWait
+	// Held is how far back a channel's buffer reaches; zero when it is not tuned.
+	Held func(channelID int64) time.Time
+}
+
+// PlanOnAir is PlanLibrary that also drops airings already on that nothing is
+// going to start, so they don't promise a recording or take a tuner.
+func PlanOnAir(passes []store.Pass, airings []store.Airing, tunerCount int, from, to time.Time, recs []store.Recording, seen, skips map[string]bool, air OnAir) []Planned {
 	items := ApplyLibrary(match(passes, airings, from, to), passes, recs, seen, skips)
 	noteRunning(items, recs)
+	if !air.Now.IsZero() {
+		markUnderway(items, passes, recs, air)
+	}
 	resolvePriority(items, tunerCount)
 	return items
+}
+
+// markUnderway skips an airing past its start that Tick will not join: no
+// recording running, no refused start still trying, no failed one with tries
+// left, and no buffer that holds its beginning. Starting one would be a piece
+// of a show nobody asked for by name, so the plan says it won't record.
+func markUnderway(items []Planned, passes []store.Pass, recs []store.Recording, air OnAir) {
+	waiting := make(map[waitKey]bool, len(air.Waits))
+	for _, w := range air.Waits {
+		waiting[keyOfWait(w.ChannelID, w.Start)] = true
+	}
+	for i := range items {
+		a := items[i].Airing
+		if items[i].Skipped || !air.Now.After(a.Start.Add(recordLead)) || !a.End.After(air.Now) {
+			continue
+		}
+		if already(recs, a) || waiting[keyOfWait(a.ChannelID, a.Start)] {
+			continue
+		}
+		pass, ok := passByID(passes, items[i].PassID)
+		if !ok || retriesLeft(recs, pass, a, air.Now) {
+			continue
+		}
+		if air.Held != nil && !attempted(recs, pass, a) {
+			if join, _ := JoinDecision(pass, a, air.Now, air.Held(a.ChannelID)); join {
+				continue
+			}
+		}
+		items[i].Skipped = true
+		items[i].Reason = "Already on"
+	}
 }
 
 // noteRunning extends an airing's tuner span to the end of the recording

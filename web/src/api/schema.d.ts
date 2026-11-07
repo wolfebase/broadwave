@@ -2996,7 +2996,7 @@ export interface components {
             padAfter: number;
             conflict: boolean;
             skipped: boolean;
-            /** @description Why the line is skipped or waiting, in words to show the viewer. */
+            /** @description Why the line is skipped or waiting, in words to show the viewer. "Already on" is an airing past its start that won't record. */
             reason?: string;
             /** @description The airing should be recording and could not start. The server keeps trying while it is on, and `reason` says what it is waiting for ("Waiting for a tuner"). If it never starts, a failed recording says why in its `error`. */
             waiting?: boolean;

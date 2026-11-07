@@ -44,7 +44,10 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 	active, _ := st.Recordings(ctx)
 	seen, _ := st.SeenDeleted(ctx)
 	skips, _ := st.Skips(ctx)
-	planned := PlanLibrary(passes, rows, TunerCount(ctx, st, now), now.Add(-time.Minute), now.Add(lead), active, seen, skips)
+	planned := PlanOnAir(passes, rows, TunerCount(ctx, st, now), now.Add(-time.Minute), now.Add(lead), active, seen, skips, OnAir{
+		Now: now, Waits: waits,
+		Held: func(id int64) time.Time { return hub.BufferedSince(ctx, id) },
+	})
 	open := settleWaits(ctx, st, waits, passes, planned, active, now)
 	hold := 0
 	for _, item := range planned {
@@ -141,6 +144,27 @@ const maxRetries = 3
 // complete and is not tried again. Each retry waits a minute longer than the
 // last, and after maxRetries failures the airing is left alone.
 func RetryDue(recs []store.Recording, pass store.Pass, airing store.Airing, now time.Time) bool {
+	tries, last := failedTries(recs, pass, airing)
+	if tries == 0 || tries > maxRetries || now.Sub(last) < time.Duration(tries)*time.Minute {
+		return false
+	}
+	end := airing.End.Add(time.Duration(pass.PadAfter)*time.Minute + SportsTail(airing))
+	return end.Sub(now) >= time.Minute
+}
+
+// retriesLeft reports an airing RetryDue will start, now or after its wait.
+func retriesLeft(recs []store.Recording, pass store.Pass, airing store.Airing, now time.Time) bool {
+	tries, _ := failedTries(recs, pass, airing)
+	if tries == 0 || tries > maxRetries {
+		return false
+	}
+	end := airing.End.Add(time.Duration(pass.PadAfter)*time.Minute + SportsTail(airing))
+	return end.Sub(now) >= time.Minute
+}
+
+// failedTries counts this airing's failed attempts and when the last one
+// ended. Zero tries means there is none to repeat: any other attempt took.
+func failedTries(recs []store.Recording, pass store.Pass, airing store.Airing) (int, time.Time) {
 	lead := recordLead
 	if extra := time.Duration(pass.PadBefore) * time.Minute; extra > lead {
 		lead = extra
@@ -153,7 +177,7 @@ func RetryDue(recs []store.Recording, pass store.Pass, airing store.Airing, now 
 			continue
 		}
 		if rec.Status != "failed" && rec.Status != "interrupted" {
-			return false
+			return 0, time.Time{}
 		}
 		tries++
 		ended := rec.StartedAt
@@ -164,11 +188,7 @@ func RetryDue(recs []store.Recording, pass store.Pass, airing store.Airing, now 
 			last = ended
 		}
 	}
-	if tries == 0 || tries > maxRetries || now.Sub(last) < time.Duration(tries)*time.Minute {
-		return false
-	}
-	end := airing.End.Add(time.Duration(pass.PadAfter)*time.Minute + SportsTail(airing))
-	return end.Sub(now) >= time.Minute
+	return tries, last
 }
 
 func already(recs []store.Recording, airing store.Airing) bool {

@@ -4024,7 +4024,7 @@ components:
         padAfter: { type: integer }
         conflict: { type: boolean }
         skipped: { type: boolean }
-        reason: { type: string, description: "Why the line is skipped or waiting, in words to show the viewer." }
+        reason: { type: string, description: "Why the line is skipped or waiting, in words to show the viewer. \"Already on\" is an airing past its start that won't record." }
         waiting: { type: boolean, description: "The airing should be recording and could not start. The server keeps trying while it is on, and `reason` says what it is waiting for (\"Waiting for a tuner\"). If it never starts, a failed recording says why in its `error`." }
         suggestion: { $ref: "#/components/schemas/Suggestion" }
         manual: { type: boolean, description: "A manual pass's slot. Its airing id is negative and made up for the slot; its times are the pass's, and its title and details are the guide's listing for most of that time when there is one." }

@@ -245,3 +245,84 @@ func TestALiveWarningCountsFrequencies(t *testing.T) {
 		t.Fatalf("one frequency needs one tuner, and one is left: %q", warning)
 	}
 }
+
+func underwayFixture(now time.Time) ([]store.Pass, []store.Airing) {
+	start := now.Add(-21 * time.Minute)
+	passes := []store.Pass{{ID: 1, Title: "Show", Kind: "series"}}
+	return passes, []store.Airing{
+		{ID: 1, ChannelID: 4, Title: "Show", Start: start, End: start.Add(30 * time.Minute)},
+		{ID: 2, ChannelID: 4, Title: "Show", Start: start.Add(30 * time.Minute), End: start.Add(time.Hour)},
+	}
+}
+
+func planUnderway(now time.Time, recs []store.Recording, air OnAir) []Planned {
+	passes, airings := underwayFixture(now)
+	air.Now = now
+	return PlanOnAir(passes, airings, 2, now, now.Add(2*time.Hour), recs, nil, nil, air)
+}
+
+// A rule made while its airing is on: that airing never starts, so the plan
+// doesn't say it will. The next one still does.
+func TestAnAiringAlreadyOnIsNotPromised(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	items := planUnderway(now, nil, OnAir{})
+	if len(items) != 2 {
+		t.Fatalf("items %+v", items)
+	}
+	if !items[0].Skipped || items[0].Conflict || items[0].Reason != "Already on" {
+		t.Fatalf("under way: %+v", items[0])
+	}
+	if items[1].Skipped {
+		t.Fatalf("the next airing: %+v", items[1])
+	}
+}
+
+func TestAnAiringOnThatWillRecordStaysPromised(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	passes, airings := underwayFixture(now)
+	on := airings[0]
+	for name, c := range map[string]struct {
+		recs []store.Recording
+		air  OnAir
+	}{
+		"recording":              {recs: []store.Recording{{ChannelID: 4, Title: "Show", Status: "recording", StartedAt: on.Start}}},
+		"failed with tries left": {recs: []store.Recording{{ChannelID: 4, Title: "Show", Status: "failed", StartedAt: on.Start, EndedAt: &now}}},
+		"waiting for a tuner":    {air: OnAir{Waits: []store.RecordingWait{{ChannelID: 4, Start: on.Start}}}},
+		"held by the buffer":     {air: OnAir{Held: func(int64) time.Time { return on.Start.Add(-time.Minute) }}},
+	} {
+		items := planUnderway(now, c.recs, c.air)
+		if items[0].Skipped {
+			t.Errorf("%s: %+v", name, items[0])
+		}
+	}
+	// Inside the start window Tick still starts it.
+	inWindow := on
+	inWindow.Start = now.Add(-time.Minute)
+	got := PlanOnAir(passes, []store.Airing{inWindow}, 2, now, now.Add(time.Hour), nil, nil, nil, OnAir{Now: now})
+	if len(got) != 1 || got[0].Skipped {
+		t.Fatalf("a minute in: %+v", got)
+	}
+	// A buffer that starts after the show did cannot make it whole.
+	late := planUnderway(now, nil, OnAir{Held: func(int64) time.Time { return on.Start.Add(time.Minute) }})
+	if !late[0].Skipped {
+		t.Fatalf("buffer after the start: %+v", late[0])
+	}
+}
+
+// An airing nothing will start must not push a real recording off the tuners.
+func TestAnAiringAlreadyOnTakesNoTuner(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	passes := []store.Pass{{ID: 1, Title: "On", Kind: "series", Priority: 5}, {ID: 2, Title: "Next", Kind: "series", Priority: 1}}
+	start := now.Add(-20 * time.Minute)
+	airings := []store.Airing{
+		{ID: 1, ChannelID: 4, Title: "On", Start: start, End: now.Add(time.Hour)},
+		{ID: 2, ChannelID: 5, Title: "Next", Start: now.Add(time.Minute), End: now.Add(time.Hour)},
+	}
+	items := PlanOnAir(passes, airings, 1, now, now.Add(2*time.Hour), nil, nil, nil, OnAir{Now: now})
+	if !items[0].Skipped || items[0].Reason != "Already on" {
+		t.Fatalf("on: %+v", items[0])
+	}
+	if items[1].Skipped {
+		t.Fatalf("next lost its tuner to a show that won't record: %+v", items[1])
+	}
+}
