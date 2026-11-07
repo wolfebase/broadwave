@@ -66,9 +66,10 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		if !start && RetryDue(active, pass, item.Airing, now) {
 			start, minutes, retry = true, recordMinutes(pass, item.Airing, now), true
 		}
-		// Refused on time, it keeps trying while the airing is on.
+		// Refused on time, it keeps trying while the airing is on. The padding
+		// after it has none of the show to save.
 		_, waiting := open[keyOfWait(item.Airing.ChannelID, item.Airing.Start)]
-		if !start && waiting {
+		if !start && waiting && item.Airing.End.After(now) {
 			start, minutes = true, recordMinutes(pass, item.Airing, now)
 		}
 		if !start {

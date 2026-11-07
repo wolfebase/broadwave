@@ -83,6 +83,11 @@ func TestARefusedRecordingSaysItIsWaitingOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv.HoldAll()
+	// One refusal can be a guide scan being stopped for the recording.
+	Tick(ctx, st, hub)
+	if events := recordingEvents(t, st); len(events) != 0 {
+		t.Fatalf("after one refusal: %q", events)
+	}
 	for range 3 {
 		Tick(ctx, st, hub)
 	}
@@ -153,6 +158,35 @@ func TestAWaitingRecordingStartsLateWhenATunerComesFree(t *testing.T) {
 	events := strings.Join(recordingEvents(t, st), "\n")
 	if !strings.Contains(events, "News started 10 min late") {
 		t.Fatalf("events %q", events)
+	}
+}
+
+// The show is over and only its padding is left: no piece of nothing, and the
+// failure waits for the end of the padding.
+func TestAWaitDoesNotStartInThePaddingAfterTheShow(t *testing.T) {
+	_, st, hub, channel := waitFixture(t)
+	ctx := context.Background()
+	end := time.Now().Add(-30 * time.Second).Truncate(time.Second)
+	start := end.Add(-30 * time.Minute)
+	if err := st.InsertAirings(ctx, []store.Airing{{ChannelID: channel, Title: "News", Start: start, End: end}}); err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.AddSeriesPass(ctx, store.Pass{Title: "News", Kind: "series", MatchKind: "title"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutRecordingWait(ctx, store.RecordingWait{
+		ChannelID: channel, Start: start, End: end, Until: end.Add(2 * time.Minute), PassID: id, Title: "News",
+		Reason: "Waiting for a tuner", Failure: "Every tuner was busy.", Since: start,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	Tick(ctx, st, hub)
+	if recs, _ := st.Recordings(ctx); len(recs) != 0 {
+		t.Fatalf("recordings %+v", recs)
+	}
+	if waits, _ := st.RecordingWaits(ctx); len(waits) != 1 {
+		t.Fatalf("waits %+v", waits)
 	}
 }
 

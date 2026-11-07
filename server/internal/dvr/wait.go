@@ -60,28 +60,33 @@ func MarkWaits(items []Planned, waits []store.RecordingWait) {
 	}
 }
 
-// noteRefused keeps the retry's place and, the first time, tells Activity.
+// noteRefused keeps the retry's place. Activity hears on the second refusal: a
+// guide scan being stopped for the recording refuses the first try, and the
+// next tick starts it, so that one is not news.
 func noteRefused(ctx context.Context, st *store.Store, open map[waitKey]store.RecordingWait, pass store.Pass, air store.Airing, err error, now time.Time) {
 	key := keyOfWait(air.ChannelID, air.Start)
-	_, known := open[key]
+	prev, known := open[key]
 	reason, failure := waitWords(err)
 	w := store.RecordingWait{
 		ChannelID: air.ChannelID, Start: air.Start, End: air.End,
 		Until:  air.End.Add(time.Duration(pass.PadAfter)*time.Minute + SportsTail(air)),
 		PassID: pass.ID, Title: air.Title, Subtitle: air.Subtitle, Description: air.Description,
 		Category: air.Category, ProgramID: air.ProgramID, GameID: air.GameID,
-		Reason: reason, Failure: failure, Since: now,
+		Reason: reason, Failure: failure, Since: now, Told: known,
 	}
 	if perr := st.PutRecordingWait(ctx, w); perr != nil {
 		slog.Warn(fmt.Sprintf("recording wait: %v", perr))
 		return
 	}
 	open[key] = w
-	if known {
-		slog.Debug(fmt.Sprintf("pass record: %s: %v", air.Title, err))
+	if !known {
+		slog.Warn(fmt.Sprintf("pass record: %s: %v", air.Title, err))
 		return
 	}
-	slog.Warn(fmt.Sprintf("pass record: %s: %v", air.Title, err))
+	slog.Debug(fmt.Sprintf("pass record: %s: %v", air.Title, err))
+	if prev.Told {
+		return
+	}
 	message := fmt.Sprintf("%s is waiting for a tuner. Every tuner is busy.", air.Title)
 	if reason != "Waiting for a tuner" {
 		message = fmt.Sprintf("%s has not started. %s", air.Title, failure)

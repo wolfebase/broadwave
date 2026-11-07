@@ -25,22 +25,24 @@ type RecordingWait struct {
 	// Failure is what the failed recording says if it never starts.
 	Failure string
 	Since   time.Time
+	// Told is set once Activity has said so.
+	Told bool
 }
 
 // PutRecordingWait notes a wait, or the latest reason for one already noted.
 func (s *Store) PutRecordingWait(ctx context.Context, w RecordingWait) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO recording_waits (channel_id, airing_start, airing_end, until_at, pass_id, title, subtitle, description, category, program_id, game_id, reason, failure, since)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(channel_id, airing_start) DO UPDATE SET reason = excluded.reason, failure = excluded.failure`,
-		w.ChannelID, w.Start.Unix(), w.End.Unix(), w.Until.Unix(), w.PassID, w.Title, w.Subtitle, w.Description, w.Category, w.ProgramID, w.GameID, w.Reason, w.Failure, w.Since.Unix())
+INSERT INTO recording_waits (channel_id, airing_start, airing_end, until_at, pass_id, title, subtitle, description, category, program_id, game_id, reason, failure, since, told)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(channel_id, airing_start) DO UPDATE SET reason = excluded.reason, failure = excluded.failure, told = excluded.told`,
+		w.ChannelID, w.Start.Unix(), w.End.Unix(), w.Until.Unix(), w.PassID, w.Title, w.Subtitle, w.Description, w.Category, w.ProgramID, w.GameID, w.Reason, w.Failure, w.Since.Unix(), w.Told)
 	return err
 }
 
 // RecordingWaits lists every open wait.
 func (s *Store) RecordingWaits(ctx context.Context) ([]RecordingWait, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT channel_id, airing_start, airing_end, until_at, pass_id, title, subtitle, description, category, program_id, game_id, reason, failure, since
+SELECT channel_id, airing_start, airing_end, until_at, pass_id, title, subtitle, description, category, program_id, game_id, reason, failure, since, told
 FROM recording_waits ORDER BY airing_start`)
 	if err != nil {
 		return nil, err
@@ -50,7 +52,7 @@ FROM recording_waits ORDER BY airing_start`)
 	for rows.Next() {
 		var w RecordingWait
 		var start, end, until, since int64
-		if err := rows.Scan(&w.ChannelID, &start, &end, &until, &w.PassID, &w.Title, &w.Subtitle, &w.Description, &w.Category, &w.ProgramID, &w.GameID, &w.Reason, &w.Failure, &since); err != nil {
+		if err := rows.Scan(&w.ChannelID, &start, &end, &until, &w.PassID, &w.Title, &w.Subtitle, &w.Description, &w.Category, &w.ProgramID, &w.GameID, &w.Reason, &w.Failure, &since, &w.Told); err != nil {
 			return nil, err
 		}
 		w.Start, w.End, w.Until, w.Since = time.Unix(start, 0), time.Unix(end, 0), time.Unix(until, 0), time.Unix(since, 0)
