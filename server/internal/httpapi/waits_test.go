@@ -121,3 +121,58 @@ func TestScheduleFailsWhenWaitsCannotBeRead(t *testing.T) {
 		t.Fatalf("status %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// The plan is cached for a minute. An airing that ended inside that minute
+// kept saying "Waiting for a tuner" until the minute was out.
+func TestAWaitEndsWithItsAiring(t *testing.T) {
+	ctx := context.Background()
+	st := testStore(t)
+	if err := st.UpsertDevice(ctx, hdhr.Device{DeviceID: "BOX", FriendlyName: "Lab", TunerCount: 1}, []hdhr.Channel{{GuideNumber: "4.1", GuideName: "FOX"}}); err != nil {
+		t.Fatal(err)
+	}
+	fox := guideID(t, st, "4.1")
+	// The airing ends inside the minute the plan is cached for.
+	if into := time.Since(time.Now().Truncate(time.Minute)); into > 50*time.Second {
+		time.Sleep(time.Minute - into + 100*time.Millisecond)
+	}
+	began := time.Now()
+	start := began.Add(-10 * time.Minute).Truncate(time.Second)
+	end := began.Add(2 * time.Second)
+	if err := st.ReplaceAirings(ctx, []store.Airing{{ChannelID: fox, Title: "News", ProgramID: "NEWS", Start: start, End: end}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AddPass(ctx, "News", 0, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutRecordingWait(ctx, store.RecordingWait{
+		ChannelID: fox, Start: start, End: end, Until: end, PassID: 1, Title: "News",
+		Reason: "Waiting for a tuner", Failure: "Every tuner was busy.", Since: start,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st}).Handler()
+	waiting := func() bool {
+		res := get(t, h, "/api/v1/schedule")
+		var body struct {
+			Items []struct {
+				Waiting bool `json:"waiting"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range body.Items {
+			if item.Waiting {
+				return true
+			}
+		}
+		return false
+	}
+	if !waiting() {
+		t.Fatal("the airing on now is not waiting")
+	}
+	time.Sleep(time.Until(end.Add(300 * time.Millisecond)))
+	if waiting() {
+		t.Fatal("the plan still says waiting after the airing ended")
+	}
+}

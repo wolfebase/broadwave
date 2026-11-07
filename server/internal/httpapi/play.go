@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"broadwave/internal/disk"
@@ -623,14 +624,45 @@ func (s *Server) refreshGuide(w http.ResponseWriter, r *http.Request) {
 // not once per request: a 14-day plan of a full guide takes a good part of
 // a second.
 func (s *Server) schedule(w http.ResponseWriter, r *http.Request) {
-	key := s.versionKey(r.Context(), "schedule|"+s.now().Truncate(time.Minute).Format(time.RFC3339), "guide", "channels", "recordings", "schedule")
+	now := s.now()
+	key := s.versionKey(r.Context(), "schedule|"+now.Truncate(time.Minute).Format(time.RFC3339)+"|"+s.plan.turn(now), "guide", "channels", "recordings", "schedule")
 	s.serveCached(w, r, key, func(ctx context.Context) (any, error) {
 		snap, err := s.loadSchedule(ctx)
 		if err != nil {
 			return nil, err
 		}
+		s.plan.built(snap.items, now)
 		return map[string]any{"tunerCount": snap.count, "items": snap.items}, nil
 	})
+}
+
+// planEdge turns the schedule's cache over when an airing in it ends, so a
+// line about an airing that is over, "Waiting for a tuner" above all, goes
+// with it and not when the minute is out.
+type planEdge struct {
+	mu    sync.Mutex
+	at    time.Time
+	count int
+}
+
+func (p *planEdge) turn(now time.Time) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.at.IsZero() && !now.Before(p.at) {
+		p.count++
+		p.at = time.Time{}
+	}
+	return strconv.Itoa(p.count)
+}
+
+func (p *planEdge) built(items []dvr.Planned, now time.Time) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, item := range items {
+		if end := item.Airing.End; end.After(now) && (p.at.IsZero() || end.Before(p.at)) {
+			p.at = end
+		}
+	}
 }
 
 type scheduleSnap struct {

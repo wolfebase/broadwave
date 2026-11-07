@@ -149,6 +149,8 @@ type Server struct {
 
 	// bodies caches the encoded guide, channel, and schedule answers.
 	bodies bodyCache
+	// plan says when the cached schedule goes stale inside its minute.
+	plan planEdge
 
 	probeMu      sync.Mutex
 	probing      map[int64]bool
