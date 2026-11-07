@@ -184,6 +184,30 @@ func TestPlayingAPartialCopyCarriesOn(t *testing.T) {
 	}
 }
 
+// Shutdown stops the encodes before the HTTP server, and a player still asking
+// must not start one that outlives the process.
+func TestARequestDuringShutdownStartsNoEncode(t *testing.T) {
+	dir := t.TempDir()
+	bin, argsLog := resumeFFmpeg(t, dir)
+	rec := filepath.Join(dir, "show.ts")
+	if err := os.WriteFile(rec, mpeg2TS(1, true), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: time.Minute, FFmpeg: bin}
+	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+		t.Fatal(err)
+	}
+	h.Shutdown()
+	h.FileRequested(7)
+	time.Sleep(200 * time.Millisecond)
+	if encodeRunning(h, 7) {
+		t.Fatal("a request started an encode during shutdown")
+	}
+	if n := len(argLines(t, argsLog, 1)); n != 1 {
+		t.Fatalf("%d encodes", n)
+	}
+}
+
 // ffmpeg that cannot go on must not be started again by every player request.
 func TestAFailingResumeIsNotRetriedOnEveryRequest(t *testing.T) {
 	dir := t.TempDir()

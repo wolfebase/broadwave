@@ -47,7 +47,7 @@ func (h *Hub) FileRequested(id int64) {
 	h.playMu.Lock()
 	h.noteFileRequestLocked(id)
 	job := h.fileJobs[id]
-	start := job != nil && h.fileEnc[id] == nil && !job.failed && !job.resuming
+	start := job != nil && h.fileEnc[id] == nil && !job.failed && !job.resuming && !h.fileClosed
 	if start {
 		job.resuming = true
 	}
@@ -55,6 +55,13 @@ func (h *Hub) FileRequested(id int64) {
 	if start {
 		go h.resumeFile(id, job)
 	}
+}
+
+// FileEncoding reports an ffmpeg writing this recording's copy now.
+func (h *Hub) FileEncoding(id int64) bool {
+	h.playMu.Lock()
+	defer h.playMu.Unlock()
+	return h.fileEnc[id] != nil
 }
 
 func (h *Hub) noteFileRequestLocked(id int64) {
@@ -68,7 +75,7 @@ func (h *Hub) resumeFile(id int64, job *fileJob) {
 	defer h.lockFileStart(id)()
 	h.playMu.Lock()
 	job.resuming = false
-	current := h.fileJobs[id] == job && h.fileEnc[id] == nil && !job.failed
+	current := h.fileJobs[id] == job && h.fileEnc[id] == nil && !job.failed && !h.fileClosed
 	h.playMu.Unlock()
 	if current {
 		h.carryOn(id, filepath.Join(h.Dir, "file", strconv.FormatInt(id, 10)), job)

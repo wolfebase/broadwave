@@ -242,7 +242,7 @@ func TestAPlaylistRequestCarriesOnAStoppedEncode(t *testing.T) {
 	starts := filepath.Join(dir, "starts")
 	pids := filepath.Join(dir, "pids")
 	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho x >> " + starts + "\necho $$ >> " + pids + "\n" +
-		"if [ ! -f index.m3u8 ]; then\nprintf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:2.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nfi\nexec sleep 60\n;;\nesac\nexit 0\n"
+		"if [ ! -f index.m3u8 ]; then\nprintf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:2.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nexit 0\nfi\nexec sleep 60\n;;\nesac\nexit 0\n"
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -252,17 +252,34 @@ func TestAPlaylistRequestCarriesOnAStoppedEncode(t *testing.T) {
 	}
 	hub := &live.Hub{Dir: dir, FFmpeg: bin, Encoder: "libx264"}
 	t.Cleanup(hub.Shutdown)
+	t.Cleanup(func() {
+		raw, _ := os.ReadFile(pids)
+		for _, field := range strings.Fields(string(raw)) {
+			if pid, err := strconv.Atoi(field); err == nil {
+				if p, err := os.FindProcess(pid); err == nil {
+					_ = p.Kill()
+				}
+			}
+		}
+	})
 	if _, err := hub.PlayFile(id, src, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
 	}
-	hub.Shutdown()
+	// The first encode has stopped, its list still open.
+	deadline := time.Now().Add(3 * time.Second)
+	for hub.FileEncoding(id) {
+		if time.Now().After(deadline) {
+			t.Fatal("the first encode never stopped")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	h := (&Server{Store: st, Hub: hub}).Handler()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/"+strconv.FormatInt(id, 10)+"/index.m3u8", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatal(rec.Code, rec.Body.String())
 	}
-	deadline := time.Now().Add(3 * time.Second)
+	deadline = time.Now().Add(3 * time.Second)
 	for {
 		raw, _ := os.ReadFile(starts)
 		if strings.Count(string(raw), "x") == 2 {

@@ -262,6 +262,9 @@ type Hub struct {
 	fileSeen map[int64]time.Time
 	// fileReaders is the scans reading a recording's file.
 	fileReaders map[int64][]*fileReader
+	// fileClosed is set by Shutdown. The HTTP server is still up then, and a
+	// player's request must not start an encode that outlives the process.
+	fileClosed bool
 	// fileIdle replaces fileIdleAfter in a test.
 	fileIdle time.Duration
 	ringSeq  int
@@ -2691,6 +2694,9 @@ func (h *Hub) Shutdown() {
 	h.mu.Unlock()
 	// A recording being played is not a tuner feed. Leaving its ffmpeg
 	// running survives the process, and the next boot has no pid to reap.
+	h.playMu.Lock()
+	h.fileClosed = true
+	h.playMu.Unlock()
 	h.stopFileEncodes()
 	h.grabbers.Wait()
 	h.releasing.Wait()

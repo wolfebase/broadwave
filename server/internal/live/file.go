@@ -220,6 +220,7 @@ func (h *Hub) playRecording(id int64, job *fileJob, at float64, follow bool) (st
 		}
 		// A follow copy sees the encode is no longer current and stops.
 		h.stopFileEncode(id)
+		h.forgetFileJob(id, job)
 	}
 	return url, err
 }
