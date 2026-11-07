@@ -36,6 +36,34 @@ type Graph struct {
 	SD bool
 	// Rate is the source frame rate a header named, empty when unknown.
 	Rate string
+	// Trim is decoded and dropped before the output starts. A pipe that starts
+	// early sets it, so the first picture is whole.
+	Trim float64
+	// Shift starts the output clock there without appending to a list.
+	Shift float64
+	// Until ends the output after that many seconds.
+	Until float64
+	// Name is the segment and playlist name, seg and index when empty, and
+	// First the number of the first segment.
+	Name  string
+	First int
+}
+
+// seekPreroll is how far before a seek ffmpeg starts reading. Its seek lands
+// on any picture, and the ones up to the next key frame decode wrong or not
+// at all; this covers a broadcast GOP, and the output is cut at the seek.
+const seekPreroll = 3.0
+
+// splitSeek splits a file seek into where ffmpeg reads from and what it drops.
+func splitSeek(start float64) (from, trim float64) {
+	if start < resumeMin {
+		return 0, 0
+	}
+	from = start - seekPreroll
+	if from < resumeMin {
+		from = 0
+	}
+	return from, start - from
 }
 
 // sdCaptionCrop drops the top four rows of a picture 576 lines or shorter.
@@ -111,10 +139,21 @@ func PictureArgs(g Graph) []string {
 	args = urlProtocols(args, g.Input)
 	// Before -i, so ffmpeg seeks the file instead of decoding up to this point.
 	// A pipe has no index to seek.
-	if g.Start >= resumeMin && g.Input != "pipe:0" {
-		args = append(args, "-ss", strconv.FormatFloat(g.Start, 'f', 3, 64))
+	trim := g.Trim
+	if g.Input != "pipe:0" {
+		from, cut := splitSeek(g.Start)
+		if from > 0 {
+			args = append(args, "-ss", strconv.FormatFloat(from, 'f', 3, 64))
+		}
+		trim += cut
 	}
 	args = append(args, "-i", g.Input)
+	if trim > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(trim, 'f', 3, 64))
+	}
+	if g.Until > 0 {
+		args = append(args, "-t", strconv.FormatFloat(g.Until, 'f', 3, 64))
+	}
 	switch {
 	case g.Audio == "none" && g.Program > 0:
 		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", g.Program))
@@ -139,10 +178,20 @@ func PictureArgs(g Graph) []string {
 	}
 	// The clock carries on from the segments an earlier encode wrote. It applies
 	// after the encoder, so the key frames stay on this encode's two seconds.
-	if g.Carry > 0 {
+	switch {
+	case g.Carry > 0:
 		args = append(args, "-output_ts_offset", strconv.FormatFloat(g.Carry, 'f', 3, 64))
+	case g.Shift > 0:
+		args = append(args, "-output_ts_offset", strconv.FormatFloat(g.Shift, 'f', 3, 64))
 	}
-	args = append(args, "-f", "hls", "-hls_time", "2", "-hls_segment_filename", "seg%05d.ts")
+	name, list := "seg", "index.m3u8"
+	if g.Name != "" {
+		name, list = g.Name, g.Name+".m3u8"
+	}
+	args = append(args, "-f", "hls", "-hls_time", "2", "-hls_segment_filename", name+"%05d.ts")
+	if g.First > 0 {
+		args = append(args, "-start_number", strconv.Itoa(g.First))
+	}
 	if g.Live {
 		args = append(args,
 			"-hls_list_size", "2700",
@@ -164,7 +213,7 @@ func PictureArgs(g Graph) []string {
 			"-hls_flags", flags,
 		)
 	}
-	args = append(args, "index.m3u8")
+	args = append(args, list)
 	return args
 }
 

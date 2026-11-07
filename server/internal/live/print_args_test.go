@@ -19,6 +19,9 @@ func TestPrintPlaybackArgs(t *testing.T) {
 		switch w {
 		case "12345.678":
 			return `"$SEEK"`
+		case "12342.678":
+			// ffmpeg reads from seekPreroll before the seek and drops that.
+			return `"$PRESEEK"`
 		case "98765.432":
 			return `"$CARRY"`
 		case "INPUT":
@@ -69,11 +72,17 @@ func TestPrintPlaybackArgs(t *testing.T) {
 			g.Start, g.Carry = seek, carry
 			line(name, "carry", g)
 
+			// The stretch before a resume, encoded when a player asks for it.
+			fill := g
+			fill.Start, fill.Carry, fill.Shift, fill.Until, fill.Name, fill.First = seek, 0, seek, 10, "fill", 6172
+			line(name, "fill", fill)
+
 			g.Start, g.Carry = 0, 0
 			g.Input = "pipe:0"
 			line(name, "pipefirst", g)
-			g.Carry = carry
+			g.Carry, g.Trim = carry, seekPreroll
 			line(name, "pipecarry", g)
+			g.Trim = 0
 		}
 	}
 }

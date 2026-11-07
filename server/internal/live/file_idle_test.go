@@ -393,7 +393,8 @@ func TestACarryOnSeeksInsteadOfReadingTheFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.FileRequested(8)
-	want := int64(20 * 188)
+	// From three seconds before the clock: ffmpeg drops those, so the first picture is whole.
+	want := int64(23 * 188)
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		info, err := os.Stat(second)
@@ -409,7 +410,7 @@ func TestACarryOnSeeksInsteadOfReadingTheFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pcr, ok := readPCR(got[:188]); !ok || pcr != 100*90000 {
+	if pcr, ok := readPCR(got[:188]); !ok || pcr != 97*90000 {
 		t.Fatalf("first packet clock %d %v", pcr, ok)
 	}
 }
@@ -611,7 +612,7 @@ func TestACarryOnAfterAGameFinishedPlaysTheRest(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		info, err := os.Stat(second)
-		if err == nil && info.Size() == 53*188 {
+		if err == nil && info.Size() == 56*188 {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -862,10 +863,11 @@ func TestAStoppedFollowCarriesOnAtTheClock(t *testing.T) {
 	awaitEncode(t, h, 8, false)
 	h.FileRequested(8)
 	lines := argLines(t, argsLog, 2)
-	if !strings.Contains(lines[1], "-i pipe:0") || !strings.Contains(lines[1], "-output_ts_offset 4.000") {
+	if !strings.Contains(lines[1], "-i pipe:0 -ss 3.000") || !strings.Contains(lines[1], "-output_ts_offset 4.000") {
 		t.Fatalf("resume: %s", lines[1])
 	}
-	want := len(pcrTS(0x100, 0)) * 2
+	// It starts at the clock mark before 1 s, and ffmpeg drops up to 4 s.
+	want := len(pcrTS(0x100, 0)) * 3
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		info, err := os.Stat(second)
@@ -1215,5 +1217,136 @@ func TestTheSweepRunsAtStartup(t *testing.T) {
 			t.Fatal("startup left the old copy")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+type grayFrame struct {
+	pts float64
+	pix []byte
+}
+
+// grayFrames decodes a segment to tiny pictures with their times.
+func grayFrames(t *testing.T, path string) []grayFrame {
+	t.Helper()
+	out, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0",
+		"-show_entries", "frame=pts_time", "-of", "csv=p=0", path).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var times []float64
+	for _, line := range strings.Fields(string(out)) {
+		v, err := strconv.ParseFloat(strings.TrimSuffix(line, ","), 64)
+		if err != nil {
+			t.Fatalf("frame time %q", line)
+		}
+		times = append(times, v)
+	}
+	raw, err := exec.Command("ffmpeg", "-v", "error", "-i", path, "-map", "0:v:0",
+		"-vf", "scale=32:18,format=rgb24", "-f", "rawvideo", "-").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const size = 32 * 18 * 3
+	if len(raw) != len(times)*size {
+		t.Fatalf("%d bytes for %d pictures", len(raw), len(times))
+	}
+	frames := make([]grayFrame, len(times))
+	for i := range times {
+		frames[i] = grayFrame{pts: times[i], pix: raw[i*size : (i+1)*size]}
+	}
+	return frames
+}
+
+// pictureDiff is how far apart two pictures are on average, in levels.
+func pictureDiff(a, b []byte) float64 {
+	var sum int
+	for i := range a {
+		d := int(a[i]) - int(b[i])
+		if d < 0 {
+			d = -d
+		}
+		sum += d
+	}
+	return float64(sum) / float64(len(a))
+}
+
+// ffmpeg's seek lands on any picture, and the ones before the next key frame
+// decode against missing pictures: on the processor they come out a little
+// wrong, and a GPU decoder can hold them, so every join and resume could hold
+// the picture up to a GOP while the sound went on. It reads from earlier and
+// drops that now, so the first picture of a resume is the one at the resume.
+// Without that this fixture's first pictures were 0.55 to 0.75 levels off; with
+// it, 0.1, which is encoder noise.
+func TestAResumeStartsOnAWholePicture(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not on PATH")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not on PATH")
+	}
+	dir := t.TempDir()
+	rec := filepath.Join(dir, "show.ts")
+	// A broadcast GOP: half a second, B-frames, interlaced. The colour turns
+	// all the way round every second, so a picture from the wrong moment shows.
+	build := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc2=s=320x180:r=30000/1001:d=16,hue=H=2*PI*t",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=16",
+		"-c:v", "mpeg2video", "-b:v", "2M", "-g", "15", "-bf", "2", "-flags", "+ilme+ildct", "-top", "1",
+		"-c:a", "ac3", "-b:a", "96k", "-shortest", "-f", "mpegts", rec)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("fixture: %v %s", err, out)
+	}
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: time.Minute, FFmpeg: ffmpeg}
+	t.Cleanup(h.stopFileEncodes)
+	var whole []grayFrame
+	if _, err := h.PlayFile(1, rec, "mpeg2video", "broadcast", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	awaitEnded(t, filepath.Join(dir, "file", "1", "index.m3u8"))
+	for n := 0; ; n++ {
+		seg := filepath.Join(dir, "file", "1", fmt.Sprintf("seg%05d.ts", n))
+		if !exists(seg) {
+			break
+		}
+		whole = append(whole, grayFrames(t, seg)...)
+	}
+	for _, at := range []float64{6, 9.3} {
+		id := int64(at * 10)
+		if _, err := h.PlayFile(id, rec, "mpeg2video", "broadcast", "", at); err != nil {
+			t.Fatal(err)
+		}
+		play := filepath.Join(dir, "file", strconv.FormatInt(id, 10))
+		from := FileOffset(play)
+		seg := filepath.Join(play, "seg00000.ts")
+		deadline := time.Now().Add(30 * time.Second)
+		for !exists(filepath.Join(play, "seg00001.ts")) && !playlistEnded(filepath.Join(play, "index.m3u8")) {
+			if time.Now().After(deadline) {
+				t.Fatal("no segment")
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		frames := grayFrames(t, seg)
+		var worst float64
+		for i, f := range frames[:min(len(frames), 30)] {
+			// The copy's clock starts at its own first picture: line them up by time.
+			want := f.pts - frames[0].pts + from + whole[0].pts
+			best := -1.0
+			for _, w := range whole {
+				if d := w.pts - want; d > -0.02 && d < 0.02 {
+					if diff := pictureDiff(f.pix, w.pix); best < 0 || diff < best {
+						best = diff
+					}
+				}
+			}
+			if best < 0 {
+				t.Fatalf("resume at %v: picture %d at %.3f is nowhere in the whole copy", at, i, want)
+			}
+			worst = max(worst, best)
+		}
+		t.Logf("resume at %v (copy from %v): worst picture differs by %.2f", at, from, worst)
+		if worst > 0.3 {
+			t.Fatalf("resume at %v: the first pictures are not the ones at the resume (%.2f)", at, worst)
+		}
 	}
 }

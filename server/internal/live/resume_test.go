@@ -1,6 +1,7 @@
 package live
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -78,8 +79,9 @@ func TestInputSeekPrecedesTheFile(t *testing.T) {
 	if ss < 0 || in < 0 || ss > in {
 		t.Fatalf("input seek: %s", strings.Join(args, " "))
 	}
-	if args[ss+1] != "2400.000" {
-		t.Fatalf("seek %s", args[ss+1])
+	// It reads from a little earlier and drops that, so the first picture is whole.
+	if args[ss+1] != "2397.000" || !inputSeek(strings.Join(args, "\n"), "2400.000") {
+		t.Fatalf("seek %s", strings.Join(args, " "))
 	}
 	short := strings.Join(PictureArgs(Graph{Input: "show.ts", Start: 1, VideoCodec: "MPEG2", Encoder: "libx264", Live: false}), " ")
 	if strings.Contains(short, "-ss") {
@@ -190,18 +192,37 @@ func TestPlayFileSeeksAndReuses(t *testing.T) {
 	}
 }
 
+// inputSeek reports an encode whose output starts at want: the seek before
+// -i plus what is dropped after it. Of several encodes, the last one counts.
 func inputSeek(args, want string) bool {
 	lines := strings.Split(args, "\n")
-	for i, line := range lines {
-		if line == "-ss" && i+1 < len(lines) && lines[i+1] == want {
-			for _, later := range lines[i+2:] {
-				if later == "-i" {
-					return true
-				}
-			}
+	for i := len(lines) - 1; i >= 0; i-- {
+		if lines[i] == "-hide_banner" {
+			lines = lines[i:]
+			break
 		}
 	}
-	return false
+	var in, out float64
+	input := false
+	for i, line := range lines {
+		if line == "-i" {
+			input = true
+		}
+		if line != "-ss" || i+1 >= len(lines) {
+			continue
+		}
+		v, err := strconv.ParseFloat(lines[i+1], 64)
+		if err != nil {
+			return false
+		}
+		if input {
+			out = v
+		} else {
+			in = v
+		}
+	}
+	w, err := strconv.ParseFloat(want, 64)
+	return err == nil && math.Abs(in+out-w) < 0.0005
 }
 
 func TestPlayFileKeepsAFinishedEncode(t *testing.T) {

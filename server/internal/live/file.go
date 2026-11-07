@@ -406,12 +406,18 @@ func (h *Hub) carryOn(id int64, dir string, job *fileJob) {
 		h.forgetFileJob(id, job)
 		return
 	}
-	mark, ok := job.clock.before(at)
+	// A pipe can't seek, so a follow copy starts a little early and drops that.
+	want := at
+	if job.follow {
+		want = max(at-seekPreroll, 0)
+		g.Trim = at - want
+	}
+	mark, ok := job.clock.before(want)
 	if job.follow && !ok {
 		h.markFileJobFailed(job)
 		return
 	}
-	from := followAt{start: mark.off, skip: at - mark.at}
+	from := followAt{start: mark.off, skip: want - mark.at}
 	if _, _, err := h.runFileEncode(id, dir, job, g, from, at); err != nil {
 		slog.Warn(fmt.Sprintf("recording %d: carry on: %v", id, err))
 		h.markFileJobFailed(job)
