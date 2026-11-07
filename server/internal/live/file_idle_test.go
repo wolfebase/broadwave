@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"broadwave/internal/disk"
 )
 
 // resumeFFmpeg is an ffmpeg stand-in that notes its arguments and writes a
@@ -33,6 +35,27 @@ func resumeFFmpeg(t *testing.T, dir string) (bin, argsLog string) {
 	}
 	t.Cleanup(func() { killPids(pids) })
 	return bin, argsLog
+}
+
+// clockFile writes a recording with one PCR a second, at the given seconds.
+func clockFile(t *testing.T, path string, seconds ...uint64) {
+	t.Helper()
+	var raw []byte
+	for _, s := range seconds {
+		raw = append(raw, pcrTS(0x100, s*90000)...)
+	}
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func steadyFile(t *testing.T, path string, seconds int) {
+	t.Helper()
+	ticks := make([]uint64, seconds)
+	for i := range ticks {
+		ticks[i] = uint64(i)
+	}
+	clockFile(t, path, ticks...)
 }
 
 func killPids(path string) {
@@ -86,10 +109,8 @@ func TestAnAbandonedRecordingStopsEncoding(t *testing.T) {
 	dir := t.TempDir()
 	bin, _ := resumeFFmpeg(t, dir)
 	rec := filepath.Join(dir, "show.ts")
-	if err := os.WriteFile(rec, mpeg2TS(1, true), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: 300 * time.Millisecond, FFmpeg: bin}
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 300 * time.Millisecond, FFmpeg: bin}
 	t.Cleanup(h.stopFileEncodes)
 	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
@@ -105,10 +126,8 @@ func TestRequestsKeepARecordingEncoding(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsLog := resumeFFmpeg(t, dir)
 	rec := filepath.Join(dir, "show.ts")
-	if err := os.WriteFile(rec, mpeg2TS(1, true), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: 400 * time.Millisecond, FFmpeg: bin}
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 400 * time.Millisecond, FFmpeg: bin}
 	t.Cleanup(h.stopFileEncodes)
 	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
@@ -132,10 +151,8 @@ func TestTheNextRequestCarriesOnWhereTheEncodeStopped(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsLog := resumeFFmpeg(t, dir)
 	rec := filepath.Join(dir, "show.ts")
-	if err := os.WriteFile(rec, mpeg2TS(1, true), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: 200 * time.Millisecond, FFmpeg: bin}
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 200 * time.Millisecond, FFmpeg: bin}
 	t.Cleanup(h.stopFileEncodes)
 	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
@@ -154,33 +171,258 @@ func TestTheNextRequestCarriesOnWhereTheEncodeStopped(t *testing.T) {
 	}
 }
 
-// Opening the recording again after a stop, or after a restart when nothing
-// in memory remembers the encode, reuses the copy and carries on. It used to
-// serve the partial playlist with nothing writing it, and the player stalled.
+// Opening the recording again after a stop carries on the copy. It used to serve
+// the partial playlist with nothing writing it, and the player stalled.
 func TestPlayingAPartialCopyCarriesOn(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsLog := resumeFFmpeg(t, dir)
 	rec := filepath.Join(dir, "show.ts")
-	if err := os.WriteFile(rec, mpeg2TS(1, true), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: time.Minute, FFmpeg: bin}
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 200 * time.Millisecond, FFmpeg: bin}
 	t.Cleanup(h.stopFileEncodes)
 	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
 	}
-	h.Shutdown()
-	restarted := &Hub{Dir: dir, Encoder: "libx264", fileIdle: time.Minute, FFmpeg: bin}
-	t.Cleanup(restarted.stopFileEncodes)
-	if _, err := restarted.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+	awaitEncode(t, h, 7, false)
+	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
 	}
-	if !encodeRunning(restarted, 7) {
+	if !encodeRunning(h, 7) {
 		t.Fatal("nothing is writing the rest of the recording")
 	}
 	lines := argLines(t, argsLog, 2)
 	if !strings.Contains(lines[1], "-ss 4.000") {
 		t.Fatalf("second encode: %s", lines[1])
+	}
+}
+
+// After a restart nothing knows this copy's clock. A new viewer starts again.
+func TestAPartialCopyFromAnEarlierRunStartsAgain(t *testing.T) {
+	dir := t.TempDir()
+	bin, argsLog := resumeFFmpeg(t, dir)
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: time.Minute, FFmpeg: bin}
+	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+		t.Fatal(err)
+	}
+	h.Shutdown()
+	restarted := &Hub{Dir: dir, Encoder: "libx264", FileIdle: time.Minute, FFmpeg: bin}
+	t.Cleanup(restarted.stopFileEncodes)
+	if _, err := restarted.PlayFile(7, rec, "mpeg2video", "broadwave", "progressive", 0); err != nil {
+		t.Fatal(err)
+	}
+	if !encodeRunning(restarted, 7) {
+		t.Fatal("nothing is writing the recording")
+	}
+	lines := argLines(t, argsLog, 2)
+	if strings.Contains(lines[1], "append_list") {
+		t.Fatalf("carried on with a clock nobody read: %s", lines[1])
+	}
+}
+
+// A kill can leave a list cut off. It is not carried on, or served as it is.
+func TestATornPlaylistIsNotReused(t *testing.T) {
+	dir := t.TempDir()
+	bin, argsLog := resumeFFmpeg(t, dir)
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 200 * time.Millisecond, FFmpeg: bin}
+	t.Cleanup(h.stopFileEncodes)
+	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+		t.Fatal(err)
+	}
+	awaitEncode(t, h, 7, false)
+	torn := "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXTINF:2.000,\nseg00000.ts\n#EXTINF:2.000,\nseg000"
+	playlist := filepath.Join(dir, "file", "7", "index.m3u8")
+	if err := os.WriteFile(playlist, []byte(torn), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.FileRequested(7)
+	time.Sleep(300 * time.Millisecond)
+	if n := len(argLines(t, argsLog, 1)); n != 1 {
+		t.Fatalf("%d encodes: carried on from a torn list", n)
+	}
+	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+		t.Fatal(err)
+	}
+	lines := argLines(t, argsLog, 2)
+	if strings.Contains(lines[1], "append_list") {
+		t.Fatalf("appended to a torn list: %s", lines[1])
+	}
+}
+
+func TestEveryPlaybackEncodeUsesTempFiles(t *testing.T) {
+	h := &Hub{Encoder: "libx264"}
+	line := strings.Join(PictureArgs(h.fileGraph("MPEG2", "broadcast", "progressive")), " ")
+	if !strings.Contains(line, "temp_file") {
+		t.Fatalf("args: %s", line)
+	}
+}
+
+func encodeKeepsRunning(t *testing.T, h *Hub, id int64, d time.Duration) {
+	t.Helper()
+	until := time.Now().Add(d)
+	for time.Now().Before(until) {
+		if !encodeRunning(h, id) {
+			t.Fatal("the encode stopped with a clock that can't be trusted")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// A clock reset makes the sum of segment times name the wrong place to seek
+// to, so a join would repeat or skip show. That encode runs to the end.
+func TestAnEncodeWithAnUntrustedClockIsNotStopped(t *testing.T) {
+	for name, seconds := range map[string][]uint64{
+		"went back to zero": {0, 1, 2, 3, 4, 5, 0, 1, 2, 3},
+		"jumped ahead":      {0, 1, 2, 3, 4, 5, 40, 41, 42, 43},
+		"no clock at all":   nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			bin, _ := resumeFFmpeg(t, dir)
+			rec := filepath.Join(dir, "show.ts")
+			clockFile(t, rec, seconds...)
+			if len(seconds) == 0 {
+				if err := os.WriteFile(rec, make([]byte, 188*64), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 100 * time.Millisecond, FFmpeg: bin}
+			t.Cleanup(h.stopFileEncodes)
+			if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+				t.Fatal(err)
+			}
+			encodeKeepsRunning(t, h, 7, 500*time.Millisecond)
+		})
+	}
+}
+
+func TestADiscontinuityFlagIsAReset(t *testing.T) {
+	c := newFileClock(0)
+	flagged := pcrTS(0x100, 2*90000)
+	flagged[5] |= 0x80
+	raw := append(append(pcrTS(0x100, 0), pcrTS(0x100, 90000)...), flagged...)
+	c.feed(0, raw)
+	if c.safe(true) {
+		t.Fatal("a discontinuity reads as straight")
+	}
+}
+
+// The same for a recording still being written, seen as the copy reads it.
+func TestAFollowThatSeesAResetIsNotStopped(t *testing.T) {
+	dir := t.TempDir()
+	bin, _ := resumeFFmpeg(t, dir)
+	rec := filepath.Join(dir, "show.ts")
+	clockFile(t, rec, 0, 1, 2, 3, 0, 1, 2)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 100 * time.Millisecond, FFmpeg: bin}
+	t.Cleanup(h.stopFileEncodes)
+	if _, err := h.PlayFollow(8, rec, "mpeg2video", "broadcast", "progressive", 0, func() bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	encodeKeepsRunning(t, h, 8, 500*time.Millisecond)
+}
+
+// ffmpeg dies on a file with a reset. mediaSpan can't be believed there, so the
+// list is not closed with show left, and requests don't start it over and over.
+func TestAnEncodeThatDiesOnAResetLeavesTheListOpen(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	starts := filepath.Join(dir, "starts")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho x >> " + starts + "\n" +
+		"printf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:6.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nsleep 0.3\nexit 1\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rec := filepath.Join(dir, "show.ts")
+	clockFile(t, rec, 0, 1, 2, 3, 0, 1, 2)
+	h := &Hub{Dir: dir, Encoder: "libx264", FFmpeg: bin}
+	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+		t.Fatal(err)
+	}
+	awaitEncode(t, h, 7, false)
+	time.Sleep(50 * time.Millisecond)
+	for range 10 {
+		h.FileRequested(7)
+		time.Sleep(20 * time.Millisecond)
+	}
+	if playlistEnded(filepath.Join(dir, "file", "7", "index.m3u8")) {
+		t.Fatal("the list was closed with show left")
+	}
+	raw, _ := os.ReadFile(starts)
+	if n := strings.Count(string(raw), "x"); n != 1 {
+		t.Fatalf("%d starts", n)
+	}
+}
+
+// A carry-on of a growing recording doesn't read what came before: after any
+// 30 s pause, on a share, that could take minutes.
+func TestACarryOnSeeksInsteadOfReadingTheFile(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	argsLog := filepath.Join(dir, "args.log")
+	pids := filepath.Join(dir, "pids.log")
+	second := filepath.Join(dir, "second.bin")
+	list := "#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:100.000,\\nseg00000.ts\\n"
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho $$ >> " + pids + "\necho \"$*\" >> " + argsLog + "\n" +
+		"if [ -f index.m3u8 ]; then\nexec cat > " + second + "\nfi\n" +
+		"printf '" + list + "' > index.m3u8\necho x > seg00000.ts\nexec cat > /dev/null\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { killPids(pids) })
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 120)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 500 * time.Millisecond, FFmpeg: bin}
+	t.Cleanup(h.stopFileEncodes)
+	if _, err := h.PlayFollow(8, rec, "mpeg2video", "broadcast", "progressive", 0, func() bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	awaitEncode(t, h, 8, false)
+	// What's before the last mark can't be read any more, and doesn't need to be.
+	raw, err := os.ReadFile(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 80 * 188 {
+		raw[i] = 0xff
+	}
+	if err := os.WriteFile(rec, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.FileRequested(8)
+	want := int64(20 * 188)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		info, err := os.Stat(second)
+		if err == nil && info.Size() == want {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("second copy: %v %v, want %d bytes from the clock", info, err, want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	got, err := os.ReadFile(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pcr, ok := readPCR(got[:188]); !ok || pcr != 100*90000 {
+		t.Fatalf("first packet clock %d %v", pcr, ok)
+	}
+}
+
+// The tick that starts over for a resume the clock never reached starts its
+// clock over too.
+func TestAClockThatStartsOverCanBeUsedAgain(t *testing.T) {
+	c := newFileClock(30)
+	c.feed(0, pcrTS(0x100, 0))
+	c.restartAt(0)
+	raw := append(pcrTS(0x100, 0), pcrTS(0x100, 90000)...)
+	c.feed(0, append(raw, pcrTS(0x100, 2*90000)...))
+	if !c.safe(true) || c.end() != 2 {
+		t.Fatalf("safe %v end %v", c.safe(true), c.end())
 	}
 }
 
@@ -190,10 +432,8 @@ func TestARequestDuringShutdownStartsNoEncode(t *testing.T) {
 	dir := t.TempDir()
 	bin, argsLog := resumeFFmpeg(t, dir)
 	rec := filepath.Join(dir, "show.ts")
-	if err := os.WriteFile(rec, mpeg2TS(1, true), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: time.Minute, FFmpeg: bin}
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: time.Minute, FFmpeg: bin}
 	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
 	}
@@ -220,11 +460,8 @@ func TestAFailingResumeIsNotRetriedOnEveryRequest(t *testing.T) {
 	}
 	rec := filepath.Join(dir, "show.ts")
 	// A clock far past the two seconds written: this is not the end of the file.
-	raw := append(pcrTS(0x100, 0), pcrTS(0x100, 600*90000)...)
-	if err := os.WriteFile(rec, raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: 200 * time.Millisecond, FFmpeg: bin}
+	steadyFile(t, rec, 600)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 200 * time.Millisecond, FFmpeg: bin}
 	t.Cleanup(h.stopFileEncodes)
 	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
@@ -269,11 +506,8 @@ func TestAResumeAtTheEndClosesTheList(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec := filepath.Join(dir, "show.ts")
-	raw := append(pcrTS(0x100, 0), pcrTS(0x100, 7*90000)...)
-	if err := os.WriteFile(rec, raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: 200 * time.Millisecond, FFmpeg: bin}
+	steadyFile(t, rec, 8)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 200 * time.Millisecond, FFmpeg: bin}
 	t.Cleanup(h.stopFileEncodes)
 	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
@@ -313,7 +547,7 @@ func TestAStoppedFollowCarriesOnAtTheClock(t *testing.T) {
 	if err := os.WriteFile(rec, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: 200 * time.Millisecond, FFmpeg: bin}
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: 200 * time.Millisecond, FFmpeg: bin}
 	t.Cleanup(h.stopFileEncodes)
 	still := func() bool { return true }
 	if _, err := h.PlayFollow(8, rec, "mpeg2video", "broadcast", "progressive", 0, still); err != nil {
@@ -359,7 +593,7 @@ func TestAResumedEncodeJoinsTheOneBeforeIt(t *testing.T) {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("fixture: %v %s", err, out)
 	}
-	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: time.Minute, FFmpeg: ffmpeg}
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: time.Minute, FFmpeg: ffmpeg}
 	t.Cleanup(h.stopFileEncodes)
 	if _, err := h.PlayFile(1, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
@@ -408,6 +642,16 @@ func TestAResumedEncodeJoinsTheOneBeforeIt(t *testing.T) {
 	if len(before) == 0 {
 		t.Fatal("no playlist before the stop")
 	}
+	abs, err := filepath.Abs(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := &fileJob{path: abs, graph: h.fileGraphFor(rec, "mpeg2video", "broadcast", "progressive"), clock: newFileClock(0)}
+	job.clock.scan(abs, func() bool { return false })
+	if !job.clock.safe(false) {
+		t.Fatal("a generated file's clock reads as unsteady")
+	}
+	h.keepFileJob(1, job)
 
 	if _, err := h.PlayFile(1, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
@@ -564,9 +808,9 @@ func TestTheSweepKeepsCopiesUnderTheLimit(t *testing.T) {
 	prev := fileKeepBytes
 	fileKeepBytes = 100
 	t.Cleanup(func() { fileKeepBytes = prev })
-	oldest := copyDir(t, h, 1, 60, 5*time.Hour)
-	middle := copyDir(t, h, 2, 60, 4*time.Hour)
-	newest := copyDir(t, h, 3, 30, 3*time.Hour)
+	oldest := copyDir(t, h, 1, 60, fileLimitIdle+5*time.Hour)
+	middle := copyDir(t, h, 2, 60, fileLimitIdle+4*time.Hour)
+	newest := copyDir(t, h, 3, 30, fileLimitIdle+3*time.Hour)
 	h.SweepFileCopies(time.Now())
 	if exists(oldest) {
 		t.Fatal("over the limit, the oldest copy stayed")
@@ -584,7 +828,7 @@ func TestTheLimitLeavesARecentlyPlayedCopy(t *testing.T) {
 	fileKeepBytes = 10
 	t.Cleanup(func() { fileKeepBytes = prev })
 	paused := copyDir(t, h, 1, 60, fileLimitIdle-time.Minute)
-	seen := copyDir(t, h, 2, 60, 5*time.Hour)
+	seen := copyDir(t, h, 2, 60, fileLimitIdle+5*time.Hour)
 	h.FileRequested(2)
 	h.SweepFileCopies(time.Now())
 	if !exists(paused) {
@@ -599,10 +843,8 @@ func TestTheSweepLeavesARunningEncode(t *testing.T) {
 	dir := t.TempDir()
 	bin, _ := resumeFFmpeg(t, dir)
 	rec := filepath.Join(dir, "show.ts")
-	if err := os.WriteFile(rec, mpeg2TS(1, true), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	h := &Hub{Dir: dir, Encoder: "libx264", fileIdle: time.Minute, FFmpeg: bin}
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "libx264", FileIdle: time.Minute, FFmpeg: bin}
 	t.Cleanup(h.stopFileEncodes)
 	if _, err := h.PlayFile(7, rec, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
@@ -615,6 +857,42 @@ func TestTheSweepLeavesARunningEncode(t *testing.T) {
 	h.SweepFileCopies(time.Now())
 	if !exists(play) {
 		t.Fatal("the sweep removed a copy being written")
+	}
+}
+
+// One game's copy passes the limit by itself. A viewer who paused it for the
+// evening gets their picture back: a 404 makes the player give up.
+func TestAPausedGameKeepsItsCopyPastTheLimit(t *testing.T) {
+	h := &Hub{Dir: t.TempDir()}
+	prev := fileKeepBytes
+	fileKeepBytes = 10
+	t.Cleanup(func() { fileKeepBytes = prev })
+	game := copyDir(t, h, 1, 60, 8*time.Hour)
+	h.SweepFileCopies(time.Now())
+	if !exists(game) {
+		t.Fatal("a copy paused for 8 hours went")
+	}
+}
+
+func standInDisk(t *testing.T, free uint64) {
+	t.Helper()
+	prev := diskStat
+	diskStat = func(string) (disk.Space, error) { return disk.Space{Free: free, Total: 100 << 30}, nil }
+	t.Cleanup(func() { diskStat = prev })
+}
+
+// A disk about to fill comes before a viewer who may be gone.
+func TestANearlyFullDiskTakesAQuietCopy(t *testing.T) {
+	standInDisk(t, 1<<30)
+	h := &Hub{Dir: t.TempDir()}
+	quiet := copyDir(t, h, 1, 60, fileRoomIdle+time.Minute)
+	played := copyDir(t, h, 2, 60, fileRoomIdle-time.Minute)
+	h.SweepFileCopies(time.Now())
+	if exists(quiet) {
+		t.Fatal("a nearly full disk kept a copy nobody asked for")
+	}
+	if !exists(played) {
+		t.Fatal("a copy asked for a minute ago went")
 	}
 }
 

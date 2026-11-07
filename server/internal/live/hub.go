@@ -267,8 +267,8 @@ type Hub struct {
 	fileClosed bool
 	// GameOn reports a game the scoreboard says is still on. httpapi sets it.
 	GameOn func(ctx context.Context, gameID string) bool
-	// fileIdle replaces fileIdleAfter in a test.
-	fileIdle time.Duration
+	// FileIdle replaces fileIdleAfter in a test.
+	FileIdle time.Duration
 	ringSeq  int
 	// cuts keeps recent view cuts, so screens on one view share one copy.
 	cuts cutCache

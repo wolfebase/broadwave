@@ -148,7 +148,7 @@ func TestPlayFileSeeksAndReuses(t *testing.T) {
 	}
 	bin := filepath.Join(dir, "ffmpeg")
 	argsPath := filepath.Join(dir, "args")
-	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\nprintf '%s\\n' \"$@\" > " + argsPath + "\ncat > index.m3u8 << 'EOF'\n#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.000,\nseg00000.ts\nEOF\necho x > seg00000.ts\n;;\nesac\nexit 0\n"
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\nprintf '%s\\n' \"$@\" > " + argsPath + "\ncat > index.m3u8 << 'EOF'\n#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.000,\nseg00000.ts\n#EXT-X-ENDLIST\nEOF\necho x > seg00000.ts\n;;\nesac\nexit 0\n"
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

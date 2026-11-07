@@ -159,7 +159,7 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 	}
 	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
 	g.Live = false
-	return h.playRecording(id, &fileJob{path: abs, graph: g}, at, false)
+	return h.playRecording(id, &fileJob{path: abs, graph: g}, at)
 }
 
 // PlayFollow transcodes a recording that is still being written.
@@ -176,20 +176,34 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 	}
 	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
 	g.Live = false
-	return h.playRecording(id, &fileJob{path: abs, graph: g, still: still}, at, true)
+	return h.playRecording(id, &fileJob{path: abs, graph: g, still: still, follow: true}, at)
 }
 
 // playRecording reuses the copy in the recording's folder when it can show at,
 // and otherwise replaces it with an encode from there. The caller holds the
-// recording's start lock.
-func (h *Hub) playRecording(id int64, job *fileJob, at float64, follow bool) (string, error) {
+// recording's start lock. A copy with nothing writing it carries on only when
+// this run read its clock and found it straight. After a restart nothing here
+// knows that, and a new viewer loses nothing when it starts again.
+func (h *Hub) playRecording(id int64, job *fileJob, at float64) (string, error) {
 	dir := filepath.Join(h.Dir, "file", fmt.Sprintf("%d", id))
 	stamp := graphStamp(job.graph)
 	playlist := filepath.Join(dir, "index.m3u8")
-	if playlistFresh(dir, stamp) && filePlaylistCovers(dir, at) {
-		h.keepFileJob(id, job)
-		h.carryOn(id, dir, job)
-		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
+	url := fmt.Sprintf("/media/file/%d/index.m3u8", id)
+	if playlistFresh(dir, stamp) && playlistSound(dir) && filePlaylistCovers(dir, at) {
+		if playlistEnded(playlist) {
+			return url, nil
+		}
+		h.playMu.Lock()
+		running := h.fileEnc[id] != nil
+		prev := h.fileJobs[id]
+		h.playMu.Unlock()
+		if running {
+			return url, nil
+		}
+		if prev != nil && prev.path == job.path && prev.clock.safe(prev.follow) {
+			h.carryOn(id, dir, prev)
+			return url, nil
+		}
 	}
 	h.stopFileEncode(id)
 	_ = os.RemoveAll(dir)
@@ -203,17 +217,23 @@ func (h *Hub) playRecording(id int64, job *fileJob, at float64, follow bool) (st
 	if err := os.WriteFile(filepath.Join(dir, "graph.txt"), []byte(stamp), 0o644); err != nil {
 		return "", err
 	}
+	job.clock = newFileClock(at)
+	if !job.follow {
+		// A finished file is read from its first byte. Its seek is by timestamp.
+		job.clock = newFileClock(0)
+	}
 	h.keepFileJob(id, job)
-	done, cancel, err := h.runFileEncode(id, dir, job, job.graph, at, follow, func() {
+	done, cancel, err := h.runFileEncode(id, dir, job, job.graph, followAt{skip: at, least: resumeMin, missed: func() {
 		// The clock never reached the resume. The bytes that follow are
 		// the start of the file, so the playlist clock has to say that
 		// before the first segment is published.
 		_ = writeFileOffset(dir, 0)
-	})
+		job.clock.restartAt(0)
+	}}, at)
 	if err != nil {
 		return "", err
 	}
-	url, err := waitPlaylistFile(playlist, id, done)
+	url, err = waitPlaylistFile(playlist, id, done)
 	if err != nil {
 		if cancel != nil {
 			cancel()
@@ -225,12 +245,11 @@ func (h *Hub) playRecording(id int64, job *fileJob, at float64, follow bool) (st
 	return url, err
 }
 
-// runFileEncode starts one ffmpeg writing the recording's playlist in dir.
-// follow feeds it the growing file from at; otherwise it seeks there, and the
-// caption pass runs beside it. missed runs when a follow's clock never reaches
-// at, and the copy then starts over at the first byte. Without it the copy ends.
-func (h *Hub) runFileEncode(id int64, dir string, job *fileJob, g Graph, at float64, follow bool, missed func()) (<-chan struct{}, context.CancelFunc, error) {
-	if follow {
+// runFileEncode starts one ffmpeg writing the recording's playlist in dir. A
+// follow job feeds it the growing file as from says; a finished file seeks to
+// at, its clock is read beside it, and so are its captions.
+func (h *Hub) runFileEncode(id int64, dir string, job *fileJob, g Graph, from followAt, at float64) (<-chan struct{}, context.CancelFunc, error) {
+	if job.follow {
 		g.Input = "pipe:0"
 	} else {
 		g.Input = job.path
@@ -241,7 +260,7 @@ func (h *Hub) runFileEncode(id int64, dir string, job *fileJob, g Graph, at floa
 	cmd.Dir = dir
 	logCommand(cmd, "playback "+filepath.Base(dir))
 	var stdin io.WriteCloser
-	if follow {
+	if job.follow {
 		pipe, err := cmd.StdinPipe()
 		if err != nil {
 			return nil, nil, err
@@ -255,24 +274,30 @@ func (h *Hub) runFileEncode(id int64, dir string, job *fileJob, g Graph, at floa
 	// picture, or shutdown ends it too.
 	var capCtx context.Context
 	var capCancel context.CancelFunc
-	if !follow {
+	if !job.follow {
 		capCtx, capCancel = context.WithTimeout(context.Background(), captionSpan)
 	}
-	idle := h.fileIdle
+	idle := h.FileIdle
 	if idle <= 0 {
 		idle = fileIdleAfter
 	}
 	done := h.trackFileEncode(id, cmd, capCancel)
-	go h.watchFileRequests(id, cmd, done, idle)
+	current := func() bool { return h.fileEncodeCurrent(id, cmd) }
+	go h.watchFileRequests(id, cmd, job, done, idle)
 	go func() {
-		if follow {
+		if job.follow {
 			var over atomic.Bool
-			gone := func() bool { return over.Load() || !h.fileEncodeCurrent(id, cmd) }
-			current := func() bool { return !gone() && job.still() }
+			gone := func() bool { return over.Load() || !current() }
+			still := func() bool {
+				return !gone() && job.still != nil && job.still()
+			}
+			missed := from.missed
 			if missed == nil {
 				missed = func() { over.Store(true) }
 			}
-			followFile(job.path, stdin, current, gone, at, missed)
+			from.missed = missed
+			from.clock = job.clock
+			followFrom(job.path, stdin, still, gone, from)
 		}
 		_ = cmd.Wait()
 		ended := h.dropFileEncode(id, cmd)
@@ -281,7 +306,8 @@ func (h *Hub) runFileEncode(id int64, dir string, job *fileJob, g Graph, at floa
 			h.fileEncodeEnded(id, dir, job, at, before)
 		}
 	}()
-	if !follow {
+	if !job.follow {
+		go job.clock.scan(job.path, func() bool { return !current() })
 		go func() {
 			defer capCancel()
 			extractCaptions(capCtx, h.FFmpeg, job.path, filepath.Join(dir, "captions.vtt"))
@@ -291,9 +317,10 @@ func (h *Hub) runFileEncode(id int64, dir string, job *fileJob, g Graph, at floa
 }
 
 // carryOn starts an encode after the last whole segment of the copy in dir,
-// unless one is running or the copy is complete. The caller holds the start
-// lock. Numbering and clock continue, so a list that already names later
-// segments stays right. The bytes of a segment the stop cut short are overwritten.
+// unless one is running, the copy is complete, or its clock can't be trusted.
+// The caller holds the start lock. Numbering and clock continue, so a list that
+// already names later segments stays right. A follow job seeks to a mark near
+// that clock, so this costs a few seconds of reading and not the whole file.
 func (h *Hub) carryOn(id int64, dir string, job *fileJob) {
 	h.playMu.Lock()
 	running := h.fileEnc[id] != nil
@@ -307,6 +334,10 @@ func (h *Hub) carryOn(id int64, dir string, job *fileJob) {
 		h.forgetFileJob(id, job)
 		return
 	}
+	if !job.clock.safe(job.follow) || !playlistSound(dir) {
+		h.markFileJobFailed(job)
+		return
+	}
 	g := job.graph
 	at := FileOffset(dir)
 	if span := fileSpan(playlist); segmentCount(playlist) > 0 && at+span >= resumeMin {
@@ -314,11 +345,30 @@ func (h *Hub) carryOn(id int64, dir string, job *fileJob) {
 		at += span
 		g.Carry = span
 	}
-	follow := job.still != nil && job.still()
-	if _, _, err := h.runFileEncode(id, dir, job, g, at, follow, nil); err != nil {
+	mark, ok := job.clock.before(at)
+	if job.follow && !ok {
+		h.markFileJobFailed(job)
+		return
+	}
+	from := followAt{start: mark.off, skip: at - mark.at}
+	if _, _, err := h.runFileEncode(id, dir, job, g, from, at); err != nil {
 		slog.Warn(fmt.Sprintf("recording %d: carry on: %v", id, err))
 		h.markFileJobFailed(job)
 	}
+}
+
+// playlistSound reports a list that isn't torn: a stop mid-write can leave one
+// cut off. It is complete, or ends on a whole segment that is on disk.
+func playlistSound(dir string) bool {
+	body, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		return false
+	}
+	pl, ok := parseMediaPlaylist(body)
+	if !ok || pl.dangling || pl.tail {
+		return false
+	}
+	return pl.ended || len(pl.segs) == 0 || segmentReady(dir, pl.segs[len(pl.segs)-1].uri)
 }
 
 // fileLead is how far into its own clock the copy's first picture sits. A file
@@ -332,21 +382,25 @@ func fileLead(dir string) float64 {
 	return max(float64(pts)/90000-mpegtsDelay, 0)
 }
 
-// fileEncodeEnded runs when an ffmpeg exited by itself, not by a stop. A list
-// left open with no progress is the end of the file when the seek landed
-// within a few seconds of it, and otherwise waits for someone to press play,
-// so a broken encode is not restarted by every player request.
+// fileEncodeEnded runs when an ffmpeg exited by itself, not by a stop. It closes
+// the list only when it knows the file really ended: a clock it read straight
+// to within a few seconds of the seek. Anything else waits for someone to press
+// play, so a broken encode is not restarted by every player request.
 func (h *Hub) fileEncodeEnded(id int64, dir string, job *fileJob, at float64, before int) {
 	playlist := filepath.Join(dir, "index.m3u8")
 	if playlistEnded(playlist) {
 		h.forgetFileJob(id, job)
 		return
 	}
+	if !job.clock.safe(job.follow) {
+		h.markFileJobFailed(job)
+		return
+	}
 	if segmentCount(playlist) > before {
 		return
 	}
 	growing := job.still != nil && job.still()
-	if end, ok := mediaSpan(job.path); before > 0 && !growing && ok && at >= end-fileEndMargin {
+	if before > 0 && !growing && at >= job.clock.end()-fileEndMargin {
 		if f, err := os.OpenFile(playlist, os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			_, _ = f.WriteString("#EXT-X-ENDLIST\n")
 			_ = f.Close()
@@ -378,8 +432,13 @@ type fileEncode struct {
 type fileJob struct {
 	path  string
 	graph Graph
+	// follow feeds ffmpeg the file through a pipe, as it was written. A job that
+	// starts that way keeps to it after the recording finishes.
+	follow bool
 	// still reports a recording being written. A finished recording has none.
-	still    func() bool
+	still func() bool
+	// clock says whether the encode can stop and carry on.
+	clock    *fileClock
 	failed   bool
 	resuming bool
 }
@@ -632,6 +691,20 @@ func syncAlign(buf []byte) int {
 // the first byte. It runs before any byte is written. gone, when set, is true
 // once nobody will read dst, and the copy quits without reading the rest.
 func followFile(path string, dst io.WriteCloser, still, gone func() bool, skip float64, missed func()) {
+	followFrom(path, dst, still, gone, followAt{skip: skip, least: resumeMin, missed: missed})
+}
+
+// followAt is where a follow copy starts: byte start, then skip more seconds of
+// clock when that is at least least. clock reads everything the copy sends.
+type followAt struct {
+	start  int64
+	skip   float64
+	least  float64
+	missed func()
+	clock  *fileClock
+}
+
+func followFrom(path string, dst io.WriteCloser, still, gone func() bool, from followAt) {
 	defer dst.Close()
 	var file *os.File
 	deadline := time.Now().Add(15 * time.Second)
@@ -647,7 +720,12 @@ func followFile(path string, dst io.WriteCloser, still, gone func() bool, skip f
 		time.Sleep(200 * time.Millisecond)
 	}
 	defer file.Close()
-	if skip >= resumeMin && !discardPrefix(file, skip, still, gone) {
+	if from.start > 0 {
+		if _, err := file.Seek(from.start, io.SeekStart); err != nil {
+			return
+		}
+	}
+	if from.skip > 0 && from.skip >= from.least && !discardPrefix(file, from.skip, still, gone) {
 		// The next encode may already own the playlist folder.
 		if gone != nil && gone() {
 			return
@@ -655,12 +733,17 @@ func followFile(path string, dst io.WriteCloser, still, gone func() bool, skip f
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return
 		}
-		if missed != nil {
-			missed()
+		if from.missed != nil {
+			from.missed()
 		}
+		// A carry-on has nothing to start over: there is no more of the show.
 		if gone != nil && gone() {
 			return
 		}
+	}
+	off, err := file.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return
 	}
 	buf := make([]byte, 64*1024)
 	quiet := 0
@@ -668,6 +751,10 @@ func followFile(path string, dst io.WriteCloser, still, gone func() bool, skip f
 		n, err := file.Read(buf)
 		if n > 0 {
 			quiet = 0
+			if from.clock != nil {
+				from.clock.feed(off, buf[:n])
+			}
+			off += int64(n)
 			if _, werr := dst.Write(buf[:n]); werr != nil {
 				return
 			}
@@ -692,29 +779,31 @@ func followFile(path string, dst io.WriteCloser, still, gone func() bool, skip f
 // The file is left at that packet. A step backward, or a packet with the
 // discontinuity flag, starts a new base and is not counted: a splice would
 // otherwise look like 2^33 ticks and the copy would begin there. False means
-// the recording ended before the clock got there.
+// the recording ended before the clock got there. It reads in large blocks: a
+// seek and a read per packet took about 50 s for a 15 GB file on a fast disk.
 func discardPrefix(file *os.File, skip float64, still, gone func() bool) bool {
 	want := int64(skip*90000 + 0.5)
 	if !alignTS(file, still) {
 		return false
 	}
-	buf := make([]byte, 188)
+	off, err := file.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return false
+	}
+	buf := make([]byte, 1<<20)
 	var base, elapsed int64
 	var have bool
 	quiet := 0
-	for n := 0; ; n++ {
+	for {
 		// Every packet already on disk reads at once, so a replaced encode
 		// would otherwise scan the whole file before it noticed.
-		if gone != nil && n%1024 == 0 && gone() {
+		if gone != nil && gone() {
 			return false
 		}
-		off, err := file.Seek(0, io.SeekCurrent)
-		if err != nil {
-			return false
-		}
-		_, err = io.ReadFull(file, buf)
-		if err != nil {
-			if _, serr := file.Seek(off, io.SeekStart); serr != nil {
+		n, err := file.ReadAt(buf, off)
+		whole := n - n%188
+		if whole == 0 {
+			if err != nil && err != io.EOF {
 				return false
 			}
 			if !still() {
@@ -728,29 +817,39 @@ func discardPrefix(file *os.File, skip float64, still, gone func() bool) bool {
 			time.Sleep(300 * time.Millisecond)
 			continue
 		}
-		if buf[0] != 0x47 {
-			if _, serr := file.Seek(off, io.SeekStart); serr != nil {
-				return false
-			}
-			if !alignTS(file, still) {
-				return false
-			}
-			continue
-		}
 		quiet = 0
-		pcr, ok := readPCR(buf)
-		if !ok {
-			continue
+		for i := 0; i < whole; i += 188 {
+			pkt := buf[i : i+188]
+			if pkt[0] != 0x47 {
+				if _, serr := file.Seek(off+int64(i), io.SeekStart); serr != nil {
+					return false
+				}
+				if !alignTS(file, still) {
+					return false
+				}
+				if off, err = file.Seek(0, io.SeekCurrent); err != nil {
+					return false
+				}
+				whole = -1
+				break
+			}
+			pcr, ok := readPCR(pkt)
+			if !ok {
+				continue
+			}
+			if !have {
+				base = pcr
+				have = true
+			} else if !advancePCR(&base, &elapsed, pcr, pkt[5]&0x80 != 0) {
+				continue
+			}
+			if elapsed >= want {
+				_, err = file.Seek(off+int64(i), io.SeekStart)
+				return err == nil
+			}
 		}
-		if !have {
-			base = pcr
-			have = true
-		} else if !advancePCR(&base, &elapsed, pcr, buf[5]&0x80 != 0) {
-			continue
-		}
-		if elapsed >= want {
-			_, err = file.Seek(off, io.SeekStart)
-			return err == nil
+		if whole > 0 {
+			off += int64(whole)
 		}
 	}
 }

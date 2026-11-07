@@ -242,15 +242,24 @@ func TestAPlaylistRequestCarriesOnAStoppedEncode(t *testing.T) {
 	starts := filepath.Join(dir, "starts")
 	pids := filepath.Join(dir, "pids")
 	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho x >> " + starts + "\necho $$ >> " + pids + "\n" +
-		"if [ ! -f index.m3u8 ]; then\nprintf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:2.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nexit 0\nfi\nexec sleep 60\n;;\nesac\nexit 0\n"
+		"if [ ! -f index.m3u8 ]; then\nprintf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:2.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nfi\nexec sleep 60\n;;\nesac\nexit 0\n"
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	src := filepath.Join(dir, "news.ts")
-	if err := os.WriteFile(src, make([]byte, 188*4), 0o644); err != nil {
+	// One PCR a second: a clock the encode can stop and carry on from.
+	var raw []byte
+	for s := range 30 {
+		pkt := make([]byte, 188)
+		tick := uint64(s) * 90000
+		pkt[0], pkt[1], pkt[2], pkt[3], pkt[4], pkt[5] = 0x47, 0x01, 0x00, 0x20, 183, 0x10
+		pkt[6], pkt[7], pkt[8], pkt[9], pkt[10] = byte(tick>>25), byte(tick>>17), byte(tick>>9), byte(tick>>1), byte(tick<<7)|0x7e
+		raw = append(raw, pkt...)
+	}
+	if err := os.WriteFile(src, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	hub := &live.Hub{Dir: dir, FFmpeg: bin, Encoder: "libx264"}
+	hub := &live.Hub{Dir: dir, FFmpeg: bin, Encoder: "libx264", FileIdle: 200 * time.Millisecond}
 	t.Cleanup(hub.Shutdown)
 	t.Cleanup(func() {
 		raw, _ := os.ReadFile(pids)
@@ -265,7 +274,7 @@ func TestAPlaylistRequestCarriesOnAStoppedEncode(t *testing.T) {
 	if _, err := hub.PlayFile(id, src, "mpeg2video", "broadcast", "progressive", 0); err != nil {
 		t.Fatal(err)
 	}
-	// The first encode has stopped, its list still open.
+	// Nobody asked, so the first encode has stopped, its list still open.
 	deadline := time.Now().Add(3 * time.Second)
 	for hub.FileEncoding(id) {
 		if time.Now().After(deadline) {

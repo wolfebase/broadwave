@@ -11,8 +11,6 @@ import (
 	"slices"
 	"strconv"
 	"time"
-
-	"broadwave/internal/disk"
 )
 
 // A played recording that needs a new picture is encoded into work/file/<id>.
@@ -20,14 +18,21 @@ import (
 // age and total size, so a moment of playback does not cost a recording's
 // length of disk for as long as the recording is kept.
 var (
-	// fileKeepFor is how long a copy nobody asks for is kept. It outlasts a
-	// viewer pausing overnight.
+	// fileKeepFor is how long a copy nobody asks for is kept.
 	fileKeepFor = 24 * time.Hour
-	// fileKeepBytes is the most the copies may use together. A copy runs about
-	// 4.4 GB an hour.
+	// fileKeepBytes is what the copies aim to stay under together. A copy runs
+	// about 4.4 GB an hour, so one game can pass it alone.
 	fileKeepBytes = uint64(10 << 30)
-	// fileLimitIdle protects a paused viewer from the size limit.
-	fileLimitIdle = time.Hour
+	// fileLimitIdle is how long a copy has to be left before the size limit can
+	// take it. A paused player asks for nothing, and its next request after the
+	// copy goes is a 404 it gives up on, so this outlasts a viewer pausing
+	// overnight. The limit can be passed for that long.
+	fileLimitIdle = 12 * time.Hour
+	// fileRoomFloor is the free space below which a disk comes before a paused
+	// viewer. fileRoomIdle is how long a copy has to be left even then: that
+	// viewer gets a failed picture, and Try again plays from where they were.
+	fileRoomFloor = uint64(4 << 30)
+	fileRoomIdle  = 5 * time.Minute
 	// fileSweepEvery is the wait between passes.
 	fileSweepEvery = 10 * time.Minute
 )
@@ -116,8 +121,10 @@ func (h *Hub) forgetFileCopy(id int64) {
 	h.playMu.Unlock()
 }
 
-// watchFileRequests stops the encode once nobody has asked for it for idle.
-func (h *Hub) watchFileRequests(id int64, cmd *exec.Cmd, done <-chan struct{}, idle time.Duration) {
+// watchFileRequests stops the encode once nobody has asked for it for idle. It
+// never stops one whose clock it can't trust: that one runs to the end, as
+// every encode used to, and the sweep still removes the copy.
+func (h *Hub) watchFileRequests(id int64, cmd *exec.Cmd, job *fileJob, done <-chan struct{}, idle time.Duration) {
 	every := min(idle/4, 5*time.Second)
 	tick := time.NewTicker(every)
 	defer tick.Stop()
@@ -127,7 +134,7 @@ func (h *Hub) watchFileRequests(id int64, cmd *exec.Cmd, done <-chan struct{}, i
 			return
 		case <-tick.C:
 		}
-		if !h.fileEncodeIdle(id, cmd, idle) {
+		if !h.fileEncodeIdle(id, cmd, idle) || !job.clock.safe(job.follow) {
 			continue
 		}
 		unlock := h.lockFileStart(id)
@@ -170,9 +177,9 @@ type fileCopy struct {
 }
 
 // SweepFileCopies removes copies nobody has asked for in fileKeepFor, then the
-// oldest ones while the copies are over their limit. A copy being written, or
-// asked for within fileLimitIdle, stays. Only folders named for a recording
-// are touched.
+// oldest ones while the copies are over their limit and left for fileLimitIdle,
+// then the oldest left for fileRoomIdle while the disk is nearly full. A copy
+// being written stays. Only folders named for a recording are touched.
 func (h *Hub) SweepFileCopies(now time.Time) {
 	root := filepath.Join(h.Dir, "file")
 	entries, err := os.ReadDir(root)
@@ -202,10 +209,17 @@ func (h *Hub) SweepFileCopies(now time.Time) {
 	}
 	slices.SortFunc(copies, func(a, b fileCopy) int { return a.last.Compare(b.last) })
 	limit := fileCopiesLimit(root, total)
+	free, known := uint64(0), false
+	if space, err := diskStat(root); err == nil && space.Total > 0 {
+		free, known = space.Free, true
+	}
 	removed, freed := 0, uint64(0)
 	for _, c := range copies {
 		age := now.Sub(c.last)
-		if age <= fileKeepFor && (total <= limit || age <= fileLimitIdle) {
+		old := age > fileKeepFor
+		over := total > limit && age > fileLimitIdle
+		tight := known && free+freed < fileRoomFloor && age > fileRoomIdle
+		if !old && !over && !tight {
 			continue
 		}
 		if h.removeFileCopy(c) {
@@ -223,7 +237,7 @@ func (h *Hub) SweepFileCopies(now time.Time) {
 // disk too small for that.
 func fileCopiesLimit(root string, total uint64) uint64 {
 	limit := fileKeepBytes
-	if space, err := disk.Stat(root); err == nil && space.Total > 0 {
+	if space, err := diskStat(root); err == nil && space.Total > 0 {
 		limit = min(limit, (space.Free+total)/2)
 	}
 	return limit

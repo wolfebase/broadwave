@@ -153,7 +153,8 @@ func PictureArgs(g Graph) []string {
 		// a discontinuity, and AVPlayer fails the item when a reload's
 		// discontinuity count does not match. An encode that carries on needs it
 		// to keep the list and the numbering, and the served list drops its tag.
-		flags := "independent_segments+program_date_time"
+		// temp_file: a kill leaves no half-written segment under its real name.
+		flags := "independent_segments+program_date_time+temp_file"
 		if g.Carry > 0 {
 			flags += "+append_list"
 		}
