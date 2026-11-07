@@ -43,9 +43,10 @@ type Graph struct {
 	Shift float64
 	// Until ends the output after that many seconds.
 	Until float64
-	// Name is the segment and playlist name, seg and index when empty, and
-	// First the number of the first segment.
+	// Name is the segment and playlist name, seg and index when empty, List
+	// another playlist name, and First the number of the first segment.
 	Name  string
+	List  string
 	First int
 }
 
@@ -187,6 +188,9 @@ func PictureArgs(g Graph) []string {
 	name, list := "seg", "index.m3u8"
 	if g.Name != "" {
 		name, list = g.Name, g.Name+".m3u8"
+	}
+	if g.List != "" {
+		list = g.List
 	}
 	args = append(args, "-f", "hls", "-hls_time", "2", "-hls_segment_filename", name+"%05d.ts")
 	if g.First > 0 {

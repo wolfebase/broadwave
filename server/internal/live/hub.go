@@ -267,7 +267,7 @@ type Hub struct {
 	// encode writing it, fillSeen when a player last asked for it, and
 	// fillLock holds one decision about a recording's fill at a time.
 	fillSrc  map[int64]fillSource
-	fillRuns map[int64]*fillRun
+	fillRuns map[int64][]*fillRun
 	fillSeen map[int64]time.Time
 	fillLock map[int64]*sync.Mutex
 	// fileReaders is the scans reading a recording's file.

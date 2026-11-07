@@ -251,7 +251,7 @@ func fileCopiesLimit(root string, total uint64) uint64 {
 func (h *Hub) removeFileCopy(c fileCopy) bool {
 	defer h.lockFileStart(c.id)()
 	h.playMu.Lock()
-	busy := h.fileEnc[c.id] != nil || h.fillRuns[c.id] != nil || h.fileSeen[c.id].After(c.last) || h.fillSeen[c.id].After(c.last)
+	busy := h.fileEnc[c.id] != nil || len(h.fillRuns[c.id]) > 0 || h.fileSeen[c.id].After(c.last) || h.fillSeen[c.id].After(c.last)
 	h.playMu.Unlock()
 	if busy {
 		return false

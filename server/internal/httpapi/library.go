@@ -726,16 +726,21 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	recID, idErr := strconv.ParseInt(id, 10, 64)
 	if isFill {
-		// The stretch before a resume, encoded when a player asks for it. One
-		// that can't be made in time is empty packets, as a gap is.
-		var made string
-		if idErr == nil {
-			made = s.Hub.FillSegment(recID, fill)
+		// The stretch before a resume, encoded when a player asks for it.
+		if idErr != nil {
+			http.NotFound(w, r)
+			return
 		}
-		if made == "" {
-			w.Header().Set("Content-Type", "video/mp2t")
-			w.Header().Set("Cache-Control", "no-cache")
-			_, _ = w.Write(nullPackets())
+		made, err := s.Hub.FillSegment(r.Context(), recID, fill)
+		switch {
+		case errors.Is(err, live.ErrFillGone):
+			http.NotFound(w, r)
+			return
+		case err != nil:
+			// Not a few empty packets: a player told this is 2 s of media
+			// can stall on them. It asks again.
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
 			return
 		}
 		w.Header().Set("Cache-Control", "no-cache")

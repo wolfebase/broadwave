@@ -1,6 +1,9 @@
 package live
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -25,17 +28,35 @@ var fillWait = 12 * time.Second
 // and still wait for it, in segments, instead of starting a new one there.
 const fillAhead = 4
 
-// fillSource is what a recording's fill encode reads and how.
+// fillRunsMax is how many fill encodes one recording runs at once: two
+// screens going back to different places each keep theirs.
+const fillRunsMax = 2
+
+var (
+	// ErrFillGone is a fill segment nothing can make.
+	ErrFillGone = errors.New("fill segment cannot be made")
+	// ErrFillLate is one not written yet. Asking again may find it.
+	ErrFillLate = errors.New("fill segment is not ready")
+)
+
+// fillSource is what a recording's fill encode reads and how. It is kept in
+// the copy's folder too, so a restart doesn't lose it. failed is a fill that
+// didn't start on the processor either.
 type fillSource struct {
-	path   string
-	graph  Graph
-	offset float64
+	Path   string  `json:"path"`
+	Graph  Graph   `json:"graph"`
+	Offset float64 `json:"offset"`
+	failed bool
 }
 
 type fillRun struct {
 	first int
+	list  string
 	cmd   *exec.Cmd
 	done  chan struct{}
+	// seen and stopped are under playMu.
+	seen    time.Time
+	stopped bool
 }
 
 // fillName is fill segment n.
@@ -61,23 +82,60 @@ func gridStart(at float64) float64 {
 	return max(float64(int(at/2))*2, resumeMin)
 }
 
-func (h *Hub) setFillSource(id int64, src fillSource) {
+// setFillSource notes how to fill the copy in dir. The same copy keeps what
+// it learned, a move to the processor included.
+func (h *Hub) setFillSource(id int64, dir string, src fillSource) {
 	h.playMu.Lock()
 	defer h.playMu.Unlock()
-	if !fillable(src.offset) {
+	if !fillable(src.Offset) {
 		delete(h.fillSrc, id)
+		return
+	}
+	if old, ok := h.fillSrc[id]; ok && old.Path == src.Path && old.Offset == src.Offset {
 		return
 	}
 	if h.fillSrc == nil {
 		h.fillSrc = map[int64]fillSource{}
 	}
 	h.fillSrc[id] = src
+	writeFillSource(dir, src)
+}
+
+func writeFillSource(dir string, src fillSource) {
+	body, err := json.Marshal(src)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, "fill.json"), body, 0o644)
+}
+
+// fillSourceFor is the recording's fill source, read from its copy's folder
+// when this run hasn't played it. The caller holds playMu.
+func (h *Hub) fillSourceFor(id int64, dir string) (fillSource, bool) {
+	if src, ok := h.fillSrc[id]; ok {
+		return src, true
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "fill.json"))
+	if err != nil {
+		return fillSource{}, false
+	}
+	var src fillSource
+	if json.Unmarshal(body, &src) != nil || src.Path == "" || !fillable(src.Offset) || math.Abs(src.Offset-FileOffset(dir)) > 0.0005 {
+		return fillSource{}, false
+	}
+	if h.fillSrc == nil {
+		h.fillSrc = map[int64]fillSource{}
+	}
+	h.fillSrc[id] = src
+	return src, true
 }
 
 // FillSegment is the path of fill segment n of a recording's copy, encoding
-// it if it isn't written. Empty means it could not be made in time.
-func (h *Hub) FillSegment(id int64, n int) string {
+// it if it isn't written. ErrFillGone means nothing can make it, ErrFillLate
+// that it didn't come in time, and a cancelled ctx ends the wait.
+func (h *Hub) FillSegment(ctx context.Context, id int64, n int) (string, error) {
 	dir := filepath.Join(h.Dir, "file", strconv.FormatInt(id, 10))
+	path := filepath.Join(dir, fillName(n))
 	h.playMu.Lock()
 	if h.fillSeen == nil {
 		h.fillSeen = map[int64]time.Time{}
@@ -85,93 +143,178 @@ func (h *Hub) FillSegment(id int64, n int) string {
 	h.fillSeen[id] = time.Now()
 	h.playMu.Unlock()
 	if n < 0 {
-		return ""
+		return "", ErrFillGone
 	}
 	if segmentReady(dir, fillName(n)) {
-		return filepath.Join(dir, fillName(n))
+		return path, nil
 	}
-	if !h.ensureFill(id, dir, n) {
-		return ""
-	}
-	deadline := time.Now().Add(fillWait)
-	for {
+	deadline := time.NewTimer(fillWait)
+	defer deadline.Stop()
+	tick := time.NewTicker(40 * time.Millisecond)
+	defer tick.Stop()
+	// A run that exits without the segment is tried again: the next one may
+	// be on the processor.
+	for tries := 0; tries < 3; tries++ {
+		run, err := h.ensureFill(id, dir, n)
+		if err != nil {
+			return "", err
+		}
+	wait:
+		for {
+			if segmentReady(dir, fillName(n)) {
+				return path, nil
+			}
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-deadline.C:
+				return "", ErrFillLate
+			case <-run.done:
+				break wait
+			case <-tick.C:
+			}
+		}
 		if segmentReady(dir, fillName(n)) {
-			return filepath.Join(dir, fillName(n))
+			return path, nil
 		}
-		if time.Now().After(deadline) {
-			return ""
-		}
-		time.Sleep(40 * time.Millisecond)
 	}
+	return "", ErrFillLate
 }
 
-func (h *Hub) ensureFill(id int64, dir string, n int) bool {
+func (h *Hub) ensureFill(id int64, dir string, n int) (*fillRun, error) {
 	defer h.lockFill(id)()
 	h.playMu.Lock()
-	src, ok := h.fillSrc[id]
-	run := h.fillRuns[id]
+	src, ok := h.fillSourceFor(id, dir)
 	closed := h.fileClosed
+	var live []*fillRun
+	for _, r := range h.fillRuns[id] {
+		if !r.ended() {
+			live = append(live, r)
+		}
+	}
+	var found *fillRun
+	for _, r := range live {
+		if r.covers(dir, n) {
+			found = r
+			r.seen = time.Now()
+			break
+		}
+	}
 	h.playMu.Unlock()
-	if !ok || closed || float64(2*n) >= src.offset-0.001 {
-		return false
+	switch {
+	case closed:
+		return nil, ErrFillLate
+	case !ok || src.failed || float64(2*n) >= src.Offset-0.001:
+		return nil, ErrFillGone
+	case found != nil:
+		return found, nil
 	}
-	if run != nil && run.covers(dir, n) {
-		return true
+	// The run asked for longest ago makes room.
+	if len(live) >= fillRunsMax {
+		oldest := live[0]
+		h.playMu.Lock()
+		for _, r := range live[1:] {
+			if r.seen.Before(oldest.seen) {
+				oldest = r
+			}
+		}
+		h.playMu.Unlock()
+		h.stopFillRun(id, oldest)
 	}
-	h.stopFill(id)
-	if err := h.startFill(id, dir, src, n); err != nil {
+	run, err := h.startFill(id, dir, src, n)
+	if err != nil {
 		slog.Warn(fmt.Sprintf("recording %d: fill: %v", id, err))
-		return false
+		return nil, ErrFillGone
 	}
-	return true
+	return run, nil
 }
 
-// covers reports a run still going that will reach segment n soon.
-func (r *fillRun) covers(dir string, n int) bool {
+func (r *fillRun) ended() bool {
 	select {
 	case <-r.done:
-		return false
+		return true
 	default:
+		return false
 	}
-	written := segmentCount(filepath.Join(dir, "fill.m3u8"))
+}
+
+// covers reports a run that will reach segment n soon.
+func (r *fillRun) covers(dir string, n int) bool {
+	written := segmentCount(filepath.Join(dir, r.list))
 	return n >= r.first && n <= r.first+written+fillAhead
 }
 
-func (h *Hub) startFill(id int64, dir string, src fillSource, n int) error {
-	g := src.graph
-	g.Input = src.path
+func (h *Hub) startFill(id int64, dir string, src fillSource, n int) (*fillRun, error) {
+	g := src.Graph
+	g.Input = src.Path
 	g.Carry = 0
 	g.Start = float64(2 * n)
 	g.Shift = g.Start
-	g.Until = src.offset - g.Start
+	g.Until = src.Offset - g.Start
 	g.Name = "fill"
 	g.First = n
-	// The list of the run before would say this one has written its segments.
-	_ = os.Remove(filepath.Join(dir, "fill.m3u8"))
+	// Each run lists what it wrote in its own file.
+	g.List = fmt.Sprintf("fill-%05d.m3u8", n)
+	_ = os.Remove(filepath.Join(dir, g.List))
 	cmd := exec.Command(h.FFmpeg, PictureArgs(g)...)
 	cmd.Dir = dir
 	logCommand(cmd, "playback fill "+filepath.Base(dir))
 	if err := cmd.Start(); err != nil {
-		return err
+		return nil, err
 	}
-	run := &fillRun{first: n, cmd: cmd, done: make(chan struct{})}
+	run := &fillRun{first: n, list: g.List, cmd: cmd, done: make(chan struct{}), seen: time.Now()}
 	h.playMu.Lock()
 	if h.fillRuns == nil {
-		h.fillRuns = map[int64]*fillRun{}
+		h.fillRuns = map[int64][]*fillRun{}
 	}
-	h.fillRuns[id] = run
+	h.fillRuns[id] = append(h.fillRuns[id], run)
 	h.playMu.Unlock()
 	go func() {
 		_ = cmd.Wait()
+		wrote := segmentReady(dir, fillName(n))
+		_ = os.Remove(filepath.Join(dir, run.list))
 		h.playMu.Lock()
-		if h.fillRuns[id] == run {
-			delete(h.fillRuns, id)
+		h.dropFillRunLocked(id, run)
+		if !run.stopped && !wrote {
+			h.fillFailedLocked(id, dir, g.Encoder)
 		}
 		h.playMu.Unlock()
 		close(run.done)
 	}()
 	go h.watchFill(id, run)
-	return nil
+	return run, nil
+}
+
+// fillFailedLocked notes a fill encode that exited before its first segment.
+// One on the GPU moves to the processor, as the copy does; one on the
+// processor is not tried again for this copy.
+func (h *Hub) fillFailedLocked(id int64, dir, encoder string) {
+	src, ok := h.fillSrc[id]
+	if !ok || src.Graph.Encoder != encoder {
+		return
+	}
+	if gpuEncoder(encoder) {
+		slog.Warn(fmt.Sprintf("recording %d: a fill did not start on the GPU. Trying the processor.", id))
+		src.Graph = softwareGraph(src.Graph)
+		writeFillSource(dir, src)
+	} else {
+		slog.Warn(fmt.Sprintf("recording %d: a fill did not start on the processor.", id))
+		src.failed = true
+	}
+	h.fillSrc[id] = src
+}
+
+func (h *Hub) dropFillRunLocked(id int64, run *fillRun) {
+	runs := h.fillRuns[id]
+	for i, r := range runs {
+		if r == run {
+			h.fillRuns[id] = append(runs[:i:i], runs[i+1:]...)
+			break
+		}
+	}
+	if len(h.fillRuns[id]) == 0 {
+		delete(h.fillRuns, id)
+	}
 }
 
 // watchFill stops a fill encode nobody has asked for lately.
@@ -189,7 +332,7 @@ func (h *Hub) watchFill(id int64, run *fillRun) {
 		case <-tick.C:
 		}
 		h.playMu.Lock()
-		quiet := h.fillRuns[id] == run && time.Since(h.fillSeen[id]) >= idle
+		quiet := time.Since(run.seen) >= idle
 		h.playMu.Unlock()
 		if quiet {
 			h.stopFillRun(id, run)
@@ -197,21 +340,20 @@ func (h *Hub) watchFill(id int64, run *fillRun) {
 	}
 }
 
-// stopFill ends the recording's fill encode and waits for it to exit.
+// stopFill ends the recording's fill encodes and waits for them to exit.
 func (h *Hub) stopFill(id int64) {
 	h.playMu.Lock()
-	run := h.fillRuns[id]
+	runs := append([]*fillRun(nil), h.fillRuns[id]...)
 	h.playMu.Unlock()
-	if run != nil {
+	for _, run := range runs {
 		h.stopFillRun(id, run)
 	}
 }
 
 func (h *Hub) stopFillRun(id int64, run *fillRun) {
 	h.playMu.Lock()
-	if h.fillRuns[id] == run {
-		delete(h.fillRuns, id)
-	}
+	run.stopped = true
+	h.dropFillRunLocked(id, run)
 	h.playMu.Unlock()
 	if run.cmd.Process != nil {
 		_ = run.cmd.Process.Kill()

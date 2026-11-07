@@ -224,7 +224,7 @@ func (h *Hub) playRecording(id int64, job *fileJob, at float64) (string, error) 
 	playlist := filepath.Join(dir, "index.m3u8")
 	url := fmt.Sprintf("/media/file/%d/index.m3u8", id)
 	reused := func() (string, error) {
-		h.setFillSource(id, fillSource{path: job.path, graph: job.graph, offset: FileOffset(dir)})
+		h.setFillSource(id, dir, fillSource{Path: job.path, Graph: job.graph, Offset: FileOffset(dir)})
 		return url, nil
 	}
 	if playlistFresh(dir, stamp) && playlistSound(dir) && filePlaylistCovers(dir, at) {
@@ -247,7 +247,7 @@ func (h *Hub) playRecording(id int64, job *fileJob, at float64) (string, error) 
 	h.stopFill(id)
 	_ = os.RemoveAll(dir)
 	h.forgetRecordingPlaylist(dir)
-	h.setFillSource(id, fillSource{})
+	h.setFillSource(id, dir, fillSource{})
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

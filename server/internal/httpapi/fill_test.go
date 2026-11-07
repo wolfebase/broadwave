@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -181,5 +182,60 @@ func TestBeforeAResumePlaysThePicture(t *testing.T) {
 	}
 	if got := live.FileOffset(filepath.Join(dir, "file", strconv.FormatInt(id, 10))); got != 10 {
 		t.Fatalf("copy offset %v", got)
+	}
+}
+
+// A fill that can't be made was answered with a few empty packets, which a
+// player told "2 s of media" can stall or fail on. It is an error now, and a
+// player that gives up on a fill doesn't leave the request waiting.
+func TestAFillThatCantBeMadeIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "show.ts")
+	if err := os.WriteFile(path, make([]byte, 188*10), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A copy that waits, and a fill encode that never writes.
+	bin := filepath.Join(dir, "ffmpeg")
+	pids := filepath.Join(dir, "pids")
+	script := "#!/bin/sh\necho $$ >> " + pids + "\ncase \" $* \" in\n*fill%05d.ts*) exec sleep 60 ;;\n" +
+		"*\" -f hls \"*)\nprintf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:2.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nexec sleep 60\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		raw, _ := os.ReadFile(pids)
+		for _, f := range strings.Fields(string(raw)) {
+			if pid, _ := strconv.Atoi(f); pid > 0 {
+				if p, err := os.FindProcess(pid); err == nil {
+					_ = p.Kill()
+				}
+			}
+		}
+	})
+	hub := &live.Hub{Dir: dir, Encoder: "libx264", FFmpeg: bin}
+	t.Cleanup(hub.Shutdown)
+	if _, err := hub.PlayFile(4, path, "mpeg2video", "broadcast", "progressive", 21); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Hub: hub}).Handler()
+
+	// A recording with no copy: nothing can make its fill.
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/9/fill00001.ts", nil))
+	if rec.Code == http.StatusOK {
+		t.Fatalf("a fill nothing can make was served: %d bytes", rec.Body.Len())
+	}
+
+	// A player that leaves: the request ends with it.
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	began := time.Now()
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/4/fill00002.ts", nil).WithContext(ctx))
+	if took := time.Since(began); took > 2*time.Second {
+		t.Fatalf("a request the player left waited %v", took)
+	}
+	if rec.Code == http.StatusOK {
+		t.Fatalf("a fill that never came was served: %d bytes", rec.Body.Len())
 	}
 }
