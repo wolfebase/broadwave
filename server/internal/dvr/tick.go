@@ -25,7 +25,11 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		return
 	}
 	now := time.Now()
-	waits, _ := st.RecordingWaits(ctx)
+	// Recordings still start without this. A wait not read is a wait not tried.
+	waits, err := st.RecordingWaits(ctx)
+	if err != nil {
+		slog.Error(fmt.Sprintf("recording waits: %v", err))
+	}
 	if len(passes) == 0 {
 		settleWaits(ctx, st, waits, nil, nil, nil, now)
 		return

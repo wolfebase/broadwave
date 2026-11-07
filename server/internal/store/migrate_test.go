@@ -184,3 +184,34 @@ INSERT INTO settings (key, value) VALUES ('note', 'x')`})
 		t.Fatal(err)
 	}
 }
+
+// A database that ran the first form of 0045 has no told column.
+func TestWaitsTableGetsToldAfterTheFirstForm(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	for _, q := range []string{
+		`DROP TABLE recording_waits`,
+		`CREATE TABLE recording_waits (
+			channel_id INTEGER NOT NULL, airing_start INTEGER NOT NULL, airing_end INTEGER NOT NULL, until_at INTEGER NOT NULL,
+			pass_id INTEGER NOT NULL, title TEXT NOT NULL DEFAULT '', subtitle TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '',
+			category TEXT NOT NULL DEFAULT '', program_id TEXT NOT NULL DEFAULT '', game_id TEXT NOT NULL DEFAULT '',
+			reason TEXT NOT NULL DEFAULT '', failure TEXT NOT NULL DEFAULT '', since INTEGER NOT NULL,
+			PRIMARY KEY (channel_id, airing_start))`,
+		`DELETE FROM schema_migrations WHERE version >= 46`,
+	} {
+		if _, err := st.db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Migrate(st.db); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Truncate(time.Second)
+	if err := st.PutRecordingWait(ctx, RecordingWait{ChannelID: 1, Start: now, End: now, Until: now, PassID: 1, Since: now, Told: true}); err != nil {
+		t.Fatal(err)
+	}
+	waits, err := st.RecordingWaits(ctx)
+	if err != nil || len(waits) != 1 || !waits[0].Told {
+		t.Fatalf("waits %+v %v", waits, err)
+	}
+}

@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -91,5 +94,29 @@ func TestScheduleDoesNotPromiseAnAiringAlreadyOn(t *testing.T) {
 	}
 	if len(body.Items) != 1 || !body.Items[0].Skipped || body.Items[0].Conflict || body.Items[0].Reason != "Already on" {
 		t.Fatalf("items %+v", body.Items)
+	}
+}
+
+// A plan that can't read its waits says so instead of showing an airing as fine.
+func TestScheduleFailsWhenWaitsCannotBeRead(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "cfg")
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	db, err := sql.Open("sqlite", filepath.Join(dir, "broadwave.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`DROP TABLE recording_waits`); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/schedule", nil))
+	if rec.Code < 500 {
+		t.Fatalf("status %d %s", rec.Code, rec.Body.String())
 	}
 }

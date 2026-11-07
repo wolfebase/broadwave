@@ -660,7 +660,10 @@ func (s *Server) planWith(ctx context.Context, passes []store.Pass) (scheduleSna
 	recs, _ := s.Store.Recordings(ctx)
 	seen, _ := s.Store.SeenDeleted(ctx)
 	skips, _ := s.Store.Skips(ctx)
-	waits, _ := s.Store.RecordingWaits(ctx)
+	waits, err := s.Store.RecordingWaits(ctx)
+	if err != nil {
+		return scheduleSnap{}, err
+	}
 	items := dvr.PlanOnAir(passes, airings, count, now, end, recs, seen, skips, dvr.OnAir{
 		Now: now, Waits: waits,
 		Held: func(id int64) time.Time {

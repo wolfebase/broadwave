@@ -13,6 +13,5 @@ CREATE TABLE recording_waits (
 	reason TEXT NOT NULL DEFAULT '',
 	failure TEXT NOT NULL DEFAULT '',
 	since INTEGER NOT NULL,
-	told INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY (channel_id, airing_start)
 );
