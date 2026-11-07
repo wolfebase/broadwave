@@ -151,7 +151,7 @@ export function Schedule({
                     <span className="sched-sub">
                       {item.skipped ? (
                         <>
-                          <span className="tag sched-skip">{t("schedule.skippedTag")}</span> {item.reason || t("schedule.lowerPriority", tunerCount)}
+                          <span className="tag sched-skip">{t("schedule.skippedTag")}</span> {item.reason}
                         </>
                       ) : item.waiting ? (
                         <span className="tag sched-skip">{item.reason}</span>

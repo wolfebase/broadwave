@@ -2,9 +2,12 @@ package store
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"broadwave/internal/hdhr"
 )
 
 func TestQueryAiringsKeepsTheWindowAndNarrowsByTeam(t *testing.T) {
@@ -159,5 +162,54 @@ func TestQueryAiringsFindsATeamWithAnAccentOrAmpersand(t *testing.T) {
 		if strings.Join(titlesOf(got), ",") != want {
 			t.Fatalf("%s: %v", name, titlesOf(got))
 		}
+	}
+}
+
+// Subchannels of a frequency share a tune. A 3.0 channel and a stream do not.
+func TestRecordingAiringsNameTheirTune(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	if err := st.UpsertDevice(ctx, hdhr.Device{DeviceID: "BOX", TunerCount: 2}, []hdhr.Channel{
+		{GuideNumber: "4.1"}, {GuideNumber: "4.2"}, {GuideNumber: "5.1"}, {GuideNumber: "104.1", VideoCodec: "HEVC", AudioCodec: "AC4"}, {GuideNumber: "6.1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	chs, err := st.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]int64{}
+	for _, ch := range chs {
+		ids[ch.GuideNumber] = ch.ID
+	}
+	for number, freq := range map[string]int{"4.1": 593000000, "4.2": 593000000, "5.1": 605000000, "104.1": 593000000} {
+		if err := st.RememberProgram(ctx, "BOX", number, freq, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	start := time.Now().Add(time.Hour).Truncate(time.Second)
+	var rows []Airing
+	for _, id := range ids {
+		rows = append(rows, Airing{ChannelID: id, Title: "Show", ProgramID: strconv.FormatInt(id, 10), Start: start, End: start.Add(time.Hour)})
+	}
+	if err := st.InsertAirings(ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.RecordingAirings(ctx, start.Add(-time.Minute), start.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tunes := map[int64]string{}
+	for _, a := range got {
+		tunes[a.ChannelID] = a.Tune
+	}
+	if tunes[ids["4.1"]] == "" || tunes[ids["4.1"]] != tunes[ids["4.2"]] {
+		t.Fatalf("one frequency: %q %q", tunes[ids["4.1"]], tunes[ids["4.2"]])
+	}
+	if tunes[ids["5.1"]] == "" || tunes[ids["5.1"]] == tunes[ids["4.1"]] {
+		t.Fatalf("another frequency: %q", tunes[ids["5.1"]])
+	}
+	if tunes[ids["104.1"]] != "" || tunes[ids["6.1"]] != "" {
+		t.Fatalf("a 3.0 channel or one with no frequency has no shared tune: %q %q", tunes[ids["104.1"]], tunes[ids["6.1"]])
 	}
 }

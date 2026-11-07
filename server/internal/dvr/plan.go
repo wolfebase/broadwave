@@ -45,8 +45,8 @@ func (p Planned) tunerSpan() (time.Time, time.Time) {
 	return start, end
 }
 
-// Plan matches passes to airings and marks any span where more channels overlap than the tuner count.
-// Two shows on the same channel count as one tuner. A show that ends as the next begins does not overlap.
+// Plan matches passes to airings and marks any span where more frequencies overlap than the tuner count.
+// Shows on one frequency count as one tuner. A show that ends as the next begins does not overlap.
 // Plan does not move a pass onto another channel. A skipped airing stays skipped.
 // A later airing is named by AttachSuggestions, and only a title pass whose channel pin is the only mismatch moves that pin.
 func Plan(passes []store.Pass, airings []store.Airing, tunerCount int, from, to time.Time) []Planned {
@@ -88,6 +88,14 @@ func noteRunning(items []Planned, recs []store.Recording) {
 func match(passes []store.Pass, airings []store.Airing, from, to time.Time) []Planned {
 	items := make([]Planned, 0)
 	manual := manualAirings(passes, airings, from, to)
+	// A slot's channel has its tune on any listing the guide has for it.
+	tunes := map[int64]string{}
+	for _, airing := range airings {
+		tunes[airing.ChannelID] = airing.Tune
+	}
+	for i := range manual {
+		manual[i].Tune = tunes[manual[i].ChannelID]
+	}
 	for _, airing := range append(airings[:len(airings):len(airings)], manual...) {
 		if !airing.End.After(from) || !airing.Start.Before(to) {
 			continue
@@ -253,7 +261,7 @@ func resolvePriority(items []Planned, tunerCount int) {
 		}
 		return events[i].at.Before(events[j].at)
 	})
-	active := map[int]int64{}
+	active := map[int]string{}
 	for _, ev := range events {
 		if !ev.start {
 			delete(active, ev.index)
@@ -262,24 +270,46 @@ func resolvePriority(items []Planned, tunerCount int) {
 		if items[ev.index].Skipped {
 			continue
 		}
-		active[ev.index] = items[ev.index].Airing.ChannelID
-		for uniqueChannels(active) > tunerCount && len(active) > 0 {
-			loser := lowestPriority(items, active)
-			items[loser].Skipped = true
-			items[loser].Conflict = true
-			delete(active, loser)
+		active[ev.index] = tuneOf(items[ev.index].Airing)
+		for uniqueTunes(active) > tunerCount {
+			// A frequency goes as a whole. Dropping one of its shows frees no tuner.
+			lost := lowestTune(items, active)
+			for idx, tune := range active {
+				if tune != lost {
+					continue
+				}
+				items[idx].Skipped = true
+				items[idx].Conflict = true
+				items[idx].Reason = conflictReason(tunerCount)
+				delete(active, idx)
+			}
 		}
 	}
 }
 
-func lowestPriority(items []Planned, active map[int]int64) int {
-	loser := -1
-	for idx := range active {
-		if loser < 0 || losesTo(items[idx], items[loser]) {
-			loser = idx
+// conflictReason is the plan line of an airing that lost its tuner.
+func conflictReason(tunerCount int) string {
+	if tunerCount == 1 {
+		return "The tuner is taken by a recording that goes first."
+	}
+	return "The tuners are taken by recordings that go first."
+}
+
+// lowestTune is the tune whose best show ranks below every other tune's best.
+func lowestTune(items []Planned, active map[int]string) string {
+	best := map[string]int{}
+	for idx, tune := range active {
+		if top, ok := best[tune]; !ok || losesTo(items[top], items[idx]) {
+			best[tune] = idx
 		}
 	}
-	return loser
+	lost, loser := "", -1
+	for tune, idx := range best {
+		if loser < 0 || losesTo(items[idx], items[loser]) {
+			lost, loser = tune, idx
+		}
+	}
+	return lost
 }
 
 func losesTo(a, b Planned) bool {
@@ -292,10 +322,19 @@ func losesTo(a, b Planned) bool {
 	return a.Airing.ID > b.Airing.ID
 }
 
-func uniqueChannels(active map[int]int64) int {
-	seen := map[int64]struct{}{}
-	for _, channelID := range active {
-		seen[channelID] = struct{}{}
+// tuneOf is what the airing takes a tuner for: the frequency, when the store
+// knows it, so channels the hub carries on one tune count once.
+func tuneOf(air store.Airing) string {
+	if air.Tune != "" {
+		return air.Tune
+	}
+	return "channel:" + strconv.FormatInt(air.ChannelID, 10)
+}
+
+func uniqueTunes(active map[int]string) int {
+	seen := map[string]struct{}{}
+	for _, tune := range active {
+		seen[tune] = struct{}{}
 	}
 	return len(seen)
 }

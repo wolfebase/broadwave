@@ -41,6 +41,9 @@ type SourceChannel struct {
 }
 
 type Airing struct {
+	// Tune is what a recording of this airing takes a tuner for, set for the
+	// planner by RecordingAirings. Channels on one frequency share it.
+	Tune         string `json:"-"`
 	ID           int64  `json:"id"`
 	ChannelID    int64  `json:"channelId"`
 	Title        string `json:"title"`

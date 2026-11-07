@@ -3,7 +3,6 @@ import type { Message } from "../runtime.ts";
 export const scheduleMessages = {
   "schedule.comingUp": "Coming up",
   "schedule.noMatch": "No recording rule matches an airing in the guide.",
-  "schedule.lowerPriority": { one: "Lower priority · {count} tuner", other: "Lower priority · {count} tuners" },
   "schedule.willRecord": "Will record {start}–{end}",
   "schedule.laterOn": "Later on {when}.",
   "schedule.laterOnChannel": "Later on {when} on {number}.",

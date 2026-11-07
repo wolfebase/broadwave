@@ -3,6 +3,7 @@ package dvr
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ type Suggestion struct {
 type Soon struct {
 	Title     string
 	ChannelID int64
+	Tune      string
 	Start     time.Time
 	Pad       time.Duration
 }
@@ -141,16 +143,16 @@ func fitsBeside(items []Planned, cand Planned, tunerCount int) bool {
 			continue
 		}
 		start, end := item.tunerSpan()
-		spans = append(spans, span{start: start, end: end, channel: item.Airing.ChannelID})
+		spans = append(spans, span{start: start, end: end, tune: tuneOf(item.Airing)})
 	}
 	start, end := cand.tunerSpan()
-	spans = append(spans, span{start: start, end: end, channel: air.ChannelID})
+	spans = append(spans, span{start: start, end: end, tune: tuneOf(air)})
 	return !overflows(spans, tunerCount)
 }
 
 type span struct {
 	start, end time.Time
-	channel    int64
+	tune       string
 }
 
 func overflows(spans []span, tunerCount int) bool {
@@ -158,18 +160,18 @@ func overflows(spans []span, tunerCount int) bool {
 		tunerCount = 1
 	}
 	type event struct {
-		at      time.Time
-		index   int
-		start   bool
-		channel int64
+		at    time.Time
+		index int
+		start bool
+		tune  string
 	}
 	events := make([]event, 0, len(spans)*2)
 	for i, sp := range spans {
 		if !sp.end.After(sp.start) {
 			continue
 		}
-		events = append(events, event{at: sp.start, index: i, start: true, channel: sp.channel})
-		events = append(events, event{at: sp.end, index: i, start: false, channel: sp.channel})
+		events = append(events, event{at: sp.start, index: i, start: true, tune: sp.tune})
+		events = append(events, event{at: sp.end, index: i, start: false, tune: sp.tune})
 	}
 	sort.SliceStable(events, func(i, j int) bool {
 		if events[i].at.Equal(events[j].at) && events[i].start != events[j].start {
@@ -177,14 +179,14 @@ func overflows(spans []span, tunerCount int) bool {
 		}
 		return events[i].at.Before(events[j].at)
 	})
-	active := map[int]int64{}
+	active := map[int]string{}
 	for _, ev := range events {
 		if !ev.start {
 			delete(active, ev.index)
 			continue
 		}
-		active[ev.index] = ev.channel
-		if uniqueChannels(active) > tunerCount {
+		active[ev.index] = ev.tune
+		if uniqueTunes(active) > tunerCount {
 			return true
 		}
 	}
@@ -297,15 +299,17 @@ func inPad(item Soon, now time.Time) bool {
 }
 
 func dueTuners(due []Soon) int {
-	seen := map[int64]struct{}{}
-	anon := 0
-	for _, item := range due {
-		id := item.ChannelID
-		if id == 0 {
-			anon--
-			id = int64(anon)
+	seen := map[string]struct{}{}
+	for i, item := range due {
+		key := item.Tune
+		switch {
+		case key != "":
+		case item.ChannelID != 0:
+			key = tuneOf(store.Airing{ChannelID: item.ChannelID})
+		default:
+			key = "anon:" + strconv.Itoa(i)
 		}
-		seen[id] = struct{}{}
+		seen[key] = struct{}{}
 	}
 	return len(seen)
 }

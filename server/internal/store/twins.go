@@ -399,6 +399,45 @@ func contains(ids []int64, id int64) bool {
 // both show (or neither), on the 1.0 channel. An encrypted 3.0 channel's
 // copy goes to its 1.0 twin.
 func (s *Store) RecordingAirings(ctx context.Context, from, to time.Time) ([]Airing, error) {
+	rows, err := s.recordingAirings(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	tunes, err := s.channelTunes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].Tune = tunes[rows[i].ChannelID]
+	}
+	return rows, nil
+}
+
+// channelTunes names what each channel takes a tuner for. A tuner carries a
+// whole frequency, so the channels on it share one tune. An ATSC 3.0 channel is
+// tuned on its own, and one with no frequency, like a stream, has no tune.
+func (s *Store) channelTunes(ctx context.Context) (map[int64]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, device_id, frequency_hz, video_codec, audio_codec FROM channels WHERE frequency_hz > 0`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]string{}
+	for rows.Next() {
+		var id int64
+		var device, video, audio string
+		var freq int
+		if err := rows.Scan(&id, &device, &freq, &video, &audio); err != nil {
+			return nil, err
+		}
+		if !IsATSC3(video, audio) {
+			out[id] = device + ":" + strconv.Itoa(freq)
+		}
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) recordingAirings(ctx context.Context, from, to time.Time) ([]Airing, error) {
 	rows, err := s.Airings(ctx, from, to)
 	if err != nil {
 		return nil, err

@@ -157,3 +157,91 @@ func TestAPassRecordsOnlyOnItsDays(t *testing.T) {
 		t.Error("a pass with no days records every day")
 	}
 }
+
+func tuneAiring(id, channel int64, tune string, start time.Time) store.Airing {
+	return store.Airing{ID: id, ChannelID: channel, Tune: tune, Title: "Show", Start: start, End: start.Add(time.Hour)}
+}
+
+// Two frequencies carry four channels, so two tuners record all four. The plan
+// used to count channels, skip two, and start them a tick after the others.
+func TestChannelsOnOneFrequencyShareATuner(t *testing.T) {
+	start := time.Now().Add(time.Hour).Truncate(time.Minute)
+	passes := []store.Pass{{ID: 1, Title: "Show", Kind: "series"}}
+	airings := []store.Airing{
+		tuneAiring(1, 41, "box:593", start),
+		tuneAiring(2, 42, "box:593", start),
+		tuneAiring(3, 51, "box:605", start),
+		tuneAiring(4, 52, "box:605", start),
+	}
+	items := Plan(passes, airings, 2, start.Add(-time.Hour), start.Add(2*time.Hour))
+	if len(items) != 4 {
+		t.Fatalf("items %+v", items)
+	}
+	for _, item := range items {
+		if item.Skipped || item.Conflict {
+			t.Fatalf("a false conflict on channel %d: %+v", item.Airing.ChannelID, item)
+		}
+	}
+}
+
+// A third frequency is one too many. Everything on it goes together, and the
+// tune that goes is the one whose best show ranks lowest. Dropping the lowest
+// show on a frequency that stays tuned would free nothing.
+func TestAFrequencyGoesAsAWhole(t *testing.T) {
+	start := time.Now().Add(time.Hour).Truncate(time.Minute)
+	passes := []store.Pass{
+		{ID: 1, Title: "Top", Kind: "series", Priority: 9},
+		{ID: 2, Title: "Mid", Kind: "series", Priority: 5},
+		{ID: 3, Title: "Low", Kind: "series", Priority: 3},
+		{ID: 4, Title: "Least", Kind: "series", Priority: 1},
+	}
+	show := func(id, channel int64, tune, title string) store.Airing {
+		return store.Airing{ID: id, ChannelID: channel, Tune: tune, Title: title, Start: start, End: start.Add(time.Hour)}
+	}
+	airings := []store.Airing{
+		show(1, 41, "box:593", "Top"),
+		show(2, 42, "box:593", "Least"),
+		show(3, 51, "box:605", "Mid"),
+		show(4, 61, "box:617", "Low"),
+	}
+	items := Plan(passes, airings, 2, start.Add(-time.Hour), start.Add(2*time.Hour))
+	for _, item := range items {
+		wantSkip := item.Airing.Title == "Low"
+		if item.Skipped != wantSkip || item.Conflict != wantSkip {
+			t.Fatalf("%s skipped=%v conflict=%v, want only Low to go", item.Airing.Title, item.Skipped, item.Conflict)
+		}
+		if wantSkip && item.Reason == "" {
+			t.Fatalf("a conflict gives no reason: %+v", item)
+		}
+	}
+}
+
+// A later airing is offered when it fits on a frequency already tuned.
+func TestASuggestionCountsFrequencies(t *testing.T) {
+	start := time.Now().Add(time.Hour).Truncate(time.Minute)
+	spans := []span{
+		{start: start, end: start.Add(time.Hour), tune: "box:593"},
+		{start: start, end: start.Add(time.Hour), tune: "box:593"},
+		{start: start, end: start.Add(time.Hour), tune: "box:605"},
+	}
+	if overflows(spans, 2) {
+		t.Fatal("two frequencies fit on two tuners")
+	}
+	spans = append(spans, span{start: start, end: start.Add(time.Hour), tune: "box:617"})
+	if !overflows(spans, 2) {
+		t.Fatal("three frequencies do not fit on two tuners")
+	}
+}
+
+// The warning before a live watch counts tuners the same way.
+func TestALiveWarningCountsFrequencies(t *testing.T) {
+	now := time.Now()
+	soon := now.Add(time.Minute)
+	upcoming := []Soon{
+		{Title: "A", ChannelID: 41, Tune: "box:593", Start: soon},
+		{Title: "B", ChannelID: 42, Tune: "box:593", Start: soon},
+	}
+	if allow, warning := LiveWatch(2, 0, upcoming, now); !allow {
+		t.Fatalf("one frequency needs one tuner, and one is left: %q", warning)
+	}
+}

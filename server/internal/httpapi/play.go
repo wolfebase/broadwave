@@ -948,6 +948,7 @@ func (s *Server) upcomingSoon(ctx context.Context, watch store.SourceChannel, tu
 		out = append(out, dvr.Soon{
 			Title:     item.Airing.Title,
 			ChannelID: item.Airing.ChannelID,
+			Tune:      item.Airing.Tune,
 			Start:     item.Airing.Start,
 			Pad:       time.Duration(item.PadBefore) * time.Minute,
 		})
