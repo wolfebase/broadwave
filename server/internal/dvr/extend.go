@@ -66,6 +66,15 @@ func NextExtension(id int64, ends time.Time, game sports.Game, found bool, now t
 	return Extend{ID: id, Until: horizon, Note: note}, true
 }
 
+// GameStillOn reports a game the scoreboard says isn't over: in progress, or
+// late to start.
+func GameStillOn(game sports.Game, now time.Time) bool {
+	if game.State == "post" || game.Completed {
+		return false
+	}
+	return game.State == "in" || (game.State == "pre" && now.After(game.Start))
+}
+
 // SportsTail is the time after the listing a sports show keeps recording when
 // it is not a matched game the scoreboard can follow. It fits the sport: a
 // basketball, hockey, or soccer game rarely runs 30 minutes over, football

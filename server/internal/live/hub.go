@@ -265,6 +265,8 @@ type Hub struct {
 	// fileClosed is set by Shutdown. The HTTP server is still up then, and a
 	// player's request must not start an encode that outlives the process.
 	fileClosed bool
+	// GameOn reports a game the scoreboard says is still on. httpapi sets it.
+	GameOn func(ctx context.Context, gameID string) bool
 	// fileIdle replaces fileIdleAfter in a test.
 	fileIdle time.Duration
 	ringSeq  int

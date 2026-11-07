@@ -197,6 +197,20 @@ func (s *Server) LinkGames(ctx context.Context) {
 }
 
 // ExtendRecordings keeps a matched game recording going until the game is over.
+// GameOn reports a game the scoreboard says is still on. An unknown game isn't.
+func (s *Server) GameOn(ctx context.Context, id string) bool {
+	if s == nil || s.Sports == nil {
+		return false
+	}
+	now := time.Now()
+	for _, game := range s.boardsAround(ctx, now) {
+		if game.ID == id {
+			return dvr.GameStillOn(game, now)
+		}
+	}
+	return false
+}
+
 func (s *Server) ExtendRecordings(ctx context.Context) {
 	if s == nil || s.Store == nil || s.Hub == nil || s.Sports == nil {
 		return

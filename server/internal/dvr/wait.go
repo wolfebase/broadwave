@@ -22,7 +22,7 @@ func waitWords(err error) (reason, failure string) {
 	var missing *disk.MissingError
 	switch {
 	case errors.As(err, &busy):
-		return "Waiting for a tuner", "Every tuner was busy."
+		return "Waiting for a tuner", failedBusy
 	case errors.As(err, &low), errors.As(err, &write), errors.As(err, &missing):
 		return "Waiting for the recordings disk", err.Error()
 	}
@@ -115,35 +115,117 @@ func shortSpan(d time.Duration) string {
 	return fmt.Sprintf("%d min", int(d.Round(time.Minute).Minutes()))
 }
 
+// What a failed recording says when the wait ended some other way than busy tuners.
+const (
+	failedBusy     = "Every tuner was busy."
+	failedConflict = "Recordings that went first had the tuners."
+	failedMoved    = "The guide moved this show while it waited for a tuner."
+	failedGame     = "Every tuner was busy until the game ended."
+)
+
 // settleWaits closes the waits that are over and returns the ones still open.
-// A rule removed or an airing skipped while it waited is the viewer's choice.
-// An airing that started some other way needs no more. An airing that ended
-// without a recording leaves a failed one saying why.
-func settleWaits(ctx context.Context, st *store.Store, waits []store.RecordingWait, passes []store.Pass, planned []Planned, recs []store.Recording, now time.Time) map[waitKey]store.RecordingWait {
+// Only the viewer's own choice is silent: a rule removed, an airing skipped, or
+// a library rule that says it isn't wanted. An airing that started some other
+// way needs no more. Anything else ends in a failed recording saying why,
+// including a lost conflict or a listing the guide moved.
+func settleWaits(ctx context.Context, st *store.Store, hub *live.Hub, waits []store.RecordingWait, passes []store.Pass, planned []Planned, recs []store.Recording, skips map[string]bool, now time.Time) map[waitKey]store.RecordingWait {
 	open := make(map[waitKey]store.RecordingWait, len(waits))
 	if len(waits) == 0 {
 		return open
 	}
-	wanted := make(map[waitKey]bool, len(planned))
+	plan := make(map[waitKey]Planned, len(planned))
 	for _, item := range planned {
-		if !item.Skipped {
-			wanted[keyOfWait(item.Airing.ChannelID, item.Airing.Start)] = true
-		}
+		plan[keyOfWait(item.Airing.ChannelID, item.Airing.Start)] = item
 	}
 	for _, w := range waits {
 		key := keyOfWait(w.ChannelID, w.Start)
+		item, listed := plan[key]
 		pass, ok := passByID(passes, w.PassID)
-		switch {
-		case !ok, startedSince(recs, w, pass), w.End.After(now) && !wanted[key]:
+		if !ok || startedSince(recs, w, pass) || viewerSkipped(w, pass, skips) || (listed && item.Skipped && !item.Conflict) {
 			_ = st.DeleteRecordingWait(ctx, w.ChannelID, w.Start)
-		case !w.Until.After(now):
+			continue
+		}
+		if !w.Until.After(now) && !gameStillOn(ctx, hub, w, now) {
 			failWait(ctx, st, w)
 			_ = st.DeleteRecordingWait(ctx, w.ChannelID, w.Start)
-		default:
-			open[key] = w
+			continue
 		}
+		failure := w.Failure
+		switch {
+		case listed && item.Conflict:
+			failure = failedConflict
+		case !listed && w.End.After(now):
+			failure = failedMoved
+		}
+		if failure != w.Failure {
+			w.Failure = failure
+			_ = st.PutRecordingWait(ctx, w)
+		}
+		open[key] = w
 	}
 	return open
+}
+
+func viewerSkipped(w store.RecordingWait, pass store.Pass, skips map[string]bool) bool {
+	key, starts := SkipParts(waitAiring(w, pass))
+	return key != "" && skips[key+"|"+starts]
+}
+
+// waitAiring is the airing a wait is for, as far as the wait knows it.
+func waitAiring(w store.RecordingWait, pass store.Pass) store.Airing {
+	air := store.Airing{
+		ChannelID: w.ChannelID, Title: w.Title, Subtitle: w.Subtitle, Description: w.Description,
+		Category: w.Category, ProgramID: w.ProgramID, GameID: w.GameID, Start: w.Start, End: w.End,
+	}
+	if pass.Kind == "manual" {
+		air.ManualPass = pass.ID
+	}
+	return air
+}
+
+// gameLimit is how long after its start a game is taken to be still on,
+// whatever the scoreboard says, so a stuck one can't hold a wait for good.
+const gameLimit = 12 * time.Hour
+
+// gameStillOn asks the scoreboard about a matched game.
+func gameStillOn(ctx context.Context, hub *live.Hub, w store.RecordingWait, now time.Time) bool {
+	return w.GameID != "" && hub != nil && hub.GameOn != nil && now.Before(w.Start.Add(gameLimit)) && hub.GameOn(ctx, w.GameID)
+}
+
+// tryPastListing gives a waiting game the rest of its time once its listing has
+// ended: overtime for a game the scoreboard follows, the sport's extra time for
+// a listing it doesn't. It runs after the hold and takes only a free tuner.
+func tryPastListing(ctx context.Context, st *store.Store, hub *live.Hub, open map[waitKey]store.RecordingWait, passes []store.Pass, now time.Time) {
+	for _, w := range open {
+		if w.End.After(now) {
+			continue
+		}
+		pass, ok := passByID(passes, w.PassID)
+		if !ok {
+			continue
+		}
+		air := waitAiring(w, pass)
+		minutes := 0
+		switch {
+		case gameStillOn(ctx, hub, w, now):
+			// The scoreboard extends it from here.
+			minutes = int(liveExtend / time.Minute)
+		case SportsTail(air) > 0 && w.Until.After(now):
+			minutes = int(w.Until.Sub(now).Minutes()) + 1
+		default:
+			continue
+		}
+		rec, err := hub.RecordIfFree(ctx, minutes, store.Recording{
+			ChannelID: w.ChannelID, Title: w.Title, Subtitle: w.Subtitle, Description: w.Description,
+			Category: w.Category, ProgramID: w.ProgramID, GameID: w.GameID, PassID: w.PassID,
+			StartedAt: w.Start,
+		})
+		if err != nil {
+			slog.Debug(fmt.Sprintf("pass record: %s: %v", w.Title, err))
+			continue
+		}
+		noteStarted(ctx, st, rec, air)
+	}
 }
 
 func passByID(passes []store.Pass, id int64) (store.Pass, bool) {
@@ -191,6 +273,9 @@ func failWait(ctx context.Context, st *store.Store, w store.RecordingWait) {
 		return
 	}
 	failure := strings.TrimSpace(w.Failure)
+	if failure == failedBusy && (w.GameID != "" || SportsTail(waitAiring(w, store.Pass{})) > 0) {
+		failure = failedGame
+	}
 	_ = st.FinishRecording(ctx, id, "failed", failure)
 	_ = st.AddEvent(ctx, "recording", fmt.Sprintf("%s did not record. %s", w.Title, failure))
 }

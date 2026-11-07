@@ -552,3 +552,228 @@ func TestARecordingIsNotRefusedByItsOwnHold(t *testing.T) {
 	}
 	t.Cleanup(func() { hub.StopRecord(recs[0].ID) })
 }
+
+func waitFor(t *testing.T, st *store.Store, channel int64) (store.RecordingWait, bool) {
+	t.Helper()
+	waits, err := st.RecordingWaits(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range waits {
+		if w.ChannelID == channel {
+			return w, true
+		}
+	}
+	return store.RecordingWait{}, false
+}
+
+// Losing the tuners to a rule above, or the guide moving the show, is not the
+// viewer's choice. The airing still ends with a failed recording that says why.
+func TestAWaitThatLosesAConflictLeavesATrace(t *testing.T) {
+	srv := &fake.Server{Realtime: true, Channels: []fake.Channel{
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
+		{Number: "5.1", Name: "KTWO", Freq: 605000000},
+		{Number: "6.1", Name: "KSIX", Freq: 617000000},
+	}}
+	base, port, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	t.Setenv("HDHR_CONTROL_PORT", port)
+	ctx := context.Background()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	client := &hdhr.Client{}
+	dev, err := client.FetchDevice(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lineup, err := client.FetchLineup(ctx, dev.LineupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, dev, lineup); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutSettings(ctx, map[string]string{"watermarkGB": "0"}); err != nil {
+		t.Fatal(err)
+	}
+	hub := live.New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(hub.Shutdown)
+	chs, err := st.Channels(ctx, false)
+	if err != nil || len(chs) != 3 {
+		t.Fatalf("%+v %v", chs, err)
+	}
+	freq := map[string]int{"4.1": 593000000, "5.1": 605000000, "6.1": 617000000}
+	start := time.Now().Add(30 * time.Second).Truncate(time.Second)
+	end := start.Add(time.Hour)
+	var last int64
+	for i, ch := range chs {
+		if err := st.RememberProgram(ctx, "FAKEHDHR", ch.GuideNumber, freq[ch.GuideNumber], 1); err != nil {
+			t.Fatal(err)
+		}
+		title := ch.GuideNumber + " show"
+		if err := st.InsertAirings(ctx, []store.Airing{{ChannelID: ch.ID, Title: title, Start: start, End: end}}); err != nil {
+			t.Fatal(err)
+		}
+		id, err := st.AddSeriesPass(ctx, store.Pass{Title: title, Kind: "series", MatchKind: "title"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.UpdatePass(ctx, id, 0, 0, 5-i); err != nil {
+			t.Fatal(err)
+		}
+		last = ch.ID
+		if i == 2 {
+			if err := st.PutRecordingWait(ctx, store.RecordingWait{
+				ChannelID: ch.ID, Start: start, End: end, Until: end, PassID: id, Title: title,
+				Reason: "Waiting for a tuner", Failure: "Every tuner was busy.", Since: start, Told: true,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	srv.HoldAll()
+	Tick(ctx, st, hub)
+	w, ok := waitFor(t, st, last)
+	if !ok {
+		t.Fatal("the wait went with no trace")
+	}
+	if w.Failure != failedConflict {
+		t.Fatalf("failure %q", w.Failure)
+	}
+}
+
+func TestAWaitWhoseListingMovedLeavesATrace(t *testing.T) {
+	_, st, hub, channel := waitFixture(t)
+	ctx := context.Background()
+	start := time.Now().Add(-5 * time.Minute).Truncate(time.Second)
+	end := start.Add(30 * time.Minute)
+	id, err := st.AddSeriesPass(ctx, store.Pass{Title: "News", Kind: "series", MatchKind: "title"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := store.RecordingWait{
+		ChannelID: channel, Start: start, End: end, Until: end, PassID: id, Title: "News",
+		Reason: "Waiting for a tuner", Failure: "Every tuner was busy.", Since: start, Told: true,
+	}
+	if err := st.PutRecordingWait(ctx, w); err != nil {
+		t.Fatal(err)
+	}
+	Tick(ctx, st, hub)
+	got, ok := waitFor(t, st, channel)
+	if !ok {
+		t.Fatal("the wait went with no trace")
+	}
+	if got.Failure != failedMoved {
+		t.Fatalf("failure %q", got.Failure)
+	}
+	// Its time passes: the failed recording says what happened.
+	if err := st.DeleteRecordingWait(ctx, channel, start); err != nil {
+		t.Fatal(err)
+	}
+	got.End, got.Until = time.Now().Add(-time.Minute), time.Now().Add(-time.Minute)
+	if err := st.PutRecordingWait(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	Tick(ctx, st, hub)
+	recs, err := st.Recordings(ctx)
+	if err != nil || len(recs) != 1 || recs[0].Status != "failed" || recs[0].Error != failedMoved {
+		t.Fatalf("recordings %+v %v", recs, err)
+	}
+}
+
+// A game can run hours past its listing. A tuner that comes free for the end of
+// it still records the end.
+func TestAWaitingGameKeepsTryingPastItsListing(t *testing.T) {
+	_, st, hub, channel := waitFixture(t)
+	ctx := context.Background()
+	on := true
+	hub.GameOn = func(_ context.Context, id string) bool { return id == "401" && on }
+	end := time.Now().Add(-20 * time.Minute).Truncate(time.Second)
+	start := end.Add(-3 * time.Hour)
+	id, err := st.AddSeriesPass(ctx, store.Pass{Title: "Game", Kind: "series", MatchKind: "title"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutRecordingWait(ctx, store.RecordingWait{
+		ChannelID: channel, Start: start, End: end, Until: end, PassID: id, Title: "Game", GameID: "401",
+		Reason: "Waiting for a tuner", Failure: "Every tuner was busy.", Since: start, Told: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	Tick(ctx, st, hub)
+	recs, err := st.Recordings(ctx)
+	if err != nil || len(recs) != 1 || recs[0].Status != "recording" || !recs[0].Partial || recs[0].GameID != "401" {
+		t.Fatalf("recordings %+v %v", recs, err)
+	}
+	t.Cleanup(func() { hub.StopRecord(recs[0].ID) })
+	if _, waiting := waitFor(t, st, channel); waiting {
+		t.Fatal("the wait stayed after it started")
+	}
+}
+
+func TestAWaitingGameThatEndedSaysSo(t *testing.T) {
+	srv, st, hub, channel := waitFixture(t)
+	ctx := context.Background()
+	on := true
+	hub.GameOn = func(context.Context, string) bool { return on }
+	end := time.Now().Add(-20 * time.Minute).Truncate(time.Second)
+	start := end.Add(-3 * time.Hour)
+	id, err := st.AddSeriesPass(ctx, store.Pass{Title: "Game", Kind: "series", MatchKind: "title"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutRecordingWait(ctx, store.RecordingWait{
+		ChannelID: channel, Start: start, End: end, Until: end, PassID: id, Title: "Game", GameID: "401",
+		Reason: "Waiting for a tuner", Failure: "Every tuner was busy.", Since: start, Told: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	srv.HoldAll()
+	Tick(ctx, st, hub)
+	if _, waiting := waitFor(t, st, channel); !waiting {
+		t.Fatal("the game is on and the wait ended")
+	}
+	if recs, _ := st.Recordings(ctx); len(recs) != 0 {
+		t.Fatalf("recordings %+v", recs)
+	}
+	on = false
+	Tick(ctx, st, hub)
+	recs, err := st.Recordings(ctx)
+	if err != nil || len(recs) != 1 || recs[0].Status != "failed" || recs[0].Error != "Every tuner was busy until the game ended." {
+		t.Fatalf("recordings %+v %v", recs, err)
+	}
+}
+
+// A sports listing with no game to follow has its extra time.
+func TestAWaitingSportsShowUsesItsTail(t *testing.T) {
+	_, st, hub, channel := waitFixture(t)
+	ctx := context.Background()
+	end := time.Now().Add(-5 * time.Minute).Truncate(time.Second)
+	start := end.Add(-2 * time.Hour)
+	id, err := st.AddSeriesPass(ctx, store.Pass{Title: "Football", Kind: "series", MatchKind: "title"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	air := store.Airing{Title: "Football", Category: "Sports", Start: start, End: end}
+	if SportsTail(air) == 0 {
+		t.Fatal("fixture has no tail")
+	}
+	if err := st.PutRecordingWait(ctx, store.RecordingWait{
+		ChannelID: channel, Start: start, End: end, Until: end.Add(SportsTail(air)), PassID: id, Title: "Football", Category: "Sports",
+		Reason: "Waiting for a tuner", Failure: "Every tuner was busy.", Since: start, Told: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	Tick(ctx, st, hub)
+	recs, err := st.Recordings(ctx)
+	if err != nil || len(recs) != 1 || recs[0].Status != "recording" {
+		t.Fatalf("recordings %+v %v", recs, err)
+	}
+	t.Cleanup(func() { hub.StopRecord(recs[0].ID) })
+}

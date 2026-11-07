@@ -339,6 +339,7 @@ func main() {
 			api.BroadcastScan(context.Background())
 		}
 	}()
+	hub.GameOn = api.GameOn
 	go hub.RunFileSweep(context.Background())
 	// Idle tuners keep every channel's still recent (BROADWAVE_STILL_SWEEP=0, or the stillSweep setting, turns it off).
 	if !*staging && os.Getenv("BROADWAVE_E2E") != "1" {

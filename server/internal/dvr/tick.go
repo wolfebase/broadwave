@@ -31,7 +31,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		slog.Error(fmt.Sprintf("recording waits: %v", err))
 	}
 	if len(passes) == 0 {
-		settleWaits(ctx, st, waits, nil, nil, nil, now)
+		settleWaits(ctx, st, hub, waits, nil, nil, nil, nil, now)
 		return
 	}
 	lead := 2 * time.Minute
@@ -52,7 +52,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		Now: now, Waits: waits,
 		Held: func(id int64) time.Time { return hub.BufferedSince(ctx, id) },
 	})
-	open := settleWaits(ctx, st, waits, passes, planned, active, now)
+	open := settleWaits(ctx, st, hub, waits, passes, planned, active, skips, now)
 	tunes := map[int64]string{}
 	for _, row := range rows {
 		tunes[row.ChannelID] = row.Tune
@@ -113,6 +113,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 	for _, plan := range late {
 		runStart(ctx, st, hub, open, plan, now, hub.RecordIfFree)
 	}
+	tryPastListing(ctx, st, hub, open, passes, now)
 }
 
 // startPlan is one airing Tick has decided to start.
