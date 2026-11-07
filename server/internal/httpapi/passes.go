@@ -65,6 +65,10 @@ func (s *Server) addPass(w http.ResponseWriter, r *http.Request) {
 			writeError(w, err)
 			return
 		}
+		if err := s.takeBackSkip(r.Context(), channelID, start); err != nil {
+			writeError(w, err)
+			return
+		}
 		s.passes(w, r)
 		return
 	}
@@ -78,6 +82,25 @@ func (s *Server) addPass(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.passes(w, r)
+}
+
+// takeBackSkip clears a skip on the airing someone just asked to record. A skip
+// outranks a one-time rule, so it would stay off the plan with no word why.
+func (s *Server) takeBackSkip(ctx context.Context, channelID int64, start time.Time) error {
+	airings, err := s.Store.QueryAirings(ctx, store.AiringQuery{From: start, To: start.Add(time.Second), Channels: []int64{channelID}})
+	if err != nil {
+		return err
+	}
+	for _, airing := range airings {
+		if airing.ChannelID != channelID || !airing.Start.Equal(start) {
+			continue
+		}
+		key, starts := dvr.SkipParts(airing)
+		if err := s.Store.UnskipAiring(ctx, key, starts); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newSeriesPass(title string, body map[string]any) (store.Pass, string) {

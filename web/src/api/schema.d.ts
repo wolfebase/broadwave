@@ -1152,6 +1152,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/schedule/unskip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Takes back a skip, so the rule that wanted the airing records it. Naming an airing with no skip is fine. Adding a one-time pass for an airing does this too. */
+        post: operations["unskipAiring"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/schedule/fix": {
         parameters: {
             query?: never;
@@ -5435,6 +5452,39 @@ export interface operations {
                     /**
                      * Format: date-time
                      * @description An offset is accepted and stored as UTC, which is how the skip is matched. A missing or unreadable time is 400.
+                     */
+                    start: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Ok"];
+            400: components["responses"]["Error"];
+        };
+    };
+    unskipAiring: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    programId?: string;
+                    title?: string;
+                    subtitle?: string;
+                    /** Format: int64 */
+                    channelId?: number;
+                    /**
+                     * Format: int64
+                     * @description The planned item's passId, as sent to /schedule/skip.
+                     */
+                    passId?: number;
+                    /**
+                     * Format: date-time
+                     * @description As sent to /schedule/skip. A missing or unreadable time is 400.
                      */
                     start: string;
                 };

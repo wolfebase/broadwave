@@ -245,6 +245,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /airings", s.airings)
 	api("GET /schedule", s.schedule)
 	api("POST /schedule/skip", s.skipAiring)
+	api("POST /schedule/unskip", s.unskipAiring)
 	api("POST /schedule/fix", s.fixSchedule)
 	api("GET /events", s.events)
 	api("POST /guide/refresh", s.refreshGuide)
