@@ -182,10 +182,7 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 func (h *Hub) recordingGraph(id int64, path, videoCodec, mode, fieldOrder string) Graph {
 	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
 	g.Live = false
-	h.playMu.Lock()
-	soft := h.fileSoft[id]
-	h.playMu.Unlock()
-	if soft {
+	if h.fileOnSoftware(id) {
 		return softwareGraph(g)
 	}
 	return g
@@ -195,6 +192,12 @@ func (h *Hub) recordingGraph(id int64, path, videoCodec, mode, fieldOrder string
 func softwareGraph(g Graph) Graph {
 	g.Encoder, g.Deint = "libx264", ""
 	return g
+}
+
+func (h *Hub) fileOnSoftware(id int64) bool {
+	h.playMu.Lock()
+	defer h.playMu.Unlock()
+	return h.fileSoft[id]
 }
 
 func (h *Hub) setFileSoft(id int64, soft bool) {
@@ -272,14 +275,23 @@ func (h *Hub) playRecording(id int64, job *fileJob, at float64) (string, error) 
 		// A follow copy sees the encode is no longer current and stops.
 		h.stopFileEncode(id)
 		h.forgetFileJob(id, job)
+		h.playMu.Lock()
+		closing := h.fileClosed
+		h.playMu.Unlock()
+		if closing {
+			return url, err
+		}
 		// A stream the GPU can't take gets one try on the processor, as live does.
 		// That failing too is not the GPU, and the next press tries it again.
 		if gpuEncoder(job.graph.Encoder) {
-			slog.Warn(fmt.Sprintf("recording %d: the GPU did not start it, trying the processor", id))
+			slog.Warn(fmt.Sprintf("recording %d did not start on the GPU. Trying the processor.", id))
 			h.setFileSoft(id, true)
 			// A new job: the failed encode's exit still marks the old one.
 			next := &fileJob{path: job.path, graph: softwareGraph(job.graph), follow: job.follow, still: job.still}
 			return h.playRecording(id, next, at)
+		}
+		if h.fileOnSoftware(id) {
+			slog.Warn(fmt.Sprintf("recording %d did not start on the processor either, so the GPU was not the cause.", id))
 		}
 		h.setFileSoft(id, false)
 	}

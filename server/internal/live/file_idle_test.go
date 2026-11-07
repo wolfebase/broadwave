@@ -771,6 +771,44 @@ func TestAFallbackThatFailsDoesNotLoop(t *testing.T) {
 	}
 }
 
+// Shutdown kills the encode while a play waits for its first segment. That isn't
+// the GPU failing, and an encode started now would outlive the process.
+func TestShutdownDuringAWaitStartsNoFallback(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	argsLog := filepath.Join(dir, "args.log")
+	pids := filepath.Join(dir, "pids.log")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho $$ >> " + pids + "\necho \"$*\" >> " + argsLog + "\nexec sleep 60\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { killPids(pids) })
+	rec := filepath.Join(dir, "show.ts")
+	steadyFile(t, rec, 60)
+	h := &Hub{Dir: dir, Encoder: "h264_vaapi", DeintBroadcast: "motion_adaptive", FFmpeg: bin}
+	played := make(chan error, 1)
+	go func() {
+		_, err := h.PlayFile(7, rec, "MPEG2", "broadcast", "tt", 0)
+		played <- err
+	}()
+	argLines(t, argsLog, 1)
+	h.Shutdown()
+	select {
+	case err := <-played:
+		if err == nil {
+			t.Fatal("a killed encode said it played")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the play kept going after shutdown")
+	}
+	if n := len(argLines(t, argsLog, 1)); n != 1 {
+		t.Fatalf("%d encodes: shutdown started one", n)
+	}
+	if encodeRunning(h, 7) {
+		t.Fatal("an encode is running after shutdown")
+	}
+}
+
 // A software encoder has nothing to fall back to.
 func TestASoftwareFailureIsNotRetried(t *testing.T) {
 	dir := t.TempDir()
