@@ -2515,7 +2515,64 @@ func clampRecordMinutes(minutes int) int {
 // frequency with anyone watching and starts no transcode. It stops after
 // minutes, or at meta.EndsAt when that comes first.
 func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording) (store.Recording, error) {
-	h.preemptScan()
+	return h.recordMeta(ctx, minutes, meta, false)
+}
+
+// RecordIfFree is RecordMeta for a recording past its start window, trying
+// again on a clock. It takes a free tuner or a frequency already tuned, and
+// disturbs nothing: no viewer stopped, no scan or sweep, no room made on the
+// disk. A viewer who got a tuner first was given no warning, and keeps it.
+func (h *Hub) RecordIfFree(ctx context.Context, minutes int, meta store.Recording) (store.Recording, error) {
+	ch, err := h.Store.SourceChannel(ctx, meta.ChannelID)
+	if err != nil {
+		return store.Recording{}, err
+	}
+	if !h.tunerFreeFor(ctx, ch) {
+		return store.Recording{}, &BusyError{}
+	}
+	return h.recordMeta(ctx, minutes, meta, true)
+}
+
+// tunerFreeFor reports a channel a new tune can take without anything giving
+// way. Tuners held back for a recording about to start are not free.
+func (h *Hub) tunerFreeFor(ctx context.Context, ch store.SourceChannel) bool {
+	if ch.TunerCount == 0 {
+		return true
+	}
+	bases := []string{ch.BaseURL}
+	if more, err := h.Store.OtherDevices(ctx, ch.GuideNumber, ch.DeviceID); err == nil {
+		bases = append(bases, more...)
+	}
+	h.mu.Lock()
+	tuned := h.channels[ch.ID] != nil || (ch.FrequencyHz > 0 && h.muxes[ch.FrequencyHz] != nil)
+	plain := h.plain[ch.BaseURL]
+	h.mu.Unlock()
+	if tuned || plain {
+		return true
+	}
+	need := NeedFor(ch.VideoCodec, ch.AudioCodec, ch.ATSC3)
+	for _, base := range bases {
+		// The read runs without h.mu: playlists wait on it.
+		raw, err := fetchTunerStatus(ctx, base)
+		if err != nil {
+			continue
+		}
+		h.mu.Lock()
+		tuners := h.tunersFromLocked(ctx, base, raw)
+		host := hostOf(base)
+		_, _, ok := PickTuner([]DeviceTuners{{Host: host, Base: base, Tuners: tuners}}, h.usedTunersLocked(host), h.heldLocked(host, tuners), need)
+		h.mu.Unlock()
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording, gentle bool) (store.Recording, error) {
+	if !gentle {
+		h.preemptScan()
+	}
 	channelID := meta.ChannelID
 	title := meta.Title
 	minutes = clampRecordMinutes(minutes)
@@ -2525,7 +2582,9 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if err != nil {
 		return store.Recording{}, err
 	}
-	h.StopSweep(ch.FrequencyHz)
+	if !gentle {
+		h.StopSweep(ch.FrequencyHz)
+	}
 	// Room is made for a channel that exists, and before a tuner is taken or
 	// a viewer is stopped for a recording the disk would refuse.
 	if err := h.ensureSpace(ctx); err != nil {
@@ -2544,7 +2603,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	}
 	f, err := h.tuneFeed(ctx, ch, res)
 	defer h.mu.Unlock()
-	if _, busy := err.(*BusyError); busy {
+	if _, busy := err.(*BusyError); busy && !gentle {
 		labels, feeds := h.viewerFeedsToPreemptLocked(ch.FrequencyHz, channelID)
 		if len(feeds) > 0 {
 			if h.Store != nil {

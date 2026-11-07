@@ -305,3 +305,250 @@ func TestARepeatedDiskRefusalIsOneEvent(t *testing.T) {
 		t.Fatalf("events %+v %v", events, err)
 	}
 }
+
+func lateWait(t *testing.T, st *store.Store, channel int64, title string, ago time.Duration) store.RecordingWait {
+	t.Helper()
+	ctx := context.Background()
+	start := time.Now().Add(-ago).Truncate(time.Second)
+	end := start.Add(time.Hour)
+	if err := st.InsertAirings(ctx, []store.Airing{{ChannelID: channel, Title: title, Start: start, End: end}}); err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.AddSeriesPass(ctx, store.Pass{Title: title, Kind: "series", MatchKind: "title"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := store.RecordingWait{
+		ChannelID: channel, Start: start, End: end, Until: end, PassID: id, Title: title,
+		Reason: "Waiting for a tuner", Failure: "Every tuner was busy.", Since: start, Told: true,
+	}
+	if err := st.PutRecordingWait(ctx, w); err != nil {
+		t.Fatal(err)
+	}
+	return w
+}
+
+// A viewer who got a tuner the retry had waited for keeps it. Nothing warned
+// them: the warning before a recording only runs up to its start.
+func TestALateRetryLeavesAViewerAlone(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	srv := &fake.Server{Realtime: true, Channels: []fake.Channel{
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
+		{Number: "5.1", Name: "KTWO", Freq: 605000000},
+	}}
+	base, port, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	t.Setenv("HDHR_CONTROL_PORT", port)
+	ctx := context.Background()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	client := &hdhr.Client{}
+	dev, err := client.FetchDevice(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lineup, err := client.FetchLineup(ctx, dev.LineupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, dev, lineup); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutSettings(ctx, map[string]string{"watermarkGB": "0"}); err != nil {
+		t.Fatal(err)
+	}
+	hub := live.New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(hub.Shutdown)
+	chs, err := st.Channels(ctx, false)
+	if err != nil || len(chs) != 2 {
+		t.Fatalf("%+v %v", chs, err)
+	}
+	srv.Hold(1)
+	if _, err := hub.Watch(ctx, chs[1].ID, live.Rendition{Video: "copy", Audio: "copy"}, false); err != nil {
+		t.Fatal(err)
+	}
+	lateWait(t, st, chs[0].ID, "News", 5*time.Minute)
+	Tick(ctx, st, hub)
+	if !hub.Watching() {
+		t.Fatal("the retry stopped the viewer")
+	}
+	recs, err := st.Recordings(ctx)
+	if err != nil || len(recs) != 0 {
+		t.Fatalf("recordings %+v %v", recs, err)
+	}
+	for _, ev := range recordingEvents(t, st) {
+		if strings.Contains(ev, "Watching") || strings.Contains(ev, "stop") {
+			t.Fatalf("event %q", ev)
+		}
+	}
+}
+
+// Past the start window a retry waits its turn. A guide scan keeps its tuner.
+func TestALateRetryLeavesAScanAlone(t *testing.T) {
+	srv, st, hub, channel := waitFixture(t)
+	ctx := context.Background()
+	srv.HoldAll()
+	lateWait(t, st, channel, "News", 5*time.Minute)
+	scanning := make(chan struct{})
+	ended := make(chan error, 1)
+	stop, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go hub.RunScan(stop, []int{593000000}, time.Minute, func(ctx context.Context, _ int) error {
+		close(scanning)
+		<-ctx.Done()
+		ended <- ctx.Err()
+		return ctx.Err()
+	})
+	<-scanning
+	Tick(ctx, st, hub)
+	select {
+	case <-ended:
+		t.Fatal("the retry stopped the scan")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// Inside the start window a recording still takes its tuner back. The viewer was warned.
+func TestAStartInItsWindowStillStopsAScan(t *testing.T) {
+	srv, st, hub, channel := waitFixture(t)
+	ctx := context.Background()
+	srv.HoldAll()
+	start := time.Now().Add(30 * time.Second).Truncate(time.Second)
+	if err := st.InsertAirings(ctx, []store.Airing{{ChannelID: channel, Title: "News", Start: start, End: start.Add(time.Hour)}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddSeriesPass(ctx, store.Pass{Title: "News", Kind: "series", MatchKind: "title"}); err != nil {
+		t.Fatal(err)
+	}
+	scanning := make(chan struct{})
+	ended := make(chan error, 1)
+	stop, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go hub.RunScan(stop, []int{593000000}, time.Minute, func(ctx context.Context, _ int) error {
+		close(scanning)
+		<-ctx.Done()
+		ended <- ctx.Err()
+		return ctx.Err()
+	})
+	<-scanning
+	Tick(ctx, st, hub)
+	select {
+	case <-ended:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a recording in its window left the scan running")
+	}
+}
+
+func TestTunersToHoldCountsFrequencies(t *testing.T) {
+	soon := map[string]bool{"box:593": true, "box:605": true}
+	if n := tunersToHold(soon, nil); n != 2 {
+		t.Fatalf("two frequencies: %d", n)
+	}
+	if n := tunersToHold(soon, map[string]bool{"box:593": true}); n != 1 {
+		t.Fatalf("one already recording: %d", n)
+	}
+}
+
+// Two channels on one frequency, about to record, need one tuner. The hold used
+// to count airings, keep both free tuners back, and refuse a viewer.
+func TestHoldingForOneFrequencyLeavesAViewerATuner(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	srv := &fake.Server{Realtime: true, Channels: []fake.Channel{
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
+		{Number: "4.2", Name: "KBW2", Freq: 593000000},
+		{Number: "5.1", Name: "KTWO", Freq: 605000000},
+	}}
+	base, port, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	t.Setenv("HDHR_CONTROL_PORT", port)
+	ctx := context.Background()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	client := &hdhr.Client{}
+	dev, err := client.FetchDevice(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lineup, err := client.FetchLineup(ctx, dev.LineupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, dev, lineup); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutSettings(ctx, map[string]string{"watermarkGB": "0"}); err != nil {
+		t.Fatal(err)
+	}
+	hub := live.New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(hub.Shutdown)
+	chs, err := st.Channels(ctx, false)
+	if err != nil || len(chs) != 3 {
+		t.Fatalf("%+v %v", chs, err)
+	}
+	id := map[string]int64{}
+	for _, ch := range chs {
+		id[ch.GuideNumber] = ch.ID
+	}
+	for number, freq := range map[string]int{"4.1": 593000000, "4.2": 593000000, "5.1": 605000000} {
+		if err := st.RememberProgram(ctx, "FAKEHDHR", number, freq, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Inside the tick's look-ahead, past the start window's first second.
+	start := time.Now().Add(100 * time.Second).Truncate(time.Second)
+	if err := st.InsertAirings(ctx, []store.Airing{
+		{ChannelID: id["4.1"], Title: "One", Start: start, End: start.Add(time.Hour)},
+		{ChannelID: id["4.2"], Title: "Two", Start: start, End: start.Add(time.Hour)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, title := range []string{"One", "Two"} {
+		if _, err := st.AddSeriesPass(ctx, store.Pass{Title: title, Kind: "series", MatchKind: "title"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	Tick(ctx, st, hub)
+	if recs, _ := st.Recordings(ctx); len(recs) != 0 {
+		t.Fatalf("recordings %+v", recs)
+	}
+	if _, err := hub.Watch(ctx, id["5.1"], live.Rendition{Video: "copy", Audio: "copy"}, false); err != nil {
+		t.Fatalf("a viewer was refused with a tuner to spare: %v", err)
+	}
+}
+
+// Last tick's hold is for this recording. It used to be refused by it, and start
+// one tick late.
+func TestARecordingIsNotRefusedByItsOwnHold(t *testing.T) {
+	_, st, hub, channel := waitFixture(t)
+	ctx := context.Background()
+	start := time.Now().Add(30 * time.Second).Truncate(time.Second)
+	if err := st.InsertAirings(ctx, []store.Airing{{ChannelID: channel, Title: "News", Start: start, End: start.Add(time.Hour)}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.AddSeriesPass(ctx, store.Pass{Title: "News", Kind: "series", MatchKind: "title"}); err != nil {
+		t.Fatal(err)
+	}
+	hub.SetHold(2)
+	Tick(ctx, st, hub)
+	recs, err := st.Recordings(ctx)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("recordings %+v %v", recs, err)
+	}
+	t.Cleanup(func() { hub.StopRecord(recs[0].ID) })
+}

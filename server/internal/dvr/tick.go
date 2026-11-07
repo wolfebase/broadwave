@@ -53,7 +53,18 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		Held: func(id int64) time.Time { return hub.BufferedSince(ctx, id) },
 	})
 	open := settleWaits(ctx, st, waits, passes, planned, active, now)
-	hold := 0
+	tunes := map[int64]string{}
+	for _, row := range rows {
+		tunes[row.ChannelID] = row.Tune
+	}
+	busy := map[string]bool{}
+	for _, rec := range active {
+		if rec.Status == "recording" {
+			busy[tuneOf(store.Airing{ChannelID: rec.ChannelID, Tune: tunes[rec.ChannelID]})] = true
+		}
+	}
+	var onTime, late []startPlan
+	soon := map[string]bool{}
 	for _, item := range planned {
 		if item.Skipped || already(active, item.Airing) {
 			continue
@@ -77,32 +88,77 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 			start, minutes = true, recordMinutes(pass, item.Airing, now)
 		}
 		if !start {
-			hold++
+			soon[tuneOf(item.Airing)] = true
 			continue
 		}
-		// A recording that starts late begins at the airing, padding
-		// included, when the tuner's buffer still holds it.
-		rec, err := hub.RecordMeta(ctx, minutes, store.Recording{
-			ChannelID: item.Airing.ChannelID, Title: item.Airing.Title, Subtitle: item.Airing.Subtitle,
-			Description: item.Airing.Description, Category: item.Airing.Category, ProgramID: item.Airing.ProgramID, GameID: item.Airing.GameID,
-			StartedAt: item.Airing.Start.Add(-time.Duration(pass.PadBefore) * time.Minute), PassID: pass.ID,
-		})
-		if err != nil {
-			noteRefused(ctx, st, open, pass, item.Airing, err, now)
+		plan := startPlan{item: item, pass: pass, minutes: minutes, retry: retry, waiting: waiting}
+		if now.After(item.Airing.Start.Add(recordLead)) {
+			late = append(late, plan)
 			continue
 		}
-		if waiting {
-			noteStarted(ctx, st, rec, item.Airing)
-		}
-		if retry {
-			slog.Info(fmt.Sprintf("recording: trying %s on channel %d again for the %d min left", item.Airing.Title, item.Airing.ChannelID, minutes))
-			// The buffer can still hold the start; then the retry is whole.
-			if rec.StartedAt.After(item.Airing.Start.Add(time.Minute)) {
-				_ = st.MarkPartial(ctx, rec.ID, nil)
-			}
+		onTime = append(onTime, plan)
+		busy[tuneOf(item.Airing)] = true
+	}
+	// The tuners held back last tick are for these. A recording is refused by
+	// its own hold otherwise, and starts a tick late.
+	if len(onTime) > 0 {
+		hub.SetHold(0)
+	}
+	for _, plan := range onTime {
+		runStart(ctx, st, hub, open, plan, now, hub.RecordMeta)
+	}
+	hub.SetHold(tunersToHold(soon, busy))
+	// A late retry comes after the hold, so it can't take a tuner from a
+	// recording about to start.
+	for _, plan := range late {
+		runStart(ctx, st, hub, open, plan, now, hub.RecordIfFree)
+	}
+}
+
+// startPlan is one airing Tick has decided to start.
+type startPlan struct {
+	item    Planned
+	pass    store.Pass
+	minutes int
+	retry   bool
+	waiting bool
+}
+
+// tunersToHold is the tuners the recordings about to start will need: a
+// frequency once, and none for one a recording already has.
+func tunersToHold(soon, busy map[string]bool) int {
+	n := 0
+	for tune := range soon {
+		if !busy[tune] {
+			n++
 		}
 	}
-	hub.SetHold(hold)
+	return n
+}
+
+func runStart(ctx context.Context, st *store.Store, hub *live.Hub, open map[waitKey]store.RecordingWait, plan startPlan, now time.Time, record func(context.Context, int, store.Recording) (store.Recording, error)) {
+	air := plan.item.Airing
+	// A recording that starts late begins at the airing, padding included,
+	// when the tuner's buffer still holds it.
+	rec, err := record(ctx, plan.minutes, store.Recording{
+		ChannelID: air.ChannelID, Title: air.Title, Subtitle: air.Subtitle,
+		Description: air.Description, Category: air.Category, ProgramID: air.ProgramID, GameID: air.GameID,
+		StartedAt: air.Start.Add(-time.Duration(plan.pass.PadBefore) * time.Minute), PassID: plan.pass.ID,
+	})
+	if err != nil {
+		noteRefused(ctx, st, open, plan.pass, air, err, now)
+		return
+	}
+	if plan.waiting {
+		noteStarted(ctx, st, rec, air)
+	}
+	if plan.retry {
+		slog.Info(fmt.Sprintf("recording: trying %s on channel %d again for the %d min left", air.Title, air.ChannelID, plan.minutes))
+		// The buffer can still hold the start; then the retry is whole.
+		if rec.StartedAt.After(air.Start.Add(time.Minute)) {
+			_ = st.MarkPartial(ctx, rec.ID, nil)
+		}
+	}
 }
 
 func findPass(passes []store.Pass, airing store.Airing) (store.Pass, bool) {
