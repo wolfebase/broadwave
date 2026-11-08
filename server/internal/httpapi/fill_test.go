@@ -239,3 +239,50 @@ func TestAFillThatCantBeMadeIsAnError(t *testing.T) {
 		t.Fatalf("a fill that never came was served: %d bytes", rec.Body.Len())
 	}
 }
+
+// A copy made before fill.json was kept had no way to make its fill segments,
+// so a player holding its list got 404s until it pressed play again. The
+// copy's own files and the catalog say enough to make them.
+func TestAnOlderCopyStillFills(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not on PATH")
+	}
+	st := testStore(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "recordings", "show.ts")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	build := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc2=s=320x180:r=30000/1001:d=12",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=12",
+		"-c:v", "mpeg2video", "-b:v", "1500k", "-g", "15", "-c:a", "ac3", "-b:a", "96k", "-shortest", "-f", "mpegts", path)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("fixture: %v %s", err, out)
+	}
+	id, err := st.CreateRecording(t.Context(), store.Recording{Title: "Night Shift", Status: "complete", Path: path, StartedAt: time.Now().Add(-time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := &live.Hub{Store: st, Dir: dir, Encoder: "libx264", FFmpeg: ffmpeg}
+	if _, err := first.PlayFile(id, path, "mpeg2video", "broadcast", "", 6.5); err != nil {
+		t.Fatal(err)
+	}
+	first.Shutdown()
+	copyDir := filepath.Join(dir, "file", strconv.FormatInt(id, 10))
+	if err := os.Remove(filepath.Join(copyDir, "fill.json")); err != nil {
+		t.Fatal(err)
+	}
+	hub := &live.Hub{Store: st, Dir: dir, Encoder: "libx264", FFmpeg: ffmpeg}
+	t.Cleanup(hub.Shutdown)
+	h := (&Server{Store: st, Hub: hub}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/"+strconv.FormatInt(id, 10)+"/fill00001.ts", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("an older copy's fill: %d", rec.Code)
+	}
+	if pts := probePTS(t, rec.Body.Bytes()); len(pts) < 30 || pts[0] < 3.3 || pts[0] > 3.5 {
+		t.Fatalf("fill pictures %v", pts)
+	}
+}

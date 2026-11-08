@@ -9,19 +9,15 @@ import (
 )
 
 // fillFFmpeg stands in for ffmpeg. A copy writes its first segment and waits;
-// a fill writes a segment every 0.2 s from its -start_number. With refuseGPU a
-// fill on the GPU exits at once, as one the GPU can't start does.
-func fillFFmpeg(t *testing.T, dir string, refuseGPU bool) (bin, fills string) {
+// a fill writes a segment every 0.2 s from its -start_number. quirk runs
+// first in a fill: refuseGPU, firstDies, or firstHangs.
+func fillFFmpeg(t *testing.T, dir, quirk string) (bin, fills string) {
 	t.Helper()
 	bin = filepath.Join(dir, "ffmpeg")
 	fills = filepath.Join(dir, "fills.log")
 	pids := filepath.Join(dir, "pids.log")
-	refuse := ""
-	if refuseGPU {
-		refuse = "case \" $* \" in\n*h264_vaapi*) exit 1 ;;\nesac\n"
-	}
 	script := "#!/bin/sh\necho $$ >> " + pids + "\n" +
-		"case \" $* \" in\n*fill%05d.ts*)\necho \"$*\" >> " + fills + "\n" + refuse +
+		"case \" $* \" in\n*fill%05d.ts*)\necho \"$*\" >> " + fills + "\n" + quirk +
 		"n=0; prev=''; list=''\nfor a in \"$@\"; do\n[ \"$prev\" = -start_number ] && n=$a\nprev=$a; list=$a\ndone\n" +
 		"while :; do\nf=$(printf 'fill%05d.ts' $n)\necho x > $f.tmp && mv $f.tmp $f\nprintf '#EXTINF:2.000,\\n%s\\n' $f >> $list\nn=$((n+1)); sleep 0.2\ndone\n;;\n" +
 		"*\" -f hls \"*)\nprintf '#EXTM3U\\n#EXT-X-PLAYLIST-TYPE:EVENT\\n#EXTINF:2.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\nexec sleep 60\n;;\nesac\nexit 0\n"
@@ -33,10 +29,18 @@ func fillFFmpeg(t *testing.T, dir string, refuseGPU bool) (bin, fills string) {
 }
 
 // fillHub plays a recording from 201 s, so 100 fill segments come before its copy.
-func fillHub(t *testing.T, encoder string, refuseGPU bool) (*Hub, string, string) {
+// The quirks a fill stand-in can have: a GPU it can't start on, and a first
+// run that exits or hangs before writing anything.
+const (
+	refuseGPU  = "case \" $* \" in\n*h264_vaapi*) exit 1 ;;\nesac\n"
+	firstDies  = "if [ ! -f once ]; then touch once; exit 1; fi\n"
+	firstHangs = "if [ ! -f once ]; then touch once; exec sleep 60; fi\n"
+)
+
+func fillHub(t *testing.T, encoder, quirk string) (*Hub, string, string) {
 	t.Helper()
 	dir := t.TempDir()
-	bin, fills := fillFFmpeg(t, dir, refuseGPU)
+	bin, fills := fillFFmpeg(t, dir, quirk)
 	rec := filepath.Join(dir, "show.ts")
 	steadyFile(t, rec, 300)
 	h := &Hub{Dir: dir, Encoder: encoder, DeintBroadcast: "motion_adaptive", FileIdle: time.Minute, FFmpeg: bin}
@@ -74,7 +78,7 @@ func getFill(t *testing.T, h *Hub, n int) {
 // Two screens going back in one recording at different spots used to kill
 // each other's fill encode on every request.
 func TestTwoViewersKeepTheirOwnFill(t *testing.T) {
-	h, _, fills := fillHub(t, "libx264", false)
+	h, _, fills := fillHub(t, "libx264", "")
 	for i := range 4 {
 		getFill(t, h, 10+i)
 		getFill(t, h, 60+i)
@@ -87,7 +91,7 @@ func TestTwoViewersKeepTheirOwnFill(t *testing.T) {
 // What a fill needs was only in memory: after a restart a player holding the
 // list got empty packets for every fill segment.
 func TestAFillIsMadeAfterARestart(t *testing.T) {
-	h, dir, _ := fillHub(t, "libx264", false)
+	h, dir, _ := fillHub(t, "libx264", "")
 	h.Shutdown()
 	again := &Hub{Dir: dir, Encoder: "libx264", FileIdle: time.Minute, FFmpeg: h.FFmpeg}
 	t.Cleanup(again.Shutdown)
@@ -100,7 +104,7 @@ func TestAFillTheGPUCantStartUsesTheProcessor(t *testing.T) {
 	prev := fillWait
 	fillWait = 5 * time.Second
 	t.Cleanup(func() { fillWait = prev })
-	h, _, fills := fillHub(t, "h264_vaapi", true)
+	h, _, fills := fillHub(t, "h264_vaapi", refuseGPU)
 	getFill(t, h, 3)
 	getFill(t, h, 50)
 	starts := fillStarts(fills)
@@ -111,5 +115,36 @@ func TestAFillTheGPUCantStartUsesTheProcessor(t *testing.T) {
 		if strings.Contains(s, "vaapi") || !strings.Contains(s, "libx264") {
 			t.Fatalf("not on the processor: %s", s)
 		}
+	}
+}
+
+// A fill that died on the processor, for any reason, turned every fill of
+// that copy into a 404 until the next restart. It is tried again after a pause.
+func TestAFillThatDiedIsTriedAgain(t *testing.T) {
+	prev := fillRetryAfter
+	fillRetryAfter = 300 * time.Millisecond
+	t.Cleanup(func() { fillRetryAfter = prev })
+	h, _, fills := fillHub(t, "libx264", firstDies)
+	if path, err := h.FillSegment(t.Context(), 1, 4); err == nil {
+		t.Fatalf("a fill that died came back: %s", path)
+	}
+	time.Sleep(400 * time.Millisecond)
+	getFill(t, h, 4)
+	if n := len(fillStarts(fills)); n != 2 {
+		t.Fatalf("%d fill encodes, want 2", n)
+	}
+}
+
+// A fill encode that runs and never writes was waited on by every request,
+// each of which kept it from going idle: a 503 every 12 s for good. It is
+// stopped when its first segment is late, and the next request starts afresh.
+func TestAFillThatHangsIsReplaced(t *testing.T) {
+	prevWait, prevFirst := fillWait, fillFirstWithin
+	fillWait, fillFirstWithin = 3*time.Second, 500*time.Millisecond
+	t.Cleanup(func() { fillWait, fillFirstWithin = prevWait, prevFirst })
+	h, _, fills := fillHub(t, "libx264", firstHangs)
+	getFill(t, h, 4)
+	if n := len(fillStarts(fills)); n != 2 {
+		t.Fatalf("%d fill encodes, want 2", n)
 	}
 }

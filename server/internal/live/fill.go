@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -23,6 +24,15 @@ import (
 
 // fillWait is how long a request for a fill segment waits for its encode.
 var fillWait = 12 * time.Second
+
+var (
+	// fillRetryAfter is how long a copy's fills rest after one died on the
+	// processor before the next request tries again.
+	fillRetryAfter = 30 * time.Second
+	// fillFirstWithin is how long a fill encode has to write its first
+	// segment. One that hasn't is stopped, and the next request starts afresh.
+	fillFirstWithin = 10 * time.Second
+)
 
 // fillAhead is how far past what a fill encode has written a request can be
 // and still wait for it, in segments, instead of starting a new one there.
@@ -40,13 +50,13 @@ var (
 )
 
 // fillSource is what a recording's fill encode reads and how. It is kept in
-// the copy's folder too, so a restart doesn't lose it. failed is a fill that
-// didn't start on the processor either.
+// the copy's folder too, so a restart doesn't lose it. failed is when a fill
+// last died on the processor.
 type fillSource struct {
 	Path   string  `json:"path"`
 	Graph  Graph   `json:"graph"`
 	Offset float64 `json:"offset"`
-	failed bool
+	failed time.Time
 }
 
 type fillRun struct {
@@ -54,9 +64,10 @@ type fillRun struct {
 	list  string
 	cmd   *exec.Cmd
 	done  chan struct{}
-	// seen and stopped are under playMu.
+	// seen, stopped, and hung (stopped for a late first segment) are under playMu.
 	seen    time.Time
 	stopped bool
+	hung    bool
 }
 
 // fillName is fill segment n.
@@ -110,11 +121,33 @@ func writeFillSource(dir string, src fillSource) {
 }
 
 // fillSourceFor is the recording's fill source, read from its copy's folder
-// when this run hasn't played it. The caller holds playMu.
+// when this run hasn't played it.
 func (h *Hub) fillSourceFor(id int64, dir string) (fillSource, bool) {
-	if src, ok := h.fillSrc[id]; ok {
+	h.playMu.Lock()
+	src, ok := h.fillSrc[id]
+	h.playMu.Unlock()
+	if ok {
 		return src, true
 	}
+	if src, ok = readFillSource(dir); !ok {
+		if src, ok = h.fillSourceFromCopy(id, dir); !ok {
+			return fillSource{}, false
+		}
+		writeFillSource(dir, src)
+	}
+	h.playMu.Lock()
+	defer h.playMu.Unlock()
+	if cur, ok := h.fillSrc[id]; ok {
+		return cur, true
+	}
+	if h.fillSrc == nil {
+		h.fillSrc = map[int64]fillSource{}
+	}
+	h.fillSrc[id] = src
+	return src, true
+}
+
+func readFillSource(dir string) (fillSource, bool) {
 	body, err := os.ReadFile(filepath.Join(dir, "fill.json"))
 	if err != nil {
 		return fillSource{}, false
@@ -123,11 +156,42 @@ func (h *Hub) fillSourceFor(id int64, dir string) (fillSource, bool) {
 	if json.Unmarshal(body, &src) != nil || src.Path == "" || !fillable(src.Offset) || math.Abs(src.Offset-FileOffset(dir)) > 0.0005 {
 		return fillSource{}, false
 	}
-	if h.fillSrc == nil {
-		h.fillSrc = map[int64]fillSource{}
-	}
-	h.fillSrc[id] = src
 	return src, true
+}
+
+// fillSourceFromCopy rebuilds what a copy made before fill.json needs: the
+// recording's file from the catalog, and the picture its graph.txt names,
+// which has to come out the same.
+func (h *Hub) fillSourceFromCopy(id int64, dir string) (fillSource, bool) {
+	offset := FileOffset(dir)
+	body, err := os.ReadFile(filepath.Join(dir, "graph.txt"))
+	if h.Store == nil || !fillable(offset) || err != nil {
+		return fillSource{}, false
+	}
+	stamp := strings.TrimSpace(string(body))
+	parts := strings.Split(stamp, "|")
+	if len(parts) < 6 {
+		return fillSource{}, false
+	}
+	rec, err := h.Store.Recording(context.Background(), id)
+	if err != nil || rec.Path == "" {
+		return fillSource{}, false
+	}
+	path, err := filepath.Abs(rec.Path)
+	if err != nil {
+		return fillSource{}, false
+	}
+	order := ""
+	if parts[5] == "progressive" || parts[5] == "film" {
+		order = parts[5]
+	}
+	g := h.fileGraphFor(path, parts[1], parts[0], order)
+	g.Live = false
+	g.Encoder, g.Deint, g.Profile = parts[2], parts[3], parts[4]
+	if graphStamp(g) != stamp {
+		return fillSource{}, false
+	}
+	return fillSource{Path: path, Graph: g, Offset: offset}, true
 }
 
 // FillSegment is the path of fill segment n of a recording's copy, encoding
@@ -183,8 +247,8 @@ func (h *Hub) FillSegment(ctx context.Context, id int64, n int) (string, error) 
 
 func (h *Hub) ensureFill(id int64, dir string, n int) (*fillRun, error) {
 	defer h.lockFill(id)()
-	h.playMu.Lock()
 	src, ok := h.fillSourceFor(id, dir)
+	h.playMu.Lock()
 	closed := h.fileClosed
 	var live []*fillRun
 	for _, r := range h.fillRuns[id] {
@@ -204,7 +268,7 @@ func (h *Hub) ensureFill(id int64, dir string, n int) (*fillRun, error) {
 	switch {
 	case closed:
 		return nil, ErrFillLate
-	case !ok || src.failed || float64(2*n) >= src.Offset-0.001:
+	case !ok || time.Since(src.failed) < fillRetryAfter || float64(2*n) >= src.Offset-0.001:
 		return nil, ErrFillGone
 	case found != nil:
 		return found, nil
@@ -275,20 +339,33 @@ func (h *Hub) startFill(id int64, dir string, src fillSource, n int) (*fillRun, 
 		_ = os.Remove(filepath.Join(dir, run.list))
 		h.playMu.Lock()
 		h.dropFillRunLocked(id, run)
-		if !run.stopped && !wrote {
-			h.fillFailedLocked(id, dir, g.Encoder)
+		if !wrote && (!run.stopped || run.hung) {
+			h.fillFailedLocked(id, dir, g.Encoder, run.hung)
 		}
 		h.playMu.Unlock()
 		close(run.done)
 	}()
+	// Requests keep a run from going idle, so one that never writes would be
+	// waited on for good.
+	time.AfterFunc(fillFirstWithin, func() {
+		if run.ended() || segmentReady(dir, fillName(n)) {
+			return
+		}
+		slog.Warn(fmt.Sprintf("recording %d: a fill wrote nothing in %v, stopping it", id, fillFirstWithin))
+		h.playMu.Lock()
+		run.hung = true
+		h.playMu.Unlock()
+		h.stopFillRun(id, run)
+	})
 	go h.watchFill(id, run)
 	return run, nil
 }
 
-// fillFailedLocked notes a fill encode that exited before its first segment.
-// One on the GPU moves to the processor, as the copy does; one on the
-// processor is not tried again for this copy.
-func (h *Hub) fillFailedLocked(id int64, dir, encoder string) {
+// fillFailedLocked notes a fill encode that ended before its first segment.
+// One on the GPU moves to the processor, as the copy does. One that died on
+// the processor rests the copy's fills for fillRetryAfter; one that hung there
+// was stopped, and the next request starts another.
+func (h *Hub) fillFailedLocked(id int64, dir, encoder string, hung bool) {
 	src, ok := h.fillSrc[id]
 	if !ok || src.Graph.Encoder != encoder {
 		return
@@ -297,9 +374,9 @@ func (h *Hub) fillFailedLocked(id int64, dir, encoder string) {
 		slog.Warn(fmt.Sprintf("recording %d: a fill did not start on the GPU. Trying the processor.", id))
 		src.Graph = softwareGraph(src.Graph)
 		writeFillSource(dir, src)
-	} else {
+	} else if !hung {
 		slog.Warn(fmt.Sprintf("recording %d: a fill did not start on the processor.", id))
-		src.failed = true
+		src.failed = time.Now()
 	}
 	h.fillSrc[id] = src
 }
