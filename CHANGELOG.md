@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.18.0 — 2026-11-07
+
+### Added
+
+- Server: a skipped airing can be taken back (`POST /api/v1/schedule/unskip`), and recording it again by any route takes the skip back.
+- Server: a scheduled recording that can't start says so. Upcoming shows that it's waiting for a tuner and why, Activity notes it once, and an airing that never got a tuner leaves a failed recording that says what happened. The retry keeps going for the whole airing, and past the start only takes a free tuner, never one a viewer is using.
+- Server: `GET /api/v1/channels/{id}/reception` answers on a paired device with Watch access, so a TV with that access can recover from a stall by itself.
+- Apple TV, iPhone, and iPad: refused recordings, favorites, and channel changes show the server's own words. A stopped channel names itself and puts Try again under the remote. Diagnostics tell "nothing wrong" apart from "couldn't check". A bad link says so and leaves what's playing alone.
+- Apple TV: Hidden channels in Settings brings back a channel someone hid. Recording rules can be stopped, and single airings skipped, from Upcoming. A game card can record every game for a team. First run explains an empty guide, an incompatible server, and a server with no tuner, and setup fits the screen.
+- Apple TV: hold Select to go back to the last channel, a channel you rest on in the guide starts faster, Start over is one press after tuning in late, game alerts show over the player, and leaving a paused or rewound channel asks first.
+
+### Changed
+
+- Server: playing a recording no longer makes a whole copy of it. The copy stops about 30 seconds after the last request and carries on when a viewer comes back, and old copies are cleared after a day or when they take too much space. A recording the GPU can't start plays on the processor.
+- Server: the plan counts tuners by frequency, so channels sharing a frequency no longer show as conflicts. Upcoming no longer promises an airing that's already on and won't start, and stops saying waiting once the airing ends.
+- Server: sync reports no longer fill the log at Info; a summary is kept.
+- Apple TV: leaving the Live Guide stops a channel that was playing in it. Opening a recording ends the channel, and Back returns to the card it came from. Back, focus, and multiview land where a viewer expects throughout the guide, recordings, and setup. Settings use sentence case, Reduce Motion calms the TV's motion, and Playback details speak plainly.
+
+### Fixed
+
+- Server: going back before the point a recording was resumed from plays the picture. It was black and silent until the resume point.
+- Server: a recording goes in the season folder the show already has (`Season 2` and `Season 02` are the same season), and deleting a recording stops its break scan and removes the folder it emptied.
+- Server: a resumed recording starts on a whole picture.
+
 ## 0.17.2 — 2026-11-01
 
 ### Added
