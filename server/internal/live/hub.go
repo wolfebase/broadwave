@@ -138,6 +138,8 @@ type Hub struct {
 	MakeRoom func(ctx context.Context, need uint64) uint64
 	// stills makes recording stills (still.go).
 	stills stillMaker
+	// posters remembers recordings with no picture for a poster (poster.go).
+	posters posterMisses
 	// NoLead starts an AC-4 channel's picture with its sound, without the
 	// silent lead (BROADWAVE_SOUND_LEAD=0).
 	NoLead bool

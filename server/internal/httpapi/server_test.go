@@ -472,7 +472,7 @@ func TestARecordingOutsideItsFoldersIsNotOpened(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "posters"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "posters", ids+".jpg"), []byte("jpg"), 0o644); err != nil {
+	if err := os.WriteFile(live.PosterPath(dir, id), []byte("jpg"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range []struct{ method, path string }{

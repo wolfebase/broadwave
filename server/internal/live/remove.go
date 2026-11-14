@@ -35,7 +35,8 @@ func (h *Hub) RemoveRecordingFiles(rec store.Recording) error {
 	_ = removeInside(root, base+".json")
 	_ = removeInside(root, base+".nfo")
 	h.pruneEmpty(filepath.Dir(rec.Path))
-	_ = os.Remove(filepath.Join(workDir, "posters", strconv.FormatInt(rec.ID, 10)+".jpg"))
+	_ = os.Remove(PosterPath(workDir, rec.ID))
+	_ = os.Remove(oldPosterPath(workDir, rec.ID))
 	_ = os.RemoveAll(filepath.Join(workDir, "file", strconv.FormatInt(rec.ID, 10)))
 	_ = os.RemoveAll(filepath.Join(workDir, "stills", strconv.FormatInt(rec.ID, 10)))
 	return nil

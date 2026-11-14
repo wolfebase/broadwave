@@ -2004,7 +2004,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description JPEG still from a recording. */
+        /** @description JPEG still from a recording, 480 wide: the first of a few pictures through it (10%, 25%, 40%, 60% of its length, out of known breaks) that is a scene, or the one with the most picture. A finished recording keeps its poster until it is removed. One still recording gets a picture looked for again as it grows. */
         get: operations["recordingPoster"];
         put?: never;
         post?: never;
@@ -7113,7 +7113,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description JPEG poster. Content-Type is image/jpeg. Cache-Control is public, max-age=3600. */
+            /** @description JPEG poster. Content-Type is image/jpeg. Cache-Control is public, max-age=3600, or max-age=300 while the recording is still being made. */
             200: {
                 headers: {
                     "Cache-Control"?: string;
@@ -7123,9 +7123,19 @@ export interface operations {
                     "image/jpeg": string;
                 };
             };
-            /** @description Plain text. No such recording, or no poster could be made. */
+            /** @description Plain text. No such recording, or no poster could be made: every picture tried is one flat colour (a slate, a fade). Such a recording is looked at again after 10 minutes. */
             404: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Plain text. Stills are busy making other pictures; try again after Retry-After seconds. */
+            503: {
+                headers: {
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {

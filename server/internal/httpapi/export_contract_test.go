@@ -70,6 +70,7 @@ func TestExportRoutesMatchTheSpec(t *testing.T) {
 		{"/export/mosaic/{key}", "429", []string{"text/plain"}},
 		{"/export/mosaic/{key}", "503", []string{"text/plain"}},
 		{"/media/poster/{id}", "200", []string{"image/jpeg"}},
+		{"/media/poster/{id}", "503", []string{"text/plain"}},
 		{"/media/art/{kind}/{id}", "200", []string{"image/jpeg", "image/png", "image/svg+xml"}},
 	}
 	for _, tc := range specOnly {

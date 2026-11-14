@@ -3081,12 +3081,12 @@ paths:
       tags: [recordings]
       operationId: recordingPoster
       description: |
-        JPEG still from a recording.
+        JPEG still from a recording, 480 wide: the first of a few pictures through it (10%, 25%, 40%, 60% of its length, out of known breaks) that is a scene, or the one with the most picture. A finished recording keeps its poster until it is removed. One still recording gets a picture looked for again as it grows.
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
         "200":
-          description: JPEG poster. Content-Type is image/jpeg. Cache-Control is public, max-age=3600.
+          description: JPEG poster. Content-Type is image/jpeg. Cache-Control is public, max-age=3600, or max-age=300 while the recording is still being made.
           headers:
             Cache-Control:
               schema: { type: string }
@@ -3095,7 +3095,16 @@ paths:
               schema: { type: string, format: binary }
         "404":
           description: |
-            Plain text. No such recording, or no poster could be made.
+            Plain text. No such recording, or no poster could be made: every picture tried is one flat colour (a slate, a fade). Such a recording is looked at again after 10 minutes.
+          content:
+            text/plain:
+              schema: { type: string }
+        "503":
+          description: |
+            Plain text. Stills are busy making other pictures; try again after Retry-After seconds.
+          headers:
+            Retry-After:
+              schema: { type: integer }
           content:
             text/plain:
               schema: { type: string }

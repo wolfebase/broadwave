@@ -594,18 +594,39 @@ func (s *Server) poster(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, ok := recordingInside(s.downloadRoots(r.Context()), rec.Path); !ok {
+	path, ok := recordingInside(s.downloadRoots(r.Context()), rec.Path)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	dest := filepath.Join(s.Hub.Dir, "posters", strconv.FormatInt(id, 10)+".jpg")
-	if err := live.EnsurePoster(s.Hub.FFmpeg, rec.Path, dest); err != nil {
+	growing := rec.Status == "recording"
+	poster, err := s.Hub.RecordingPoster(r.Context(), id, path, growing, func() (float64, []store.Marker) {
+		breaks, _ := s.Store.Markers(r.Context(), id)
+		if growing {
+			return mediaSoFar(path, rec, time.Now()), breaks
+		}
+		length := recordingDuration(s.Hub, rec)
+		if rec.Duration == 0 && length > 0 {
+			_ = s.Store.SetDuration(r.Context(), id, length)
+		}
+		return length, breaks
+	})
+	if errors.Is(err, live.ErrStillBusy) {
+		w.Header().Set("Retry-After", "2")
+		http.Error(w, "posters are busy; try again", http.StatusServiceUnavailable)
+		return
+	}
+	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	http.ServeFile(w, r, dest)
+	if growing {
+		w.Header().Set("Cache-Control", "public, max-age=300")
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+	}
+	http.ServeFile(w, r, poster)
 }
 
 // recordingStill is one picture of a recording at a time in it, for chapter
