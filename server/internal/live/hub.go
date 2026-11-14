@@ -2838,7 +2838,7 @@ func (h *Hub) startCopy(ch store.SourceChannel, program int, input, path string)
 		if err != nil {
 			return nil, nil, err
 		}
-		return nil, newProgramPipe(file, program), nil
+		return nil, &fileCloser{WriteCloser: newProgramPipe(file, program)}, nil
 	}
 	cmd := exec.Command(h.FFmpeg, copyArgs(program, input, ch.UserAgent, ch.Referrer, path)...)
 	var stdin io.WriteCloser
@@ -2854,6 +2854,20 @@ func (h *Hub) startCopy(ch store.SourceChannel, program int, input, path string)
 	}
 	NotePID(h.Dir, cmd.Process.Pid)
 	return cmd, stdin, nil
+}
+
+// fileCloser closes a raw recording's file once and keeps what that close
+// said: the fan-out closes it as it lets go, and the save asks too. A share
+// can report a failed flush only there.
+type fileCloser struct {
+	io.WriteCloser
+	once sync.Once
+	err  error
+}
+
+func (c *fileCloser) Close() error {
+	c.once.Do(func() { c.err = c.WriteCloser.Close() })
+	return c.err
 }
 
 // abortStart ends a recording that did not start. Its row, when there is
@@ -4045,7 +4059,9 @@ func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText str
 	stopTimer(&rec.timer)
 	rec.finished = true
 	muxOf(h, f).detach(rec.sub)
-	if rec.stdin != nil {
+	// A copy's pipe closes now so it finishes; a raw file closes in the save,
+	// outside h.mu, where its last flush is heard.
+	if rec.stdin != nil && rec.cmd != nil {
 		_ = rec.stdin.Close()
 	}
 	f.dropRecording(rec)
@@ -4075,6 +4091,11 @@ func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText str
 
 // saveRecording finishes a stopped recording's file and row. Called without h.mu.
 func (h *Hub) saveRecording(rec *recording, status, errText string) {
+	if rec.stdin != nil && rec.cmd == nil {
+		if err := rec.stdin.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+			rec.noteWriteErr(err)
+		}
+	}
 	// watchRecording owns Wait. The copy gets three seconds to finish the
 	// file, and this does not wait past the kill: a process stuck on a
 	// network share can outlive SIGKILL.

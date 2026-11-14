@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -135,5 +136,40 @@ func TestAFailedStartIsSavedAfterTheClientLeaves(t *testing.T) {
 	recs, err := st.Recordings(context.Background())
 	if err != nil || len(recs) != 1 || recs[0].Status != "failed" {
 		t.Fatalf("recordings %+v %v", recs, err)
+	}
+}
+
+// shareFile is a recording's file on a share whose last flush fails.
+type shareFile struct{ *os.File }
+
+func (f shareFile) Close() error {
+	_ = f.File.Close()
+	return &os.PathError{Op: "close", Path: f.Name(), Err: syscall.EIO}
+}
+
+// The error from a raw recording's last close (a failed flush to a share) was
+// ignored, and the recording ended complete.
+func TestARawRecordingWhoseCloseFailsFails(t *testing.T) {
+	h, st, city, _ := rawLabTune(t)
+	prev := createRecording
+	createRecording = func(path string) (io.WriteCloser, error) {
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			return nil, err
+		}
+		return shareFile{f}, nil
+	}
+	t.Cleanup(func() { createRecording = prev })
+	m := muxOf(h, h.channels[city])
+	rec, err := h.RecordMeta(context.Background(), 60, store.Recording{ChannelID: city, Title: "Evening"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	feedMux(m, packets(10))
+	time.Sleep(100 * time.Millisecond)
+	h.StopRecord(rec.ID)
+	got, _ := st.Recording(context.Background(), rec.ID)
+	if got.Status != "failed" || !strings.Contains(got.Error, "input/output error") {
+		t.Fatalf("status %s error %q", got.Status, got.Error)
 	}
 }
