@@ -634,3 +634,33 @@ func TestALadderRebuildKeepsTheFallback(t *testing.T) {
 		t.Fatalf("ladder rebuild after a fallback:\n%s", args)
 	}
 }
+
+// On one ATSC 3.0 channel every tune's copied sound stopped the encode's
+// header, and it started again with AAC: learned again on every tune. The
+// next start converts it from the first try, until the sound changes.
+func TestASoundThatCantBeCopiedIsConvertedFromTheNextStart(t *testing.T) {
+	bin, mark := writeFakeFFmpeg(t, "sound")
+	h, f, _ := restartHub(t, time.Hour, "hold")
+	h.FFmpeg = bin
+	h.HEVC = true
+	f.source.AudioCodec = "ac4"
+	const key = "1080.copy.broadcast.hevc"
+	startRendition(t, h, f, key)
+	waitMark(t, mark, ".args.2")
+	stop := func() {
+		h.mu.Lock()
+		h.stopRenditionLocked(f, key)
+		h.mu.Unlock()
+	}
+	stop()
+	startRendition(t, h, f, key)
+	if args := waitMark(t, mark, ".args.3"); !strings.Contains(args, "-c:a\naac\n") || strings.Contains(args, "-c:a\ncopy\n") {
+		t.Fatalf("the next start copies the sound again:\n%s", args)
+	}
+	stop()
+	f.source.AudioCodec = "ac3"
+	startRendition(t, h, f, key)
+	if args := waitMark(t, mark, ".args.4"); !strings.Contains(args, "-c:a\ncopy\n") {
+		t.Fatalf("a changed sound is not copied again:\n%s", args)
+	}
+}

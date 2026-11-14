@@ -304,6 +304,10 @@ type Hub struct {
 	// mutes are channels whose main sound sent no frame, until when their
 	// encodes start without it.
 	mutes map[int64]time.Time
+	// aacSound are channels whose copied sound stopped an encode's header,
+	// with the sound that did it: their encodes start with it converted
+	// until the process ends or the sound changes.
+	aacSound map[int64]string
 	// releasing counts tuners being set to none outside h.mu.
 	releasing sync.WaitGroup
 	// saving counts recordings being started or saved outside h.mu.
@@ -1312,8 +1316,13 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 	extras := h.extrasLocked(f, want)
 	spec := want
 	mute := want.Audio != "none" && time.Now().Before(h.mutes[f.channel.ID])
-	if mute {
+	aac := !mute && h.soundConvertsLocked(f, want)
+	switch {
+	case mute:
 		spec.Audio, extras = "none", nil
+	case aac:
+		spec.Audio = convertedSound(f)
+		slog.Info(fmt.Sprintf("rendition %s on %s: starting with AAC sound; a copy of this sound could not start", key, f.channel.GuideNumber))
 	}
 	input, args := h.pictureArgs(f, spec, extras)
 	encoder := encoderOf(h.Encoder, want)
@@ -1369,7 +1378,7 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 	}
 	NotePID(h.Dir, cmd.Process.Pid)
 	now := time.Now()
-	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, startAt: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn, log: plog, encoder: encoder, mute: mute, lead: lead, fallback: soft}
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, startAt: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn, log: plog, encoder: encoder, mute: mute, aac: aac, lead: lead, fallback: soft}
 	if stdin != nil {
 		var w io.WriteCloser = stdin
 		if lead != nil {
@@ -1703,6 +1712,10 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 		f.plain = true
 	case planAAC:
 		r.aac = true
+		if h.aacSound == nil {
+			h.aacSound = map[int64]string{}
+		}
+		h.aacSound[f.channel.ID] = soundOf(f, r.spec)
 	case planSoftware:
 		r.fallback = true
 		f.markSoft(r.spec.Key())
@@ -1749,10 +1762,7 @@ func (h *Hub) restartArgsLocked(f *feed, r *rendition) (args []string, encoder s
 		spec.Audio = "none"
 	}
 	if r.aac && spec.Audio == "copy" {
-		spec.Audio = "aac2"
-		if f.source.AudioChannels >= 6 {
-			spec.Audio = "aac6"
-		}
+		spec.Audio = convertedSound(f)
 	}
 	if !r.fallback {
 		_, args = h.pictureArgs(f, spec, r.extras)
@@ -1760,6 +1770,35 @@ func (h *Hub) restartArgsLocked(f *feed, r *rendition) (args []string, encoder s
 	}
 	_, args = h.softArgs(f, spec, r.extras)
 	return args, "libx264"
+}
+
+// convertedSound is the AAC that stands in for a copied sound.
+func convertedSound(f *feed) string {
+	if f.source.AudioChannels >= 6 {
+		return "aac6"
+	}
+	return "aac2"
+}
+
+// soundOf names the sound a copy of want carries, to tell when it changed.
+func soundOf(f *feed, want Rendition) string {
+	src := f.sourceFor(want)
+	return fmt.Sprintf("%s pid %d", codecName(src.AudioCodec), src.AudioPID)
+}
+
+// soundConvertsLocked reports a copied sound that stopped an encode's header
+// on this channel before: the encode starts with it converted instead of
+// failing once more on every tune. A changed sound is tried again.
+func (h *Hub) soundConvertsLocked(f *feed, want Rendition) bool {
+	learned, ok := h.aacSound[f.channel.ID]
+	if !ok || want.Audio != "copy" {
+		return false
+	}
+	if learned != soundOf(f, want) {
+		delete(h.aacSound, f.channel.ID)
+		return false
+	}
+	return true
 }
 
 // softArgs is spec's command line on the processor: H.264 from libx264,
