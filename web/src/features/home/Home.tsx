@@ -19,6 +19,7 @@ import { Atsc3Tag, ChannelBadge, Empty, LiveDot, Progress } from "../../ui/primi
 import { RecordingCard, Shelf } from "../../ui/shelf";
 import { bareDate, isGame } from "../sports/listing";
 import { gameKey, missingTuners } from "./homeRails";
+import { recordingOn } from "../../lib/recordingOn";
 import "./home.css";
 
 const t = bind(homeMessages);
@@ -108,7 +109,7 @@ export function Home() {
       .slice(0, 14);
   }, [channels, index, now, yours, sports]);
   const missing = missingTuners(devices, now);
-  const heroRecording = hero ? recordings.find((r) => r.status === "recording" && r.channelId === hero.channel.id) : undefined;
+  const heroRecording = hero ? recordingOn(recordings, hero.channel.id, hero.airing) : undefined;
 
   const recordingNow = recordings.filter((r) => r.status === "recording");
   const resume = continueWatching(recordings);

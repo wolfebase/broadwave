@@ -16,6 +16,7 @@ import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, LiveDot, Progress } from "../../ui/primitives";
 import { useAiringDetails } from "./useAiringDetails";
 import { timedLink } from "../schedule/manual";
+import { recordingOn } from "../../lib/recordingOn";
 
 const t = bind(guideUiMessages);
 
@@ -64,7 +65,7 @@ export function ProgramSheet({ channel, airing: listed, onClose, onWatch }: { ch
   const cat = categoryOf(airing);
   const onNow = airing ? Date.parse(airing.start) <= now && Date.parse(airing.end) > now : true;
   const rec = airing ? isRecording(recordingKeys(planned, recordings), airing, now) : null;
-  const active = recordings.find((r) => r.status === "recording" && r.channelId === channel.id);
+  const active = recordingOn(recordings, channel.id, airing);
   const hasPass = airing ? passes.some((p) => p.kind !== "once" && p.title.toLowerCase() === airing.title.toLowerCase()) : false;
   const once = airing
     ? passes.find((p) => p.kind === "once" && p.channelId === channel.id && p.airingStart && Date.parse(p.airingStart) === Date.parse(airing.start))

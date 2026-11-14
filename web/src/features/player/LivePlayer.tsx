@@ -40,6 +40,7 @@ import { neighbourIds, warmIds } from "./warmPlan";
 import { tuneStepId } from "./tuneSteps";
 import { noteHandoff } from "../multiview/handoff";
 import { readCaptionStyle, saveCaptionStyle, type CaptionStyle } from "./captionStyle";
+import { recordingOn } from "../../lib/recordingOn";
 
 const t = bind(playerUiMessages);
 
@@ -265,7 +266,7 @@ export function LivePlayer({
     return () => window.clearTimeout(t);
   }, [tuning, sentText]);
   const scores = useScoreMap();
-  const active = recordings.find((r) => r.status === "recording" && r.channelId === channel.id);
+  const active = recordingOn(recordings, channel.id, airing);
   const { mediaNow } = stream;
   const held = airing ? recordingHoldingStart(airing, recordings) : undefined;
   const startOverFrom = startOverChoice(airing ? Date.parse(airing.start) : undefined, windowFrom, held ? Date.parse(held.startedAt) : undefined);
