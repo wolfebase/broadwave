@@ -4,9 +4,11 @@
 
 ### Fixed
 
-- Server: the next show on a channel that is already recording starts on time as its own recording. The next episode in the last one's padding, or the show after a game that ran long, was taken for the recording already on and never recorded without a buffer.
-- Server: an ATSC 3.0 recording whose file stops taking writes (a full disk, a share that went away) fails at once and lets its tuner go, so it is tried again. It used to stay recording, hold the tuner, and end complete with nothing written.
-- Server: playlists no longer stall while a recording starts or ends on a slow share.
+- Server: the next show on a channel that is already recording starts on time as its own recording. The next episode in the last one's padding, the show after a game that ran long, or the next airing after a late retry of the last one was taken for the recording already on and never recorded without a buffer. Pressing Record on a show already recording, by a pass or for a different length, moves its end instead of making a second file.
+- Server: after a restart, two shows of one title cut on one channel (a game that ran long and the game after it) are both resumed.
+- Web: with two recordings on a channel, the guide, the player, and Home show and stop the one for the program on screen.
+- Server: an ATSC 3.0 recording whose file stops taking writes (a full disk, a share that went away) fails at once and lets its tuner go, so it is tried again. It used to stay recording, hold the tuner, and end complete with nothing written. A failed last flush to a share fails it too.
+- Server: playlists no longer stall while a recording starts or ends on a slow share. A recording that can't start is marked failed even when the screen that asked has gone.
 - Server: going back before a resume point no longer answers "not ready" for good when a fill encode stalls or keeps dying. A stalled one is replaced while the player waits, and three deaths in a row give up with "not found".
 - Server: What's on now (`GET /api/v1/now`) opens on a device paired with Watch access.
 - Server: the pairing rate limit forgets addresses once their window passes.
