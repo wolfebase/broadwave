@@ -434,9 +434,11 @@ func TestRecordingThatCannotStartIsMarkedFailed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rec := &recording{key: recordingKey{title: "jeopardy!"}}
 	h.mu.Lock()
-	h.abortRecordingLocked(context.Background(), f, id)
+	f.recordings = []*recording{rec}
 	h.mu.Unlock()
+	h.abortStart(context.Background(), f, rec, id)
 	got, err := st.Recording(context.Background(), id)
 	if err != nil {
 		t.Fatal(err)
@@ -873,8 +875,9 @@ func TestAStoppedRecordingHasALengthAtOnce(t *testing.T) {
 	for _, name := range []string{"news", "empty"} {
 		h.mu.Lock()
 		f.recordings = []*recording{&recording{id: ids[name], path: files[name], ends: ends}}
-		h.finishRecordingLocked(f, f.recordings[0], "complete", "")
+		save := h.finishRecordingLocked(f, f.recordings[0], "complete", "")
 		h.mu.Unlock()
+		save()
 	}
 	got, err := st.Recording(context.Background(), ids["news"])
 	if err != nil {

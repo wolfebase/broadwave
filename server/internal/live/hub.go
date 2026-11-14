@@ -306,6 +306,8 @@ type Hub struct {
 	mutes map[int64]time.Time
 	// releasing counts tuners being set to none outside h.mu.
 	releasing sync.WaitGroup
+	// saving counts recordings being started or saved outside h.mu.
+	saving sync.WaitGroup
 }
 
 type mux struct {
@@ -520,6 +522,10 @@ type recording struct {
 	// werr is the first write error of a recording that writes its own file.
 	// A later close must not clear it.
 	werr atomic.Pointer[error]
+	// ready closes when a start made outside h.mu is done; id stays 0 if it
+	// failed. endStatus and endNote are a stop that came before it was.
+	ready              chan struct{}
+	endStatus, endNote string
 }
 
 func (rec *recording) noteWriteErr(err error) {
@@ -2638,7 +2644,6 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 		}
 	}
 	f, err := h.tuneFeed(ctx, ch, res)
-	defer h.mu.Unlock()
 	if _, busy := err.(*BusyError); busy && !gentle {
 		labels, feeds := h.viewerFeedsToPreemptLocked(ch.FrequencyHz, channelID)
 		if len(feeds) > 0 {
@@ -2652,6 +2657,7 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 		}
 	}
 	if err != nil {
+		h.mu.Unlock()
 		return store.Recording{}, err
 	}
 	if title == "" {
@@ -2669,95 +2675,152 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 	key := recordingKey{title: strings.ToLower(title), subtitle: meta.Subtitle, programID: meta.ProgramID, passID: meta.PassID}
 	for _, rec := range f.recordings {
 		if rec.key == key && !rec.ends.Before(ends.Add(-2*time.Minute)) {
+			h.mu.Unlock()
+			<-rec.ready
+			if rec.id == 0 {
+				return store.Recording{}, errors.New("the recording did not start")
+			}
 			return h.Store.Recording(ctx, rec.id)
 		}
 	}
-	dir := h.Recordings()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		h.dropIfUnusedLocked(f)
-		return store.Recording{}, err
-	}
 	// A show already on starts from its beginning when the buffer holds it.
 	started := time.Now()
-	from, at, backfill := ringStart(muxOf(h, f), meta.StartedAt, started)
+	m := muxOf(h, f)
+	from, at, backfill := ringStart(m, meta.StartedAt, started)
 	if backfill {
 		started = at
+	}
+	input := "pipe:0"
+	if m != nil && m.input != "" {
+		input = m.input
+	}
+	channel, program := f.channel, f.program
+	// The folder, the row, and the copy are made outside h.mu: a share can be
+	// slow, and every playlist reload waits on that lock. The placeholder
+	// holds the tune, and the same show asked for meanwhile waits on ready.
+	rec := &recording{key: key, ends: ends, ready: make(chan struct{})}
+	f.recordings = append(f.recordings, rec)
+	h.saving.Add(1)
+	h.mu.Unlock()
+	defer h.saving.Done()
+	defer close(rec.ready)
+
+	if err := os.MkdirAll(h.Recordings(), 0o755); err != nil {
+		h.abortStart(ctx, f, rec, 0)
+		return store.Recording{}, err
 	}
 	if meta.GameID == "" {
 		meta.GameID = h.Store.AiringGame(ctx, channelID, title, time.Now())
 	}
 	row := h.Store.WithEpisode(ctx, store.Recording{
-		ChannelID: channelID, GuideNumber: f.channel.GuideNumber, Title: title,
+		ChannelID: channelID, GuideNumber: channel.GuideNumber, Title: title,
 		Subtitle: meta.Subtitle, Description: meta.Description, Category: meta.Category, ProgramID: meta.ProgramID, GameID: meta.GameID,
 		Status: "recording", StartedAt: started, EndsAt: &ends, PassID: meta.PassID,
 	})
-	row.Path = h.recordingPath(row, f.channel, byShow)
-	// A recording that fails to start leaves no empty show folder behind.
-	startedOK := false
-	defer func() {
-		if !startedOK {
-			h.pruneEmptyLocked(filepath.Dir(row.Path))
-		}
-	}()
+	row.Path = h.pickRecordingPath(rec, row, channel, byShow)
 	id, err := h.Store.CreateRecording(ctx, row)
 	if err != nil {
-		h.dropIfUnusedLocked(f)
+		h.abortStart(ctx, f, rec, 0)
 		return store.Recording{}, err
 	}
 	if key := store.EpisodeKey(meta.ProgramID, title, meta.Subtitle, channelID); key != "" {
 		_ = h.Store.RememberSeen(ctx, key, false)
 	}
-	_ = h.Store.AddEvent(ctx, "recording", fmt.Sprintf("Started %s on %s", title, f.channel.GuideNumber))
-	input := "pipe:0"
-	if mux := muxOf(h, f); mux != nil && mux.input != "" {
-		input = mux.input
+	_ = h.Store.AddEvent(ctx, "recording", fmt.Sprintf("Started %s on %s", title, channel.GuideNumber))
+	cmd, stdin, err := h.startCopy(channel, program, input, row.Path)
+	if err != nil {
+		h.abortStart(ctx, f, rec, id)
+		return store.Recording{}, err
 	}
-	var cmd *exec.Cmd
-	var stdin io.WriteCloser
-	path := row.Path
-	if input == "pipe:0" && rawRecording(f.channel) {
-		file, err := createRecording(path)
-		if err != nil {
-			h.abortRecordingLocked(ctx, f, id)
-			return store.Recording{}, err
-		}
-		stdin = newProgramPipe(file, f.program)
-	} else {
-		cmd = exec.Command(h.FFmpeg, copyArgs(f.program, input, f.channel.UserAgent, f.channel.Referrer, path)...)
-		if input == "pipe:0" {
-			stdin, err = cmd.StdinPipe()
-			if err != nil {
-				h.abortRecordingLocked(ctx, f, id)
-				return store.Recording{}, err
-			}
-		}
-		logCommand(cmd, "recording "+f.channel.GuideNumber)
-		if err := cmd.Start(); err != nil {
-			h.abortRecordingLocked(ctx, f, id)
-			return store.Recording{}, err
-		}
-		NotePID(h.Dir, cmd.Process.Pid)
-	}
-	rec := &recording{id: id, key: key, path: path, cmd: cmd, stdin: stdin, ends: ends}
+
+	h.mu.Lock()
+	rec.id, rec.cmd, rec.stdin = id, cmd, stdin
 	if cmd != nil {
 		rec.exited = make(chan struct{})
-	}
-	f.recordings = append(f.recordings, rec)
-	if cmd != nil {
 		go h.watchRecording(f, rec, cmd)
+	}
+	m = muxOf(h, f)
+	if rec.finished || h.channels[channelID] != f || m == nil {
+		// A shutdown or the tuner stopping ended it while it started.
+		status, note := rec.endStatus, rec.endNote
+		if status == "" {
+			status, note = "failed", "The tuner stopped."
+		}
+		// The stop saw only the placeholder; this saves the row too.
+		rec.finished = false
+		save := h.finishRecordingLocked(f, rec, status, note)
+		h.dropIfUnusedLocked(f)
+		h.mu.Unlock()
+		save()
+		return store.Recording{}, fmt.Errorf("the recording of %s ended as it started", title)
 	}
 	if stdin != nil && backfill {
 		rec.backfilling = true
-		go h.backfill(muxOf(h, f), rec, from)
+		go h.backfill(m, rec, from)
 	} else {
-		if m := muxOf(h, f); stdin != nil {
+		if stdin != nil {
 			rec.sub = h.recordingPipe(m, rec, func() ([]byte, bool) { return m.copyLeadLocked(), true })
 		}
 		h.armRecordingStopLocked(rec)
 	}
 	h.changed()
-	startedOK = true
+	h.mu.Unlock()
 	return h.Store.Recording(ctx, id)
+}
+
+// startCopy opens what writes a recording's file: the file itself for a raw
+// recording, or an ffmpeg copy. Called without h.mu.
+func (h *Hub) startCopy(ch store.SourceChannel, program int, input, path string) (*exec.Cmd, io.WriteCloser, error) {
+	if input == "pipe:0" && rawRecording(ch) {
+		file, err := createRecording(path)
+		if err != nil {
+			return nil, nil, err
+		}
+		return nil, newProgramPipe(file, program), nil
+	}
+	cmd := exec.Command(h.FFmpeg, copyArgs(program, input, ch.UserAgent, ch.Referrer, path)...)
+	var stdin io.WriteCloser
+	if input == "pipe:0" {
+		var err error
+		if stdin, err = cmd.StdinPipe(); err != nil {
+			return nil, nil, err
+		}
+	}
+	logCommand(cmd, "recording "+ch.GuideNumber)
+	if err := cmd.Start(); err != nil {
+		return nil, nil, err
+	}
+	NotePID(h.Dir, cmd.Process.Pid)
+	return cmd, stdin, nil
+}
+
+// abortStart ends a recording that did not start. Its row, when there is
+// one, fails; the tune goes when nothing else holds it, and no empty show
+// folder is left behind. Called without h.mu.
+func (h *Hub) abortStart(ctx context.Context, f *feed, rec *recording, id int64) {
+	h.mu.Lock()
+	rec.finished = true
+	f.dropRecording(rec)
+	h.dropIfUnusedLocked(f)
+	h.mu.Unlock()
+	if id != 0 {
+		_ = h.Store.FinishRecording(ctx, id, "failed", "Could not start the recording.")
+	}
+	if rec.path != "" {
+		h.pruneEmpty(filepath.Dir(rec.path))
+	}
+}
+
+// pickRecordingPath chooses rec's file and marks it taken. moveMu keeps two
+// starts from choosing one name, and a prune from taking the folder made for it.
+func (h *Hub) pickRecordingPath(rec *recording, row store.Recording, ch store.SourceChannel, byShow bool) string {
+	moveMu.Lock()
+	defer moveMu.Unlock()
+	path := h.recordingPath(row, ch, byShow)
+	h.mu.Lock()
+	rec.path = path
+	h.mu.Unlock()
+	return path
 }
 
 // createRecording makes the file a raw recording writes. Tests stand in for a
@@ -2782,6 +2845,7 @@ func (h *Hub) Shutdown() {
 	for _, mo := range h.mosaics {
 		h.stopMosaicLocked(mo)
 	}
+	var saves []func()
 	for _, f := range h.feedsLocked() {
 		for _, rec := range slices.Clone(f.recordings) {
 			// A show still on is cut short, not finished: the next start
@@ -2791,7 +2855,7 @@ func (h *Hub) Shutdown() {
 			if time.Until(rec.ends) > 30*time.Second {
 				status, note = "interrupted", "Stopped when the server restarted."
 			}
-			h.finishRecordingLocked(f, rec, status, note)
+			saves = append(saves, h.finishRecordingLocked(f, rec, status, note))
 		}
 		h.stopFeedLocked(f)
 	}
@@ -2799,6 +2863,12 @@ func (h *Hub) Shutdown() {
 		m.cancel()
 	}
 	h.mu.Unlock()
+	var wg sync.WaitGroup
+	for _, save := range saves {
+		wg.Go(save)
+	}
+	wg.Wait()
+	h.saving.Wait()
 	// A recording being played is not a tuner feed. Leaving its ffmpeg
 	// running survives the process, and the next boot has no pid to reap.
 	h.playMu.Lock()
@@ -2813,19 +2883,12 @@ func (h *Hub) Shutdown() {
 // Jellyfin) or flat by start time and channel. A show folder that can't be
 // made, or that a link takes outside the recordings folder, falls back to flat.
 //
-// Called with h.mu held. A recording in progress counts as taken even
-// before ffmpeg makes its file: two games on two channels at noon share a
-// show name.
+// Called without h.mu; the folder checks run outside it. A recording in
+// progress counts as taken even before ffmpeg makes its file: two games on
+// two channels at noon share a show name.
 func (h *Hub) recordingPath(rec store.Recording, ch store.SourceChannel, byShow bool) string {
 	root := h.Recordings()
-	var busy []string
-	for _, f := range h.feedsLocked() {
-		for _, rec := range f.recordings {
-			if !rec.finished {
-				busy = append(busy, rec.path)
-			}
-		}
-	}
+	busy := h.busyPaths()
 	taken := func(path string) bool {
 		for _, other := range busy {
 			if strings.EqualFold(filepath.Clean(other), filepath.Clean(path)) {
@@ -2881,14 +2944,16 @@ func freePath(path string, taken func(string) bool) string {
 
 func (h *Hub) StopRecord(id int64) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	save := func() {}
 	for _, f := range h.feedsLocked() {
 		if rec := f.recordingByID(id); rec != nil {
-			h.finishRecordingLocked(f, rec, "complete", "")
+			save = h.finishRecordingLocked(f, rec, "complete", "")
 			h.dropIfUnusedLocked(f)
-			return
+			break
 		}
 	}
+	h.mu.Unlock()
+	save()
 }
 
 // ExtendRecording moves the end of an in-progress recording.
@@ -3671,25 +3736,25 @@ func (h *Hub) shiftClocks(m *mux, gap time.Duration) {
 // releaseMux drops every channel on a mux whose tuner read has ended.
 func (h *Hub) releaseMux(m *mux) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.muxes[m.freq] != m {
+		h.mu.Unlock()
 		return
 	}
 	feeds := make([]*feed, 0, len(m.feeds))
 	for _, f := range m.feeds {
 		feeds = append(feeds, f)
 	}
+	var saves []func()
 	for _, f := range feeds {
 		for _, rec := range slices.Clone(f.recordings) {
-			h.finishRecordingLocked(f, rec, "failed", "The tuner stopped.")
+			saves = append(saves, h.finishRecordingLocked(f, rec, "failed", "The tuner stopped."))
 		}
 		h.stopFeedLocked(f)
 	}
-}
-
-func (h *Hub) abortRecordingLocked(ctx context.Context, f *feed, id int64) {
-	_ = h.Store.FinishRecording(ctx, id, "failed", "Could not start the recording.")
-	h.dropIfUnusedLocked(f)
+	h.mu.Unlock()
+	for _, save := range saves {
+		save()
+	}
 }
 
 func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
@@ -3884,18 +3949,24 @@ func (h *Hub) watchRecording(f *feed, rec *recording, cmd *exec.Cmd) {
 	ForgetPID(h.Dir, pid)
 	close(rec.exited)
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if f.recordingByID(rec.id) != rec || rec.finished {
+		h.mu.Unlock()
 		return
 	}
 	slog.Error(fmt.Sprintf("recording %d on %s stopped early: %v", rec.id, f.channel.GuideNumber, err))
-	h.finishRecordingLocked(f, rec, "failed", "The recording stopped early.")
+	save := h.finishRecordingLocked(f, rec, "failed", "The recording stopped early.")
 	h.dropIfUnusedLocked(f)
+	h.mu.Unlock()
+	save()
 }
 
-func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText string) {
+// finishRecordingLocked stops rec and lets go of it under h.mu. What is
+// slow on a share (the copy finishing its file, the file's length, the row,
+// the sidecar) is the returned func, which the caller runs after unlocking:
+// every playlist reload waits on h.mu. Shutdown waits for it.
+func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText string) func() {
 	if rec == nil || rec.finished {
-		return
+		return func() {}
 	}
 	stopTimer(&rec.timer)
 	rec.finished = true
@@ -3903,9 +3974,27 @@ func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText str
 	if rec.stdin != nil {
 		_ = rec.stdin.Close()
 	}
-	// watchRecording owns Wait. This runs under h.mu, so it gives the copy
-	// three seconds to finish the file and does not wait past the kill: a
-	// process stuck on a network share can outlive SIGKILL.
+	f.dropRecording(rec)
+	if rec.id == 0 {
+		// Still starting: the start saves it with this status.
+		rec.endStatus, rec.endNote = status, errText
+		return func() {}
+	}
+	h.saving.Add(1)
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			defer h.saving.Done()
+			h.saveRecording(rec, status, errText)
+		})
+	}
+}
+
+// saveRecording finishes a stopped recording's file and row. Called without h.mu.
+func (h *Hub) saveRecording(rec *recording, status, errText string) {
+	// watchRecording owns Wait. The copy gets three seconds to finish the
+	// file, and this does not wait past the kill: a process stuck on a
+	// network share can outlive SIGKILL.
 	if rec.cmd != nil && rec.cmd.Process != nil && rec.exited != nil {
 		timer := time.NewTimer(3 * time.Second)
 		select {
@@ -3921,10 +4010,9 @@ func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText str
 			errText = disk.ClassifyWrite(err).Error()
 		}
 	}
-	f.dropRecording(rec)
-	h.changed()
-	h.storeLengthLocked(rec)
+	h.storeLength(rec)
 	_ = h.Store.FinishRecording(context.Background(), rec.id, status, errText)
+	h.changed()
 	if saved, err := h.Store.Recording(context.Background(), rec.id); err == nil {
 		WriteSidecar(saved)
 		message := fmt.Sprintf("Saved %s on %s", saved.Title, saved.GuideNumber)
@@ -3947,31 +4035,34 @@ func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText str
 // err is noted only here, under h.mu, when the stop may have closed the file.
 func (h *Hub) failRecording(rec *recording, err error) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if rec.finished {
+		h.mu.Unlock()
 		return
 	}
 	if err != nil {
 		rec.noteWriteErr(err)
 	}
+	save := func() {}
 	for _, f := range h.feedsLocked() {
 		if f.recordingByID(rec.id) != rec {
 			continue
 		}
 		slog.Error(fmt.Sprintf("recording %d on %s: %v", rec.id, f.channel.GuideNumber, rec.writeErr()))
-		h.finishRecordingLocked(f, rec, "failed", disk.ClassifyWrite(rec.writeErr()).Error())
+		save = h.finishRecordingLocked(f, rec, "failed", disk.ClassifyWrite(rec.writeErr()).Error())
 		h.dropIfUnusedLocked(f)
-		return
+		break
 	}
+	h.mu.Unlock()
+	save()
 }
 
-// storeLengthLocked stores what a recording holds as it finishes, before its
+// storeLength stores what a recording holds as it finishes, before its
 // status leaves "recording". The list shows a recording's media so far, then
 // the stored length once it is done: a list read right after a stop has a
 // length, not a zero until ffprobe runs. It reads the PCR at the two ends of
 // the file the copy just closed, as the list did while it recorded (MediaWritten).
 // rememberDuration replaces it with ffprobe's answer.
-func (h *Hub) storeLengthLocked(rec *recording) {
+func (h *Hub) storeLength(rec *recording) {
 	ctx := context.Background()
 	row, err := h.Store.Recording(ctx, rec.id)
 	if err != nil || row.Duration > 0 {
@@ -4143,19 +4234,20 @@ func (h *Hub) armRecordingStopLocked(rec *recording) {
 // A user stop does not come through here.
 func (h *Hub) finishRecordingGen(id int64, gen uint64) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	save := func() {}
 	for _, f := range h.feedsLocked() {
 		rec := f.recordingByID(id)
 		if rec == nil {
 			continue
 		}
-		if rec.gen != gen {
-			return
+		if rec.gen == gen {
+			save = h.finishRecordingLocked(f, rec, "complete", "")
+			h.dropIfUnusedLocked(f)
 		}
-		h.finishRecordingLocked(f, rec, "complete", "")
-		h.dropIfUnusedLocked(f)
-		return
+		break
 	}
+	h.mu.Unlock()
+	save()
 }
 
 // feedsLocked lists each feed once; several channel ids can point at one feed.

@@ -132,6 +132,22 @@ func airYear(air string) string {
 	return air[:4]
 }
 
+// busyPaths are the files of recordings in progress, a starting one's
+// included once it has a name.
+func (h *Hub) busyPaths() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var busy []string
+	for _, f := range h.feedsLocked() {
+		for _, rec := range f.recordings {
+			if !rec.finished && rec.path != "" {
+				busy = append(busy, rec.path)
+			}
+		}
+	}
+	return busy
+}
+
 // pruneEmpty removes dir and the folders above it while they are empty,
 // stopping at the recordings folder. Links are left alone, and so is a
 // folder a recording in progress writes into: its file may not exist yet.
@@ -139,21 +155,14 @@ func airYear(air string) string {
 func (h *Hub) pruneEmpty(dir string) {
 	moveMu.Lock()
 	defer moveMu.Unlock()
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.pruneEmptyLocked(dir)
+	h.pruneEmptyMoving(dir)
 }
 
-func (h *Hub) pruneEmptyLocked(dir string) {
+// pruneEmptyMoving is pruneEmpty for a caller holding moveMu. The folders
+// are read outside h.mu.
+func (h *Hub) pruneEmptyMoving(dir string) {
 	root := h.Recordings()
-	var busy []string
-	for _, f := range h.feedsLocked() {
-		for _, rec := range f.recordings {
-			if !rec.finished {
-				busy = append(busy, rec.path)
-			}
-		}
-	}
+	busy := h.busyPaths()
 	for {
 		if _, ok := inside(root, dir); !ok || insideReal(root, dir) != nil {
 			return

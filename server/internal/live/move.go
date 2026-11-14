@@ -95,9 +95,7 @@ func (h *Hub) MoveRecording(rec store.Recording, name string) (string, error) {
 		}
 	}
 	// Folders the move emptied go; never the recordings folder or a link.
-	h.mu.Lock()
-	h.pruneEmptyLocked(filepath.Dir(rec.Path))
-	h.mu.Unlock()
+	h.pruneEmptyMoving(filepath.Dir(rec.Path))
 	return target, nil
 }
 
