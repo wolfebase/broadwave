@@ -22,17 +22,24 @@ import (
 // copy, from the asked-for segment up to the resume. The copy and its encode
 // are not touched, and the list puts a discontinuity between the two clocks.
 
-// fillWait is how long a request for a fill segment waits for its encode.
-var fillWait = 12 * time.Second
-
 var (
+	// fillWait is how long a request for a fill segment waits on an encode
+	// that writes nothing. It is longer than fillFirstWithin, so a stalled
+	// encode is stopped and replaced while the request still waits.
+	fillWait = 25 * time.Second
 	// fillRetryAfter is how long a copy's fills rest after one died on the
 	// processor before the next request tries again.
 	fillRetryAfter = 30 * time.Second
-	// fillFirstWithin is how long a fill encode has to write its first
-	// segment. One that hasn't is stopped, and the next request starts afresh.
-	fillFirstWithin = 10 * time.Second
+	// fillFirstWithin is how long a fill encode may go without writing: no new
+	// segment, and the one it is on not growing. One that does is stopped, and
+	// the next request starts afresh. A loaded processor or a slow disk takes
+	// a while to start: 3 s read before the seek, 2 s of picture, and starting up.
+	fillFirstWithin = 20 * time.Second
 )
+
+// fillDeathsMax is how many fill encodes in a row may die on the processor
+// before the copy's fills are given up on: a 404, not a 503 every rest.
+const fillDeathsMax = 3
 
 // fillAhead is how far past what a fill encode has written a request can be
 // and still wait for it, in segments, instead of starting a new one there.
@@ -51,12 +58,13 @@ var (
 
 // fillSource is what a recording's fill encode reads and how. It is kept in
 // the copy's folder too, so a restart doesn't lose it. failed is when a fill
-// last died on the processor.
+// last died on the processor, and deaths how many did in a row.
 type fillSource struct {
 	Path   string  `json:"path"`
 	Graph  Graph   `json:"graph"`
 	Offset float64 `json:"offset"`
 	failed time.Time
+	deaths int
 }
 
 type fillRun struct {
@@ -64,8 +72,10 @@ type fillRun struct {
 	list  string
 	cmd   *exec.Cmd
 	done  chan struct{}
-	// seen, stopped, and hung (stopped for a late first segment) are under playMu.
+	// seen, wrote (when it last wrote), stopped, and hung (stopped for writing
+	// nothing) are under playMu.
 	seen    time.Time
+	wrote   time.Time
 	stopped bool
 	hung    bool
 }
@@ -197,9 +207,18 @@ func (h *Hub) fillSourceFromCopy(id int64, dir string) (fillSource, bool) {
 // FillSegment is the path of fill segment n of a recording's copy, encoding
 // it if it isn't written. ErrFillGone means nothing can make it, ErrFillLate
 // that it didn't come in time, and a cancelled ctx ends the wait.
-func (h *Hub) FillSegment(ctx context.Context, id int64, n int) (string, error) {
+func (h *Hub) FillSegment(ctx context.Context, id int64, n int) (made string, err error) {
 	dir := filepath.Join(h.Dir, "file", strconv.FormatInt(id, 10))
 	path := filepath.Join(dir, fillName(n))
+	began := time.Now()
+	how := "on disk"
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = err.Error()
+		}
+		slog.Debug(fmt.Sprintf("recording %d: fill %d: %s in %d ms, %s", id, n, status, time.Since(began).Milliseconds(), how))
+	}()
 	h.playMu.Lock()
 	if h.fillSeen == nil {
 		h.fillSeen = map[int64]time.Time{}
@@ -212,16 +231,19 @@ func (h *Hub) FillSegment(ctx context.Context, id int64, n int) (string, error) 
 	if segmentReady(dir, fillName(n)) {
 		return path, nil
 	}
-	deadline := time.NewTimer(fillWait)
-	defer deadline.Stop()
 	tick := time.NewTicker(40 * time.Millisecond)
 	defer tick.Stop()
 	// A run that exits without the segment is tried again: the next one may
 	// be on the processor.
 	for tries := 0; tries < 3; tries++ {
-		run, err := h.ensureFill(id, dir, n)
+		run, started, err := h.ensureFill(id, dir, n)
 		if err != nil {
+			how = "no run"
 			return "", err
+		}
+		how = "run reused"
+		if started {
+			how = "run started"
 		}
 	wait:
 		for {
@@ -231,11 +253,15 @@ func (h *Hub) FillSegment(ctx context.Context, id int64, n int) (string, error) 
 			select {
 			case <-ctx.Done():
 				return "", ctx.Err()
-			case <-deadline.C:
-				return "", ErrFillLate
 			case <-run.done:
 				break wait
 			case <-tick.C:
+			}
+			h.playMu.Lock()
+			quiet := time.Since(run.wrote) >= fillWait && time.Since(began) >= fillWait
+			h.playMu.Unlock()
+			if quiet {
+				return "", ErrFillLate
 			}
 		}
 		if segmentReady(dir, fillName(n)) {
@@ -245,7 +271,9 @@ func (h *Hub) FillSegment(ctx context.Context, id int64, n int) (string, error) 
 	return "", ErrFillLate
 }
 
-func (h *Hub) ensureFill(id int64, dir string, n int) (*fillRun, error) {
+// ensureFill finds or starts the run that will write segment n. started says
+// which.
+func (h *Hub) ensureFill(id int64, dir string, n int) (*fillRun, bool, error) {
 	defer h.lockFill(id)()
 	src, ok := h.fillSourceFor(id, dir)
 	h.playMu.Lock()
@@ -266,12 +294,13 @@ func (h *Hub) ensureFill(id int64, dir string, n int) (*fillRun, error) {
 	}
 	h.playMu.Unlock()
 	switch {
-	case closed:
-		return nil, ErrFillLate
-	case !ok || time.Since(src.failed) < fillRetryAfter || float64(2*n) >= src.Offset-0.001:
-		return nil, ErrFillGone
+	case !ok || src.deaths >= fillDeathsMax || float64(2*n) >= src.Offset-0.001:
+		return nil, false, ErrFillGone
+	// A player that gets a 404 may give up on the item; a rest is a while.
+	case closed || time.Since(src.failed) < fillRetryAfter:
+		return nil, false, ErrFillLate
 	case found != nil:
-		return found, nil
+		return found, false, nil
 	}
 	// The run asked for longest ago makes room.
 	if len(live) >= fillRunsMax {
@@ -283,14 +312,14 @@ func (h *Hub) ensureFill(id int64, dir string, n int) (*fillRun, error) {
 			}
 		}
 		h.playMu.Unlock()
-		h.stopFillRun(id, oldest)
+		h.stopFillRun(id, oldest, "evicted")
 	}
 	run, err := h.startFill(id, dir, src, n)
 	if err != nil {
 		slog.Warn(fmt.Sprintf("recording %d: fill: %v", id, err))
-		return nil, ErrFillGone
+		return nil, false, ErrFillGone
 	}
-	return run, nil
+	return run, true, nil
 }
 
 func (r *fillRun) ended() bool {
@@ -326,7 +355,8 @@ func (h *Hub) startFill(id int64, dir string, src fillSource, n int) (*fillRun, 
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	run := &fillRun{first: n, list: g.List, cmd: cmd, done: make(chan struct{}), seen: time.Now()}
+	now := time.Now()
+	run := &fillRun{first: n, list: g.List, cmd: cmd, done: make(chan struct{}), seen: now, wrote: now}
 	h.playMu.Lock()
 	if h.fillRuns == nil {
 		h.fillRuns = map[int64][]*fillRun{}
@@ -339,32 +369,62 @@ func (h *Hub) startFill(id int64, dir string, src fillSource, n int) (*fillRun, 
 		_ = os.Remove(filepath.Join(dir, run.list))
 		h.playMu.Lock()
 		h.dropFillRunLocked(id, run)
+		if !run.stopped {
+			slog.Debug(fmt.Sprintf("recording %d: fill from %d stopped: ended", id, n))
+		}
 		if !wrote && (!run.stopped || run.hung) {
 			h.fillFailedLocked(id, dir, g.Encoder, run.hung)
+		} else if src, ok := h.fillSrc[id]; wrote && ok && src.deaths > 0 {
+			src.deaths = 0
+			h.fillSrc[id] = src
 		}
 		h.playMu.Unlock()
 		close(run.done)
 	}()
-	// Requests keep a run from going idle, so one that never writes would be
-	// waited on for good.
-	time.AfterFunc(fillFirstWithin, func() {
-		if run.ended() || segmentReady(dir, fillName(n)) {
-			return
-		}
-		slog.Warn(fmt.Sprintf("recording %d: a fill wrote nothing in %v, stopping it", id, fillFirstWithin))
-		h.playMu.Lock()
-		run.hung = true
-		h.playMu.Unlock()
-		h.stopFillRun(id, run)
-	})
+	go h.watchWriting(id, dir, run, fillFirstWithin)
 	go h.watchFill(id, run)
 	return run, nil
 }
 
+// watchWriting stops a run that has written nothing for within: no new
+// segment, and the one it is on not growing. Requests keep a run from going
+// idle, so one that stalls would be waited on for good.
+func (h *Hub) watchWriting(id int64, dir string, run *fillRun, within time.Duration) {
+	tick := time.NewTicker(min(within/8, time.Second))
+	defer tick.Stop()
+	written, size := 0, int64(0)
+	for {
+		select {
+		case <-run.done:
+			return
+		case <-tick.C:
+		}
+		n := segmentCount(filepath.Join(dir, run.list))
+		var grown int64
+		if info, err := os.Stat(filepath.Join(dir, fillName(run.first+n)+".tmp")); err == nil {
+			grown = info.Size()
+		}
+		h.playMu.Lock()
+		if n != written || grown != size {
+			written, size = n, grown
+			run.wrote = time.Now()
+		}
+		stalled := time.Since(run.wrote) >= within
+		run.hung = run.hung || stalled
+		h.playMu.Unlock()
+		if stalled {
+			slog.Warn(fmt.Sprintf("recording %d: a fill wrote nothing in %v, stopping it", id, within))
+			h.stopFillRun(id, run, "wrote nothing")
+			return
+		}
+	}
+}
+
 // fillFailedLocked notes a fill encode that ended before its first segment.
 // One on the GPU moves to the processor, as the copy does. One that died on
-// the processor rests the copy's fills for fillRetryAfter; one that hung there
-// was stopped, and the next request starts another.
+// the processor rests the copy's fills for fillRetryAfter, and fillDeathsMax
+// in a row give them up; one that hung there was stopped, and the next request
+// starts another.
 func (h *Hub) fillFailedLocked(id int64, dir, encoder string, hung bool) {
 	src, ok := h.fillSrc[id]
 	if !ok || src.Graph.Encoder != encoder {
@@ -375,8 +435,13 @@ func (h *Hub) fillFailedLocked(id int64, dir, encoder string, hung bool) {
 		src.Graph = softwareGraph(src.Graph)
 		writeFillSource(dir, src)
 	} else if !hung {
-		slog.Warn(fmt.Sprintf("recording %d: a fill did not start on the processor.", id))
 		src.failed = time.Now()
+		src.deaths++
+		if src.deaths >= fillDeathsMax {
+			slog.Warn(fmt.Sprintf("recording %d: %d fills in a row did not start on the processor. Giving up on this copy's fills.", id, src.deaths))
+		} else {
+			slog.Warn(fmt.Sprintf("recording %d: a fill did not start on the processor.", id))
+		}
 	}
 	h.fillSrc[id] = src
 }
@@ -412,7 +477,7 @@ func (h *Hub) watchFill(id int64, run *fillRun) {
 		quiet := time.Since(run.seen) >= idle
 		h.playMu.Unlock()
 		if quiet {
-			h.stopFillRun(id, run)
+			h.stopFillRun(id, run, "idle")
 		}
 	}
 }
@@ -423,11 +488,12 @@ func (h *Hub) stopFill(id int64) {
 	runs := append([]*fillRun(nil), h.fillRuns[id]...)
 	h.playMu.Unlock()
 	for _, run := range runs {
-		h.stopFillRun(id, run)
+		h.stopFillRun(id, run, "copy replaced, removed, or shutting down")
 	}
 }
 
-func (h *Hub) stopFillRun(id int64, run *fillRun) {
+func (h *Hub) stopFillRun(id int64, run *fillRun, why string) {
+	slog.Debug(fmt.Sprintf("recording %d: fill from %d stopped: %s", id, run.first, why))
 	h.playMu.Lock()
 	run.stopped = true
 	h.dropFillRunLocked(id, run)

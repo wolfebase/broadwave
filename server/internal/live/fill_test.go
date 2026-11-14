@@ -1,6 +1,7 @@
 package live
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,6 +36,13 @@ const (
 	refuseGPU  = "case \" $* \" in\n*h264_vaapi*) exit 1 ;;\nesac\n"
 	firstDies  = "if [ ! -f once ]; then touch once; exit 1; fi\n"
 	firstHangs = "if [ ! -f once ]; then touch once; exec sleep 60; fi\n"
+	alwaysDies = "exit 1\n"
+	// stallsLater writes its first two segments, then nothing, the first time.
+	stallsLater = "if [ ! -f once ]; then touch once\nn=0; prev=''; list=''\nfor a in \"$@\"; do\n[ \"$prev\" = -start_number ] && n=$a\nprev=$a; list=$a\ndone\n" +
+		"for i in 1 2; do\nf=$(printf 'fill%05d.ts' $n)\necho x > $f.tmp && mv $f.tmp $f\nprintf '#EXTINF:2.000,\\n%s\\n' $f >> $list\nn=$((n+1))\ndone\nexec sleep 60\nfi\n"
+	// slowStart writes its first segment's .tmp a little at a time for 1.5 s.
+	slowStart = "f=$(printf 'fill%05d.ts' $(echo \"$*\" | sed 's/.*-start_number \\([0-9]*\\).*/\\1/'))\n" +
+		"for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do echo x >> $f.tmp; sleep 0.1; done\n"
 )
 
 func fillHub(t *testing.T, encoder, quirk string) (*Hub, string, string) {
@@ -125,8 +133,9 @@ func TestAFillThatDiedIsTriedAgain(t *testing.T) {
 	fillRetryAfter = 300 * time.Millisecond
 	t.Cleanup(func() { fillRetryAfter = prev })
 	h, _, fills := fillHub(t, "libx264", firstDies)
-	if path, err := h.FillSegment(t.Context(), 1, 4); err == nil {
-		t.Fatalf("a fill that died came back: %s", path)
+	// Resting is late, not gone: a player that gets a 404 may give up.
+	if path, err := h.FillSegment(t.Context(), 1, 4); !errors.Is(err, ErrFillLate) {
+		t.Fatalf("a fill that died: %q %v", path, err)
 	}
 	time.Sleep(400 * time.Millisecond)
 	getFill(t, h, 4)
@@ -144,6 +153,74 @@ func TestAFillThatHangsIsReplaced(t *testing.T) {
 	t.Cleanup(func() { fillWait, fillFirstWithin = prevWait, prevFirst })
 	h, _, fills := fillHub(t, "libx264", firstHangs)
 	getFill(t, h, 4)
+	if n := len(fillStarts(fills)); n != 2 {
+		t.Fatalf("%d fill encodes, want 2", n)
+	}
+}
+
+// A slow start that is writing its first segment is not a hang: one on a busy
+// processor or a slow disk was stopped and started again for good.
+func TestASlowFillIsNotStopped(t *testing.T) {
+	prevWait, prevFirst := fillWait, fillFirstWithin
+	fillWait, fillFirstWithin = 5*time.Second, 500*time.Millisecond
+	t.Cleanup(func() { fillWait, fillFirstWithin = prevWait, prevFirst })
+	h, _, fills := fillHub(t, "libx264", slowStart)
+	getFill(t, h, 4)
+	if n := len(fillStarts(fills)); n != 1 {
+		t.Fatalf("%d fill encodes for one slow start, want 1", n)
+	}
+}
+
+// A fill that died on the processor every time answered a 503 every 30 s for
+// good. Three in a row give the copy's fills up: a 404.
+func TestAFillThatKeepsDyingIsGivenUp(t *testing.T) {
+	prev := fillRetryAfter
+	fillRetryAfter = 50 * time.Millisecond
+	t.Cleanup(func() { fillRetryAfter = prev })
+	h, _, fills := fillHub(t, "libx264", alwaysDies)
+	var errs []error
+	for range 5 {
+		_, err := h.FillSegment(t.Context(), 1, 4)
+		errs = append(errs, err)
+		time.Sleep(100 * time.Millisecond)
+	}
+	for i, err := range errs {
+		want := ErrFillLate
+		if i >= fillDeathsMax-1 {
+			want = ErrFillGone
+		}
+		if !errors.Is(err, want) {
+			t.Fatalf("request %d: %v, want %v (all: %v)", i+1, err, want, errs)
+		}
+	}
+	if n := len(fillStarts(fills)); n != fillDeathsMax {
+		t.Fatalf("%d fill encodes, want %d", n, fillDeathsMax)
+	}
+}
+
+// A request gave up after 12 s while a slow fill was still writing its first
+// segment, and a hung one was only stopped after 20 s. A request waits while
+// its encode writes.
+func TestARequestWaitsWhileItsFillWrites(t *testing.T) {
+	prevWait, prevFirst := fillWait, fillFirstWithin
+	fillWait, fillFirstWithin = time.Second, 500*time.Millisecond
+	t.Cleanup(func() { fillWait, fillFirstWithin = prevWait, prevFirst })
+	h, _, fills := fillHub(t, "libx264", slowStart)
+	getFill(t, h, 4)
+	if n := len(fillStarts(fills)); n != 1 {
+		t.Fatalf("%d fill encodes for one slow start, want 1", n)
+	}
+}
+
+// Only a fill's first segment was watched: one that stalled after it was
+// kept alive by the requests waiting on it. Every segment is watched.
+func TestAFillThatStallsLaterIsReplaced(t *testing.T) {
+	prevWait, prevFirst := fillWait, fillFirstWithin
+	fillWait, fillFirstWithin = 3*time.Second, 500*time.Millisecond
+	t.Cleanup(func() { fillWait, fillFirstWithin = prevWait, prevFirst })
+	h, _, fills := fillHub(t, "libx264", stallsLater)
+	getFill(t, h, 4)
+	getFill(t, h, 6)
 	if n := len(fillStarts(fills)); n != 2 {
 		t.Fatalf("%d fill encodes, want 2", n)
 	}
