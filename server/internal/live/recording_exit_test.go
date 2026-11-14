@@ -221,3 +221,47 @@ func TestASecondShowOnAChannelIsItsOwnRecording(t *testing.T) {
 		t.Fatal("the tune stayed up after both recordings stopped")
 	}
 }
+
+// Pressing Record on a show a pass was already recording, or asking for it
+// again for longer, made a second file of the same show. It is the same
+// recording, running to the later end.
+func TestRecordingAShowAgainByHandExtendsIt(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "copy-ffmpeg")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nfor a; do out=$a; done\ncat > \"$out\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h, st, city := labTune(t, dir, bin)
+	first, err := h.RecordMeta(ctx, 30, store.Recording{ChannelID: city, Title: "Evening", PassID: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { h.StopRecord(first.ID) })
+	for _, minutes := range []int{60, 90, 45} {
+		again, err := h.RecordMeta(ctx, minutes, store.Recording{ChannelID: city, Title: "Evening"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if again.ID != first.ID {
+			t.Cleanup(func() { h.StopRecord(again.ID) })
+			t.Fatalf("Record for %d min made recording %d beside %d", minutes, again.ID, first.ID)
+		}
+	}
+	got, err := st.Recording(ctx, first.ID)
+	if err != nil || got.EndsAt == nil {
+		t.Fatal(err)
+	}
+	if left := time.Until(*got.EndsAt); left < 88*time.Minute || left > 91*time.Minute {
+		t.Fatalf("ends in %v, want the longest ask, 90 min", left)
+	}
+	// A pass's later airing of the same show is still its own recording.
+	next, err := h.RecordMeta(ctx, 180, store.Recording{ChannelID: city, Title: "Evening", PassID: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { h.StopRecord(next.ID) })
+	if next.ID == first.ID {
+		t.Fatal("a pass's later airing was taken for the recording on")
+	}
+}

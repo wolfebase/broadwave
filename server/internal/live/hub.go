@@ -549,6 +549,15 @@ type recordingKey struct {
 	passID                     int64
 }
 
+// sameShow reports a recording of the show want asks for. One asked for by
+// hand (no pass) is the same show whichever pass, if any, started it.
+func (k recordingKey) sameShow(want recordingKey) bool {
+	if want.passID != 0 && k.passID != want.passID {
+		return false
+	}
+	return k.title == want.title && k.subtitle == want.subtitle && k.programID == want.programID
+}
+
 // pipeQueueCap bounds how far one encode or recording can fall behind the
 // tuner. Tuner reads are often a few KB, so a count of reads is no time budget.
 const pipeQueueCap = 32 << 20
@@ -2704,19 +2713,27 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 	if meta.EndsAt != nil && meta.EndsAt.After(time.Now()) && meta.EndsAt.Before(ends) {
 		ends = *meta.EndsAt
 	}
-	// The same show asked for again is the recording already on it. Another
-	// show on the channel (back to back with padding, or after a game that
-	// ran long) is a recording of its own.
+	// The same show asked for again is the recording already on it, and a
+	// later end asked for by hand moves its end. Another show on the channel
+	// (back to back with padding, or after a game that ran long) is a
+	// recording of its own, and so is a pass's later airing of the same show.
 	key := recordingKey{title: strings.ToLower(title), subtitle: meta.Subtitle, programID: meta.ProgramID, passID: meta.PassID}
 	for _, rec := range f.recordings {
-		if rec.key == key && !rec.ends.Before(ends.Add(-2*time.Minute)) {
-			h.mu.Unlock()
-			<-rec.ready
-			if rec.id == 0 {
-				return store.Recording{}, errors.New("the recording did not start")
-			}
-			return h.Store.Recording(ctx, rec.id)
+		later := ends.After(rec.ends.Add(2 * time.Minute))
+		if !rec.key.sameShow(key) || later && meta.PassID != 0 {
+			continue
 		}
+		h.mu.Unlock()
+		<-rec.ready
+		if rec.id == 0 {
+			return store.Recording{}, errors.New("the recording did not start")
+		}
+		if later {
+			if err := h.ExtendRecording(ctx, rec.id, ends); err != nil {
+				return store.Recording{}, err
+			}
+		}
+		return h.Store.Recording(ctx, rec.id)
 	}
 	// A show already on starts from its beginning when the buffer holds it.
 	started := time.Now()
