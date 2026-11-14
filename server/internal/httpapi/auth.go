@@ -429,6 +429,9 @@ func (s *Server) giveBackCodeTry(r *http.Request, at time.Time) {
 				break
 			}
 		}
+		if len(s.pairHits[key]) == 0 {
+			delete(s.pairHits, key)
+		}
 	}
 }
 
@@ -454,6 +457,13 @@ func countRecent(at []time.Time, now time.Time, window time.Duration) int {
 
 func hitAllowed(hits map[string][]time.Time, key string, now time.Time, limit int, window time.Duration) bool {
 	cut := now.Add(-window)
+	// A client that went away leaves nothing behind once its window passes.
+	// Hits are in time order, so the last is the newest.
+	for other, at := range hits {
+		if other != key && (len(at) == 0 || !at[len(at)-1].After(cut)) {
+			delete(hits, other)
+		}
+	}
 	kept := hits[key][:0]
 	for _, at := range hits[key] {
 		if at.After(cut) {

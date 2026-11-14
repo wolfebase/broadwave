@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -675,5 +676,19 @@ func TestTwoAdminsRevokingEachOtherKeepOne(t *testing.T) {
 		if !has {
 			t.Fatalf("round %d: no admin left, codes %v", round, codes)
 		}
+	}
+}
+
+// Every address that ever asked to pair stayed in the map for good. One whose
+// window has passed goes the next time anyone asks.
+func TestPairingHitsForget(t *testing.T) {
+	hits := map[string][]time.Time{}
+	t0 := time.Now()
+	for i := range 1000 {
+		hitAllowed(hits, fmt.Sprintf("ip:10.0.%d.%d", i/256, i%256), t0, pairIPLimit, pairWindow)
+	}
+	hitAllowed(hits, "ip:10.9.9.9", t0.Add(pairWindow+time.Second), pairIPLimit, pairWindow)
+	if len(hits) != 1 {
+		t.Fatalf("%d keys after the window, want 1", len(hits))
 	}
 }
