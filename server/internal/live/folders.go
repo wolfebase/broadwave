@@ -133,11 +133,16 @@ func airYear(air string) string {
 }
 
 // busyPaths are the files of recordings in progress, a starting one's
-// included once it has a name.
+// included once it has a name, and a stopped one's until it is saved.
 func (h *Hub) busyPaths() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var busy []string
+	for path := range h.closing {
+		if path != "" {
+			busy = append(busy, path)
+		}
+	}
 	for _, f := range h.feedsLocked() {
 		for _, rec := range f.recordings {
 			if !rec.finished && rec.path != "" {

@@ -312,6 +312,9 @@ type Hub struct {
 	releasing sync.WaitGroup
 	// saving counts recordings being started or saved outside h.mu.
 	saving sync.WaitGroup
+	// closing are the files of stopped recordings still being saved: the copy
+	// may not have closed them, so a new recording must not take the name.
+	closing map[string]int
 }
 
 type mux struct {
@@ -4049,11 +4052,20 @@ func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText str
 		return func() {}
 	}
 	h.saving.Add(1)
+	if h.closing == nil {
+		h.closing = map[string]int{}
+	}
+	h.closing[rec.path]++
 	var once sync.Once
 	return func() {
 		once.Do(func() {
 			defer h.saving.Done()
 			h.saveRecording(rec, status, errText)
+			h.mu.Lock()
+			if h.closing[rec.path]--; h.closing[rec.path] <= 0 {
+				delete(h.closing, rec.path)
+			}
+			h.mu.Unlock()
 		})
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -106,5 +107,37 @@ func TestAShutdownDuringARecordingStartWaitsForIt(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("the start did not return")
+	}
+}
+
+// A stopped recording's name left the busy list before its copy closed the
+// file, so the same show started again in that second could take the name and
+// fail on a file that exists.
+func TestAStoppingRecordingKeepsItsName(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "slow-ffmpeg")
+	script := "#!/bin/sh\nfor a; do out=$a; done\ncat > \"$out\"\nsleep 1.5\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h, _, city := labTune(t, dir, bin)
+	rec, err := h.RecordMeta(ctx, 60, store.Recording{ChannelID: city, Title: "Evening"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stopped := make(chan struct{})
+	go func() {
+		h.StopRecord(rec.ID)
+		close(stopped)
+	}()
+	time.Sleep(300 * time.Millisecond)
+	busy := h.busyPaths()
+	<-stopped
+	if !slices.Contains(busy, rec.Path) {
+		t.Fatalf("busy %v while %s was being closed", busy, rec.Path)
+	}
+	if after := h.busyPaths(); slices.Contains(after, rec.Path) {
+		t.Fatalf("busy %v after the save", after)
 	}
 }
