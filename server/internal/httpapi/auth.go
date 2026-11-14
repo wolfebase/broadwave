@@ -245,7 +245,7 @@ func pairPollPath(path string) bool {
 func watchScope(method, path string) (string, bool) {
 	if method == http.MethodGet {
 		switch path {
-		case "/clock", "/groups", "/channels", "/frames", "/airings", "/schedule", "/playback",
+		case "/clock", "/groups", "/channels", "/frames", "/airings", "/now", "/schedule", "/playback",
 			"/search", "/sports/scoreboard", "/teams", "/passes", "/recordings", "/virtuals",
 			"/virtuals/schedule", "/ws":
 			return store.ScopeWatch, true

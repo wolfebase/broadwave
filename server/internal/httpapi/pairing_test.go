@@ -416,6 +416,10 @@ func TestRequiredScopeFailsClosed(t *testing.T) {
 	if got := requiredScope(http.MethodGet, "/api/channels"); got != store.ScopeWatch {
 		t.Fatalf("channels %s", got)
 	}
+	// What's on now is the guide: a watch device needed admin for it.
+	if got := requiredScope(http.MethodGet, "/api/v1/now"); got != store.ScopeWatch {
+		t.Fatalf("now %s", got)
+	}
 	if got := requiredScope(http.MethodPost, "/api/v1/passes"); got != store.ScopeRecord {
 		t.Fatalf("passes %s", got)
 	}
