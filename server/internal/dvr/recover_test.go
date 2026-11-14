@@ -82,7 +82,8 @@ func TestRecoverKeepsThePieceAndResumesAShowStillOn(t *testing.T) {
 func TestRecoverResumesACleanStopOnce(t *testing.T) {
 	st := openStore(t)
 	ctx := context.Background()
-	now := time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC)
+	// The stop's time is the clock's, and a resume starts after it.
+	now := time.Now().UTC().Truncate(time.Second)
 	ends := now.Add(30 * time.Minute)
 	first, err := st.CreateRecording(ctx, store.Recording{
 		ChannelID: 2, Title: "Game", Path: "a.ts", Status: "recording", StartedAt: now.Add(-time.Hour), EndsAt: &ends,
@@ -96,7 +97,7 @@ func TestRecoverResumesACleanStopOnce(t *testing.T) {
 	calls := 0
 	resume := func(rec store.Recording, left time.Duration) error {
 		calls++
-		_, err := st.CreateRecording(ctx, store.Recording{ChannelID: rec.ChannelID, Title: rec.Title, Path: "b.ts", Status: "recording", StartedAt: now, EndsAt: &ends})
+		_, err := st.CreateRecording(ctx, store.Recording{ChannelID: rec.ChannelID, Title: rec.Title, Path: "b.ts", Status: "recording", StartedAt: time.Now().Add(time.Second), EndsAt: &ends})
 		return err
 	}
 	if err := Recover(ctx, st, now, resume); err != nil {
@@ -299,7 +300,8 @@ func TestLiveTunersSkipQuietAndRetiredDevices(t *testing.T) {
 func TestResumedLaterIgnoresALaterEpisode(t *testing.T) {
 	now := time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC)
 	ends := now.Add(time.Hour)
-	cut := store.Recording{ID: 1, ChannelID: 2, Title: "Drama", StartedAt: now, EndsAt: &ends}
+	stopped := now.Add(20 * time.Minute)
+	cut := store.Recording{ID: 1, ChannelID: 2, Title: "Drama", Status: "interrupted", StartedAt: now, EndsAt: &ends, EndedAt: &stopped}
 	nextWeek := store.Recording{ID: 2, ChannelID: 2, Title: "Drama", StartedAt: now.Add(7 * 24 * time.Hour)}
 	if resumedLater([]store.Recording{cut, nextWeek}, cut) {
 		t.Fatal("a later episode counted as the resume")
@@ -307,5 +309,42 @@ func TestResumedLaterIgnoresALaterEpisode(t *testing.T) {
 	rest := store.Recording{ID: 3, ChannelID: 2, Title: "Drama", StartedAt: now.Add(30 * time.Minute)}
 	if !resumedLater([]store.Recording{cut, rest}, cut) {
 		t.Fatal("the second piece was not seen")
+	}
+}
+
+// Two games of one title on a channel, the first run long and the second
+// started beside it, were both cut by a restart. The second was taken for the
+// first one's resume, and the rest of the first was never recorded.
+func TestRecoverResumesTwoShowsThatOverlapped(t *testing.T) {
+	for _, clean := range []bool{false, true} {
+		st := openStore(t)
+		ctx := context.Background()
+		now := time.Now().UTC().Truncate(time.Second)
+		firstEnds, secondEnds := now.Add(30*time.Minute), now.Add(3*time.Hour)
+		first, err := st.CreateRecording(ctx, store.Recording{ChannelID: 2, Title: "Football", Path: "a.ts", Status: "recording", StartedAt: now.Add(-3 * time.Hour), EndsAt: &firstEnds})
+		if err != nil {
+			t.Fatal(err)
+		}
+		second, err := st.CreateRecording(ctx, store.Recording{ChannelID: 2, Title: "Football", Path: "b.ts", Status: "recording", StartedAt: now.Add(-10 * time.Minute), EndsAt: &secondEnds})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if clean {
+			for _, id := range []int64{first, second} {
+				if err := st.FinishRecording(ctx, id, "interrupted", restartNote); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		resumed := map[int64]bool{}
+		if err := Recover(ctx, st, now, func(rec store.Recording, left time.Duration) error {
+			resumed[rec.ID] = true
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if !resumed[first] || !resumed[second] {
+			t.Fatalf("clean stop %v: resumed %v, want both %d and %d", clean, resumed, first, second)
+		}
 	}
 }

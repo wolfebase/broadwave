@@ -265,3 +265,30 @@ func TestRecordingAShowAgainByHandExtendsIt(t *testing.T) {
 		t.Fatal("a pass's later airing was taken for the recording on")
 	}
 }
+
+// After a restart the rest of a game that ran long and the game after it, one
+// title and one pass, are both resumed. The second ask got the first one's
+// recording back because that one already ran past the end asked for.
+func TestTwoResumesOfOneTitleAreTwoRecordings(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "copy-ffmpeg")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nfor a; do out=$a; done\ncat > \"$out\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h, _, city := labTune(t, dir, bin)
+	late, early := time.Now().Add(3*time.Hour), time.Now().Add(30*time.Minute)
+	second, err := h.RecordMeta(ctx, 181, store.Recording{ChannelID: city, Title: "Football", PassID: 5, EndsAt: &late})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { h.StopRecord(second.ID) })
+	first, err := h.RecordMeta(ctx, 31, store.Recording{ChannelID: city, Title: "Football", PassID: 5, EndsAt: &early})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { h.StopRecord(first.ID) })
+	if first.ID == second.ID {
+		t.Fatal("the first game's rest was taken for the second game's recording")
+	}
+}

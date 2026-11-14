@@ -545,14 +545,17 @@ func (rec *recording) writeErr() error {
 
 // recordingKey is the show a recording was asked for.
 type recordingKey struct {
-	title, subtitle, programID string
-	passID                     int64
+	title, subtitle, programID, gameID string
+	passID                             int64
 }
 
 // sameShow reports a recording of the show want asks for. One asked for by
 // hand (no pass) is the same show whichever pass, if any, started it.
 func (k recordingKey) sameShow(want recordingKey) bool {
 	if want.passID != 0 && k.passID != want.passID {
+		return false
+	}
+	if k.gameID != "" && want.gameID != "" && k.gameID != want.gameID {
 		return false
 	}
 	return k.title == want.title && k.subtitle == want.subtitle && k.programID == want.programID
@@ -2717,10 +2720,14 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 	// later end asked for by hand moves its end. Another show on the channel
 	// (back to back with padding, or after a game that ran long) is a
 	// recording of its own, and so is a pass's later airing of the same show.
-	key := recordingKey{title: strings.ToLower(title), subtitle: meta.Subtitle, programID: meta.ProgramID, passID: meta.PassID}
+	key := recordingKey{title: strings.ToLower(title), subtitle: meta.Subtitle, programID: meta.ProgramID, gameID: meta.GameID, passID: meta.PassID}
 	for _, rec := range f.recordings {
 		later := ends.After(rec.ends.Add(2 * time.Minute))
-		if !rec.key.sameShow(key) || later && meta.PassID != 0 {
+		// A pass asks for one airing's end: another end is another airing,
+		// as after a restart the rest of a game that ran long and the game
+		// after it are both resumed.
+		other := meta.PassID != 0 && (later || ends.Before(rec.ends.Add(-2*time.Minute)))
+		if !rec.key.sameShow(key) || other {
 			continue
 		}
 		h.mu.Unlock()

@@ -57,12 +57,18 @@ func Recover(ctx context.Context, st *store.Store, now time.Time, resume func(st
 }
 
 // resumedLater is a later recording of the same show on the same channel,
-// started before this one was due to end: this one was already picked up.
-// Next week's episode of the same title is not a resume.
+// started after this one was cut and before it was due to end: this one was
+// already picked up. A resume always starts after the cut, so a recording
+// that ran beside this one (the next game, while this one ran long) is not
+// it, and a row still recording was cut by this restart and has none. Next
+// week's episode of the same title is not a resume.
 func resumedLater(recs []store.Recording, rec store.Recording) bool {
+	if rec.Status != "interrupted" || rec.EndedAt == nil {
+		return false
+	}
 	for _, other := range recs {
 		if other.ID > rec.ID && other.ChannelID == rec.ChannelID && strings.EqualFold(other.Title, rec.Title) &&
-			!other.StartedAt.Before(rec.StartedAt) && (rec.EndsAt == nil || other.StartedAt.Before(*rec.EndsAt)) {
+			!other.StartedAt.Before(*rec.EndedAt) && (rec.EndsAt == nil || other.StartedAt.Before(*rec.EndsAt)) {
 			return true
 		}
 	}
