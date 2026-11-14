@@ -64,7 +64,7 @@ func TestAWarmChannelGivesUpItsTuner(t *testing.T) {
 	copied := Rendition{Video: "copy", Audio: "copy"}
 
 	// One tuner records; the viewer has the other.
-	rec, err := h.Record(ctx, idOf(t, st, "4.1"), 2, "News")
+	rec, err := record(h, ctx, idOf(t, st, "4.1"), 2, "News")
 	if err != nil {
 		t.Fatal(err)
 	}

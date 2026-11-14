@@ -85,7 +85,7 @@ func TestEveryTuneLeavesTheHubFree(t *testing.T) {
 	}
 	cases := map[string]func(ctx context.Context, h *Hub, id int64) error{
 		"record": func(ctx context.Context, h *Hub, id int64) error {
-			rec, err := h.Record(ctx, id, 1, "News")
+			rec, err := record(h, ctx, id, 1, "News")
 			if err == nil {
 				h.StopRecord(rec.ID)
 			}
@@ -324,7 +324,7 @@ func TestARecordingTakesAWatchedTuner(t *testing.T) {
 	if _, err := h.Watch(ctx, idOf(t, st, "4.1"), want, false); err != nil {
 		t.Fatal(err)
 	}
-	rec, err := h.Record(ctx, idOf(t, st, "5.1"), 1, "News")
+	rec, err := record(h, ctx, idOf(t, st, "5.1"), 1, "News")
 	if err != nil {
 		t.Fatalf("the recording did not take the tuner: %v", err)
 	}

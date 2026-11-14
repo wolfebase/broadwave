@@ -2532,10 +2532,6 @@ func lingerFromEnv(d time.Duration) time.Duration {
 	return d
 }
 
-func (h *Hub) Record(ctx context.Context, channelID int64, minutes int, title string) (store.Recording, error) {
-	return h.RecordMeta(ctx, minutes, store.Recording{ChannelID: channelID, Title: title})
-}
-
 // maxRecordMinutes is the longest a recording starts for, so a listing that
 // runs for days or a huge request cannot hold a tuner for good.
 const maxRecordMinutes = 24 * 60
@@ -2916,14 +2912,10 @@ func (h *Hub) recordingPath(rec store.Recording, ch store.SourceChannel, byShow 
 	return path
 }
 
-// uniquePath adds -2, -3, ... when a recording file already exists. Names are
-// per second, and ffmpeg refuses to overwrite, so two recordings of one channel
-// started in the same second would otherwise lose the second one.
-func uniquePath(path string) string {
-	return freePath(path, func(string) bool { return false })
-}
-
-// freePath is uniquePath that also passes over names taken reports in use.
+// freePath adds -2, -3, ... when a recording file already exists or taken
+// reports the name in use. Names are per second, and ffmpeg refuses to
+// overwrite, so two recordings of one channel started in the same second
+// would otherwise lose the second one.
 func freePath(path string, taken func(string) bool) string {
 	free := func(candidate string) bool {
 		_, err := os.Lstat(candidate)

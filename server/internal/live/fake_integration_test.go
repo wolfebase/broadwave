@@ -92,7 +92,7 @@ func TestFakeTunerSharesFrequencyAndYields(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("scan did not start")
 	}
-	rec, err := h.Record(ctx, a, 2, "News")
+	rec, err := record(h, ctx, a, 2, "News")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestFakeTunerSharesFrequencyAndYields(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("a recording did not stop the scan")
 	}
-	if _, err := h.Record(ctx, b, 2, "News 2"); err != nil {
+	if _, err := record(h, ctx, b, 2, "News 2"); err != nil {
 		t.Fatal(err)
 	}
 	tuners, err := h.Tuners(ctx)
@@ -129,10 +129,10 @@ func TestFakeTunerSharesFrequencyAndYields(t *testing.T) {
 	if len(plan.Blocked) != 0 {
 		t.Fatalf("two frequencies fit on two tuners: %+v", plan.Blocked)
 	}
-	if _, err := h.Record(ctx, c, 2, "Other"); err != nil {
+	if _, err := record(h, ctx, c, 2, "Other"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.Record(ctx, d, 2, "Third"); err == nil {
+	if _, err := record(h, ctx, d, 2, "Third"); err == nil {
 		t.Fatal("expected both tuners to be busy")
 	}
 	until := time.Now().Add(5 * time.Minute)
@@ -179,7 +179,7 @@ func TestFakeTunerSharesFrequencyAndYields(t *testing.T) {
 	if err != nil || left.Status != "failed" {
 		t.Fatalf("restart should close the cut-off recording: %+v %v", left.Status, err)
 	}
-	again, err := h.Record(ctx, c, 2, "Still on")
+	again, err := record(h, ctx, c, 2, "Still on")
 	if err != nil || again.Status != "recording" {
 		t.Fatalf("resume %+v %v", again.Status, err)
 	}

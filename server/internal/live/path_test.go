@@ -1,10 +1,22 @@
 package live
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"broadwave/internal/store"
 )
+
+// record starts a recording of a channel by title alone.
+func record(h *Hub, ctx context.Context, channelID int64, minutes int, title string) (store.Recording, error) {
+	return h.RecordMeta(ctx, minutes, store.Recording{ChannelID: channelID, Title: title})
+}
+
+func uniquePath(path string) string {
+	return freePath(path, func(string) bool { return false })
+}
 
 func TestUniquePathNeverReusesAFile(t *testing.T) {
 	dir := t.TempDir()
