@@ -217,10 +217,12 @@ func (m *Manager) StartLogin(purpose string) (Status, error) {
 		LoginURL:  m.Endpoints.Dash + "/argotunnel?" + q.Encode(),
 		ExpiresAt: expires,
 	}
+	// The sign-in can land before this returns; the caller gets the link it asked for.
+	started := m.st
 	m.mu.Unlock()
 	go m.wait(ctx, gen, key, purpose)
 	m.changed()
-	return m.Status(), nil
+	return started, nil
 }
 
 // Cancel stops a sign-in, drops the certificate, and clears an error.
