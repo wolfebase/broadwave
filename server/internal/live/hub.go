@@ -21,7 +21,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"broadwave/internal/disk"
@@ -518,6 +517,20 @@ type recording struct {
 	// exited is closed by watchRecording after Wait, and before that watch
 	// takes h.mu. Nil when this recording writes the broadcast itself.
 	exited chan struct{}
+	// werr is the first write error of a recording that writes its own file.
+	// A later close must not clear it.
+	werr atomic.Pointer[error]
+}
+
+func (rec *recording) noteWriteErr(err error) {
+	rec.werr.CompareAndSwap(nil, &err)
+}
+
+func (rec *recording) writeErr() error {
+	if p := rec.werr.Load(); p != nil {
+		return *p
+	}
+	return nil
 }
 
 // recordingKey is the show a recording was asked for.
@@ -531,14 +544,15 @@ type recordingKey struct {
 const pipeQueueCap = 32 << 20
 
 type pipeSub struct {
-	w        io.WriteCloser
-	ch       chan []byte
-	done     chan struct{}
-	once     sync.Once
-	queued   atomic.Int64
-	lost     int64 // readLoop only
-	logged   time.Time
-	diskFull atomic.Bool // a write hit a full disk; a later close must not clear it
+	w      io.WriteCloser
+	ch     chan []byte
+	done   chan struct{}
+	once   sync.Once
+	queued atomic.Int64
+	lost   int64 // readLoop only
+	logged time.Time
+	// failed, when set, hears a write error that came before a stop.
+	failed func(error)
 }
 
 // offer queues chunk, or drops it when this reader is too far behind, so one
@@ -2702,7 +2716,7 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 	var stdin io.WriteCloser
 	path := row.Path
 	if input == "pipe:0" && rawRecording(f.channel) {
-		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		file, err := createRecording(path)
 		if err != nil {
 			h.abortRecordingLocked(ctx, f, id)
 			return store.Recording{}, err
@@ -2736,14 +2750,20 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 		rec.backfilling = true
 		go h.backfill(muxOf(h, f), rec, from)
 	} else {
-		if stdin != nil {
-			rec.sub = h.attachPipe(muxOf(h, f), stdin, true)
+		if m := muxOf(h, f); stdin != nil {
+			rec.sub = h.recordingPipe(m, rec, func() ([]byte, bool) { return m.copyLeadLocked(), true })
 		}
 		h.armRecordingStopLocked(rec)
 	}
 	h.changed()
 	startedOK = true
 	return h.Store.Recording(ctx, id)
+}
+
+// createRecording makes the file a raw recording writes. Tests stand in for a
+// disk that fills.
+var createRecording = func(path string) (io.WriteCloser, error) {
+	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 }
 
 // rawRecording writes the program's own packets instead of an ffmpeg copy.
@@ -3123,7 +3143,25 @@ func (h *Hub) attachPipe(m *mux, w io.WriteCloser, lead bool) *pipeSub {
 // nothing is subscribed and the result is nil. After the tune has ended, w
 // is closed at once.
 func (h *Hub) attachPipeHead(m *mux, w io.WriteCloser, head func() ([]byte, bool)) *pipeSub {
-	sub := newPipeSub(w)
+	return h.joinPipe(m, newPipeSub(w), head)
+}
+
+// recordingPipe is attachPipeHead for a recording. One that writes its own
+// file fails on a write error: it would stay recording, hold its tuner, and
+// end complete with nothing written.
+func (h *Hub) recordingPipe(m *mux, rec *recording, head func() ([]byte, bool)) *pipeSub {
+	sub := newPipeSub(rec.stdin)
+	if rec.cmd == nil {
+		sub.failed = func(err error) {
+			rec.noteWriteErr(err)
+			go h.failRecording(rec, nil)
+		}
+	}
+	return h.joinPipe(m, sub, head)
+}
+
+func (h *Hub) joinPipe(m *mux, sub *pipeSub, head func() ([]byte, bool)) *pipeSub {
+	w := sub.w
 	if m == nil {
 		sub.stop()
 		_ = w.Close()
@@ -3189,8 +3227,13 @@ func (m *mux) deliver(sub *pipeSub) {
 			}
 			sub.queued.Add(-int64(len(chunk)))
 			if _, err := w.Write(chunk); err != nil {
-				if errors.Is(err, syscall.ENOSPC) {
-					sub.diskFull.Store(true)
+				select {
+				case <-sub.done:
+					// Stopped: the writer was closed under it.
+				default:
+					if sub.failed != nil {
+						sub.failed(err)
+					}
 				}
 				return
 			}
@@ -3872,10 +3915,10 @@ func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText str
 			_ = rec.cmd.Process.Kill()
 		}
 	}
-	if status == "complete" && rec.sub != nil && rec.sub.diskFull.Load() {
+	if err := rec.writeErr(); err != nil && status == "complete" {
 		status = "failed"
 		if errText == "" {
-			errText = (&disk.WriteError{Full: true}).Error()
+			errText = disk.ClassifyWrite(err).Error()
 		}
 	}
 	f.dropRecording(rec)
@@ -3895,6 +3938,30 @@ func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText str
 		if h.OnSaved != nil && status == "complete" {
 			go h.OnSaved(saved)
 		}
+	}
+}
+
+// failRecording ends a recording whose file took no more writes (a full
+// disk, a share that went away) as failed, so the DVR tries it again, and
+// lets the tuner go.
+// err is noted only here, under h.mu, when the stop may have closed the file.
+func (h *Hub) failRecording(rec *recording, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if rec.finished {
+		return
+	}
+	if err != nil {
+		rec.noteWriteErr(err)
+	}
+	for _, f := range h.feedsLocked() {
+		if f.recordingByID(rec.id) != rec {
+			continue
+		}
+		slog.Error(fmt.Sprintf("recording %d on %s: %v", rec.id, f.channel.GuideNumber, rec.writeErr()))
+		h.finishRecordingLocked(f, rec, "failed", disk.ClassifyWrite(rec.writeErr()).Error())
+		h.dropIfUnusedLocked(f)
+		return
 	}
 }
 

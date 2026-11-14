@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -146,8 +147,10 @@ func ringStart(m *mux, from, now time.Time) (int64, time.Time, bool) {
 // ring moved them to disk meanwhile the copy runs again.
 func (h *Hub) backfill(m *mux, rec *recording, pos int64) {
 	var sub *pipeSub
+	out := &watchedWriter{w: rec.stdin}
+	live := func(head func() ([]byte, bool)) *pipeSub { return h.recordingPipe(m, rec, head) }
 	for sub == nil {
-		n, err := m.ring.Copy(rec.stdin, pos, m.ring.Received())
+		n, err := m.ring.Copy(out, pos, m.ring.Received())
 		pos += n
 		switch {
 		case errors.Is(err, ring.ErrGone):
@@ -155,20 +158,47 @@ func (h *Hub) backfill(m *mux, rec *recording, pos int64) {
 			if !ok || next <= pos {
 				// The ring closed, started over, or cannot read its file.
 				slog.Warn(fmt.Sprintf("mux %d: recording %d joined live with a gap: %v", m.freq, rec.id, err))
-				sub = h.attachPipe(m, rec.stdin, false)
+				sub = live(nil)
 				continue
 			}
 			slog.Warn(fmt.Sprintf("mux %d: recording %d skipped %d MB the buffer had already dropped", m.freq, rec.id, (next-pos)>>20))
 			pos = next
 			continue
-		case err != nil:
-			// The recording closed its input.
+		case out.err != nil && rec.cmd == nil:
+			// A recording that writes its own file and can't fails, as it
+			// would live.
+			h.failRecording(rec, out.err)
 			h.endBackfill(m, rec, nil)
 			return
+		case out.err != nil:
+			// The copy closed its input: it stopped, or it died and its
+			// watch fails it.
+			h.endBackfill(m, rec, nil)
+			return
+		case err != nil:
+			// The buffer's file can't be read.
+			slog.Warn(fmt.Sprintf("mux %d: recording %d joined live with a gap: %v", m.freq, rec.id, err))
+			sub = live(nil)
+			continue
 		}
-		sub = h.attachPipeHead(m, rec.stdin, func() ([]byte, bool) { return m.ring.PendingFrom(pos) })
+		sub = live(func() ([]byte, bool) { return m.ring.PendingFrom(pos) })
 	}
 	h.endBackfill(m, rec, sub)
+}
+
+// watchedWriter keeps the first write error, telling it apart from a read
+// error on the buffer's side of a copy.
+type watchedWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (w *watchedWriter) Write(b []byte) (int, error) {
+	n, err := w.w.Write(b)
+	if err != nil && w.err == nil {
+		w.err = err
+	}
+	return n, err
 }
 
 // endBackfill gives the recording its live subscriber and its stop timer,

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"syscall"
@@ -460,11 +461,15 @@ func (w *failWriter) Close() error {
 	return nil
 }
 
-func stopAfterWrite(t *testing.T, h *Hub, m *mux, f *feed, id int64, path string, w *failWriter) {
+// stopAfterWrite stops a recording after a write to w failed. cmd is its
+// ffmpeg copy, or nil for one that writes its own file.
+func stopAfterWrite(t *testing.T, h *Hub, m *mux, f *feed, id int64, path string, w *failWriter, cmd *exec.Cmd) {
 	t.Helper()
 	h.mu.Lock()
-	sub := h.attachPipeLocked(m, w)
-	f.recordings = []*recording{&recording{id: id, path: path, stdin: w, sub: sub, ends: time.Now().Add(time.Hour)}}
+	rec := &recording{id: id, path: path, cmd: cmd, stdin: w, ends: time.Now().Add(time.Hour)}
+	rec.sub = h.recordingPipe(m, rec, nil)
+	f.recordings = []*recording{rec}
+	sub := rec.sub
 	h.mu.Unlock()
 	sub.ch <- []byte{0x47}
 	select {
@@ -495,7 +500,7 @@ func TestRecordingThatHitsENOSPCIsNotComplete(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := &failWriter{err: syscall.ENOSPC, closed: make(chan struct{})}
-	stopAfterWrite(t, h, m, f, id, dir+"/news.ts", w)
+	stopAfterWrite(t, h, m, f, id, dir+"/news.ts", w, nil)
 	got, err := st.Recording(context.Background(), id)
 	if err != nil {
 		t.Fatal(err)
@@ -525,7 +530,8 @@ func TestRecordingStopWithAClosedPipeStaysComplete(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := &failWriter{err: io.ErrClosedPipe, closed: make(chan struct{})}
-	stopAfterWrite(t, h, m, f, id, dir+"/news.ts", w)
+	// The copy's stdin closes as it exits; its watch says how it ended.
+	stopAfterWrite(t, h, m, f, id, dir+"/news.ts", w, &exec.Cmd{})
 	got, err := st.Recording(context.Background(), id)
 	if err != nil {
 		t.Fatal(err)
