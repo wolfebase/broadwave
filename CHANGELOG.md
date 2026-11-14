@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.2
+
+### Fixed
+
+- Server: a recording's poster is a picture from the show. It was the frame 2 s in, which on a recording that starts in a break was often an ad's flat end card, so the card showed one blank colour. The poster is now the first of a few frames 10% to 60% through (out of known breaks) that has a scene in it, a recording with only flat frames gets no poster until it is looked at again, and posters made before are made again once.
+
 ## 0.18.1 — 2026-11-14
 
 ### Fixed
