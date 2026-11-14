@@ -94,7 +94,7 @@ func TestRecordingPathPicksTheLayout(t *testing.T) {
 	// first one's file only after it starts, so the name in use is taken.
 	game := store.Recording{Title: "College Football", StartedAt: rec.StartedAt}
 	first := h.recordingPath(game, ch, true)
-	h.channels = map[int64]*feed{1: {recording: &recording{id: 7, path: first}}}
+	h.channels = map[int64]*feed{1: {recordings: []*recording{&recording{id: 7, path: first}}}}
 	if second := h.recordingPath(game, ch, true); second == first || second != strings.TrimSuffix(first, ".ts")+"-2.ts" {
 		t.Fatalf("second game got %s (first %s)", second, first)
 	}
@@ -212,7 +212,7 @@ func TestRemovingTheLastEpisodeTakesItsEmptyFolders(t *testing.T) {
 	if err := os.WriteFile(first, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	h.channels = map[int64]*feed{1: {recording: &recording{id: 3, path: second}}}
+	h.channels = map[int64]*feed{1: {recordings: []*recording{&recording{id: 3, path: second}}}}
 	h.RemoveRecordingFiles(store.Recording{ID: 1, Path: first})
 	if _, err := os.Stat(season); err != nil {
 		t.Fatalf("the folder of a recording in progress went: %v", err)

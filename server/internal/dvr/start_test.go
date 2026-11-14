@@ -89,9 +89,16 @@ func TestAFinishedEpisodeDoesNotBlockTheNextOne(t *testing.T) {
 	if !start {
 		t.Fatal("second episode was not started")
 	}
+	// The episode before, still in its padding, used to block this one, which
+	// then started only from the buffer, or never without one.
 	open := done
 	open.Status = "recording"
-	if !already([]store.Recording{open}, second) {
-		t.Fatal("a recording still in progress must block the next start")
+	if already([]store.Recording{open}, pass, second) {
+		t.Fatal("the episode before must not block this one: the two record side by side")
+	}
+	mine := open
+	mine.StartedAt = secondStart.Add(-time.Minute)
+	if !already([]store.Recording{open, mine}, pass, second) {
+		t.Fatal("this airing's own recording in progress blocks a second start")
 	}
 }

@@ -20,8 +20,8 @@ func TestFeedStatsCountsViewersAndProcesses(t *testing.T) {
 			"b": {viewers: 1},
 			"c": waited,
 		},
-		recording: &recording{cmd: running},
-		exports:   3,
+		recordings: []*recording{&recording{cmd: running}},
+		exports:    3,
 	}
 	h.channels[7] = feed
 	h.channels[8] = feed

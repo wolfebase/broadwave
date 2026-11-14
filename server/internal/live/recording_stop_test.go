@@ -30,7 +30,7 @@ func TestExtendRecordingLeavesTheTimerItReplaced(t *testing.T) {
 	}
 	defer unlock()
 
-	armed := h.channels[id].recording.timer
+	armed := h.channels[id].recordings[0].timer
 	if armed == nil {
 		t.Fatal("no stop timer")
 	}
@@ -84,7 +84,7 @@ func TestExtendRecordingLeavesTheTimerItReplaced(t *testing.T) {
 	}
 	h.mu.Lock()
 	held := h.channels[id] != nil && len(h.muxes) == 1
-	timer := h.channels[id].recording.timer
+	timer := h.channels[id].recordings[0].timer
 	waiting := timer != nil && timer.Reset(30*time.Millisecond)
 	h.mu.Unlock()
 	if !held {
@@ -156,11 +156,11 @@ func cityRecording(t *testing.T) (*Hub, *store.Store, int64) {
 	m.feeds["8.1"] = f
 	h.muxes[freq] = m
 	h.channels[city] = f
-	f.recording = &recording{id: id, ends: ends}
+	f.recordings = []*recording{&recording{id: id, ends: ends}}
 	t.Cleanup(func() {
 		h.mu.Lock()
-		if live := h.channels[city]; live != nil && live.recording != nil {
-			stopTimer(&live.recording.timer)
+		if live := h.channels[city]; live != nil && live.recordingNow() {
+			stopTimer(&live.recordings[0].timer)
 		}
 		h.mu.Unlock()
 	})

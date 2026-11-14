@@ -96,11 +96,8 @@ func markUnderway(items []Planned, passes []store.Pass, recs []store.Recording, 
 		if items[i].Skipped || !air.Now.After(a.Start.Add(recordLead)) || !a.End.After(air.Now) {
 			continue
 		}
-		if already(recs, a) || waiting[keyOfWait(a.ChannelID, a.Start)] {
-			continue
-		}
 		pass, ok := passByID(passes, items[i].PassID)
-		if !ok || retriesLeft(recs, pass, a, air.Now) {
+		if !ok || already(recs, pass, a) || waiting[keyOfWait(a.ChannelID, a.Start)] || retriesLeft(recs, pass, a, air.Now) {
 			continue
 		}
 		if air.Held != nil && !attempted(recs, pass, a) {

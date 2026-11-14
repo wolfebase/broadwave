@@ -166,3 +166,58 @@ func waitPID(t *testing.T, path string) int {
 	})
 	return pid
 }
+
+// A second show asked for on a channel already recording got the first
+// show's row back, and nothing recorded it. Each records to its own file, and
+// stopping one leaves the other and the tune going.
+func TestASecondShowOnAChannelIsItsOwnRecording(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "copy-ffmpeg")
+	script := "#!/bin/sh\nfor a; do out=$a; done\ncat > \"$out\"\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h, st, city := labTune(t, dir, bin)
+	first, err := h.RecordMeta(ctx, 60, store.Recording{ChannelID: city, Title: "Evening"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { h.StopRecord(first.ID) })
+	second, err := h.RecordMeta(ctx, 60, store.Recording{ChannelID: city, Title: "Late"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { h.StopRecord(second.ID) })
+	if second.ID == first.ID || second.Title != "Late" || second.Path == first.Path {
+		t.Fatalf("second show got %+v, first %+v", second, first)
+	}
+	again, err := h.RecordMeta(ctx, 60, store.Recording{ChannelID: city, Title: "evening"})
+	if err != nil || again.ID != first.ID {
+		t.Fatalf("the same show asked again: %+v %v, want recording %d", again, err, first.ID)
+	}
+	h.StopRecord(first.ID)
+	if got, _ := st.Recording(ctx, first.ID); got.Status != "complete" {
+		t.Fatalf("first: %s", got.Status)
+	}
+	if got, _ := st.Recording(ctx, second.ID); got.Status != "recording" {
+		t.Fatalf("second after the first stopped: %s", got.Status)
+	}
+	h.mu.Lock()
+	f := h.channels[city]
+	still := f != nil && len(f.recordings) == 1 && f.recordings[0].id == second.ID && !f.recordings[0].finished
+	h.mu.Unlock()
+	if !still {
+		t.Fatal("stopping the first show stopped the second or let the tune go")
+	}
+	h.StopRecord(second.ID)
+	if got, _ := st.Recording(ctx, second.ID); got.Status != "complete" {
+		t.Fatalf("second: %s", got.Status)
+	}
+	h.mu.Lock()
+	left := len(h.muxes)
+	h.mu.Unlock()
+	if left != 0 {
+		t.Fatal("the tune stayed up after both recordings stopped")
+	}
+}

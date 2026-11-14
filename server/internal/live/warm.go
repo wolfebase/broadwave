@@ -262,7 +262,7 @@ func (h *Hub) guessGuidesLocked() map[string]bool {
 			continue
 		}
 		for g, f := range m.feeds {
-			if f.recording != nil || f.tuneHeld() || f.heldOutside() || len(f.renditions) == 0 {
+			if f.recordingNow() || f.tuneHeld() || f.heldOutside() || len(f.renditions) == 0 {
 				continue
 			}
 			guess := true
@@ -340,7 +340,7 @@ func (h *Hub) warmTune(ctx context.Context, ch store.SourceChannel) {
 	// A guess a watch joined, or a recording took, is no longer one.
 	guesses := h.guessTunes[:0]
 	for _, g := range h.guessTunes {
-		if h.channels[g.channel.ID] == g && len(g.renditions) == 0 && g.recording == nil {
+		if h.channels[g.channel.ID] == g && len(g.renditions) == 0 && !g.recordingNow() {
 			guesses = append(guesses, g)
 		}
 	}

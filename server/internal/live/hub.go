@@ -384,8 +384,10 @@ type feed struct {
 	// then (TunerLinger); linger is the timer that lets it go.
 	lingerUntil time.Time
 	linger      *time.Timer
-	recording   *recording
-	tracks      []AudioTrack
+	// recordings are in progress, each its own subscriber and file: back to
+	// back shows overlap by their padding, and a game can run into the next.
+	recordings []*recording
+	tracks     []AudioTrack
 	// stored is the audio measured on the last tune, then on this one. It
 	// vouches for a track this tune has not measured yet.
 	stored []AudioTrack
@@ -497,6 +499,7 @@ type rendition struct {
 
 type recording struct {
 	id    int64
+	key   recordingKey
 	path  string
 	cmd   *exec.Cmd
 	stdin io.WriteCloser
@@ -515,6 +518,12 @@ type recording struct {
 	// exited is closed by watchRecording after Wait, and before that watch
 	// takes h.mu. Nil when this recording writes the broadcast itself.
 	exited chan struct{}
+}
+
+// recordingKey is the show a recording was asked for.
+type recordingKey struct {
+	title, subtitle, programID string
+	passID                     int64
 }
 
 // pipeQueueCap bounds how far one encode or recording can fall behind the
@@ -2631,8 +2640,23 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 	if err != nil {
 		return store.Recording{}, err
 	}
-	if f.recording != nil {
-		return h.Store.Recording(ctx, f.recording.id)
+	if title == "" {
+		title = f.channel.DisplayName
+	}
+	ends := time.Now().Add(time.Duration(minutes) * time.Minute)
+	// A planned end (the rest of a show after a restart) wins over the
+	// whole minutes, which round up.
+	if meta.EndsAt != nil && meta.EndsAt.After(time.Now()) && meta.EndsAt.Before(ends) {
+		ends = *meta.EndsAt
+	}
+	// The same show asked for again is the recording already on it. Another
+	// show on the channel (back to back with padding, or after a game that
+	// ran long) is a recording of its own.
+	key := recordingKey{title: strings.ToLower(title), subtitle: meta.Subtitle, programID: meta.ProgramID, passID: meta.PassID}
+	for _, rec := range f.recordings {
+		if rec.key == key && !rec.ends.Before(ends.Add(-2*time.Minute)) {
+			return h.Store.Recording(ctx, rec.id)
+		}
 	}
 	dir := h.Recordings()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -2644,15 +2668,6 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 	from, at, backfill := ringStart(muxOf(h, f), meta.StartedAt, started)
 	if backfill {
 		started = at
-	}
-	ends := time.Now().Add(time.Duration(minutes) * time.Minute)
-	// A planned end (the rest of a show after a restart) wins over the
-	// whole minutes, which round up.
-	if meta.EndsAt != nil && meta.EndsAt.After(time.Now()) && meta.EndsAt.Before(ends) {
-		ends = *meta.EndsAt
-	}
-	if title == "" {
-		title = f.channel.DisplayName
 	}
 	if meta.GameID == "" {
 		meta.GameID = h.Store.AiringGame(ctx, channelID, title, time.Now())
@@ -2709,11 +2724,11 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 		}
 		NotePID(h.Dir, cmd.Process.Pid)
 	}
-	rec := &recording{id: id, path: path, cmd: cmd, stdin: stdin, ends: ends}
+	rec := &recording{id: id, key: key, path: path, cmd: cmd, stdin: stdin, ends: ends}
 	if cmd != nil {
 		rec.exited = make(chan struct{})
 	}
-	f.recording = rec
+	f.recordings = append(f.recordings, rec)
 	if cmd != nil {
 		go h.watchRecording(f, rec, cmd)
 	}
@@ -2748,15 +2763,15 @@ func (h *Hub) Shutdown() {
 		h.stopMosaicLocked(mo)
 	}
 	for _, f := range h.feedsLocked() {
-		if f.recording != nil {
+		for _, rec := range slices.Clone(f.recordings) {
 			// A show still on is cut short, not finished: the next start
 			// records the rest (dvr.Recover), and neither piece counts as
 			// the episode.
 			status, note := "complete", ""
-			if time.Until(f.recording.ends) > 30*time.Second {
+			if time.Until(rec.ends) > 30*time.Second {
 				status, note = "interrupted", "Stopped when the server restarted."
 			}
-			h.finishRecordingLocked(f, status, note)
+			h.finishRecordingLocked(f, rec, status, note)
 		}
 		h.stopFeedLocked(f)
 	}
@@ -2785,8 +2800,10 @@ func (h *Hub) recordingPath(rec store.Recording, ch store.SourceChannel, byShow 
 	root := h.Recordings()
 	var busy []string
 	for _, f := range h.feedsLocked() {
-		if f.recording != nil && !f.recording.finished {
-			busy = append(busy, f.recording.path)
+		for _, rec := range f.recordings {
+			if !rec.finished {
+				busy = append(busy, rec.path)
+			}
 		}
 	}
 	taken := func(path string) bool {
@@ -2846,8 +2863,8 @@ func (h *Hub) StopRecord(id int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, f := range h.feedsLocked() {
-		if f.recording != nil && f.recording.id == id {
-			h.finishRecordingLocked(f, "complete", "")
+		if rec := f.recordingByID(id); rec != nil {
+			h.finishRecordingLocked(f, rec, "complete", "")
 			h.dropIfUnusedLocked(f)
 			return
 		}
@@ -2859,12 +2876,13 @@ func (h *Hub) ExtendRecording(ctx context.Context, id int64, until time.Time) er
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, f := range h.feedsLocked() {
-		if f.recording == nil || f.recording.id != id {
+		rec := f.recordingByID(id)
+		if rec == nil {
 			continue
 		}
-		f.recording.ends = until
-		if !f.recording.backfilling {
-			h.armRecordingStopLocked(f.recording)
+		rec.ends = until
+		if !rec.backfilling {
+			h.armRecordingStopLocked(rec)
 		}
 		return h.Store.SetRecordingEnd(ctx, id, until)
 	}
@@ -2895,7 +2913,7 @@ func (h *Hub) viewerFeedsToPreemptLocked(keepHz int, keepID int64) (labels []str
 			if f == nil {
 				continue
 			}
-			if f.recording != nil {
+			if f.recordingNow() {
 				recording = true
 			}
 			if keepID > 0 && f.channel.ID == keepID {
@@ -3539,7 +3557,7 @@ func (h *Hub) recoverInput(ctx context.Context, m *mux, silent time.Time, err *e
 
 func recordingOnLocked(m *mux) bool {
 	for _, f := range m.feeds {
-		if f != nil && f.recording != nil {
+		if f != nil && f.recordingNow() {
 			return true
 		}
 	}
@@ -3619,8 +3637,8 @@ func (h *Hub) releaseMux(m *mux) {
 		feeds = append(feeds, f)
 	}
 	for _, f := range feeds {
-		if f.recording != nil {
-			h.finishRecordingLocked(f, "failed", "The tuner stopped.")
+		for _, rec := range slices.Clone(f.recordings) {
+			h.finishRecordingLocked(f, rec, "failed", "The tuner stopped.")
 		}
 		h.stopFeedLocked(f)
 	}
@@ -3637,7 +3655,7 @@ func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
 		viewers += other.viewers
 	}
 	m := muxOf(h, f)
-	shared := viewers > 1 || f.recording != nil || (m != nil && len(m.feeds) > 1)
+	shared := viewers > 1 || f.recordingNow() || (m != nil && len(m.feeds) > 1)
 	spec := r.spec
 	key := spec.Key()
 	info := StreamInfo{
@@ -3737,6 +3755,22 @@ func (h *Hub) stopRenditionLocked(f *feed, key string) {
 	h.changed()
 }
 
+// recordingNow reports a feed with a recording in progress.
+func (f *feed) recordingNow() bool { return len(f.recordings) > 0 }
+
+func (f *feed) recordingByID(id int64) *recording {
+	for _, rec := range f.recordings {
+		if rec.id == id {
+			return rec
+		}
+	}
+	return nil
+}
+
+func (f *feed) dropRecording(rec *recording) {
+	f.recordings = slices.DeleteFunc(f.recordings, func(r *recording) bool { return r == rec })
+}
+
 // heldOutside is a feed something other than a live rendition or a
 // recording is reading: an export or a mosaic.
 func (f *feed) heldOutside() bool { return f.exports > 0 || f.mosaics > 0 }
@@ -3747,7 +3781,7 @@ func (f *feed) tuneHeld() bool { return f.probing || f.probes > 0 }
 // dropIfUnusedLocked releases the feed, and the tuner with the last feed, once
 // nobody is watching or recording it.
 func (h *Hub) dropIfUnusedLocked(f *feed) {
-	if len(f.renditions) > 0 || f.recording != nil || f.tuneHeld() || f.heldOutside() || time.Now().Before(f.lingerUntil) {
+	if len(f.renditions) > 0 || f.recordingNow() || f.tuneHeld() || f.heldOutside() || time.Now().Before(f.lingerUntil) {
 		return
 	}
 	h.stopFeedLocked(f)
@@ -3808,16 +3842,15 @@ func (h *Hub) watchRecording(f *feed, rec *recording, cmd *exec.Cmd) {
 	close(rec.exited)
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if f.recording != rec || rec.finished {
+	if f.recordingByID(rec.id) != rec || rec.finished {
 		return
 	}
 	slog.Error(fmt.Sprintf("recording %d on %s stopped early: %v", rec.id, f.channel.GuideNumber, err))
-	h.finishRecordingLocked(f, "failed", "The recording stopped early.")
+	h.finishRecordingLocked(f, rec, "failed", "The recording stopped early.")
 	h.dropIfUnusedLocked(f)
 }
 
-func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
-	rec := f.recording
+func (h *Hub) finishRecordingLocked(f *feed, rec *recording, status, errText string) {
 	if rec == nil || rec.finished {
 		return
 	}
@@ -3845,7 +3878,7 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 			errText = (&disk.WriteError{Full: true}).Error()
 		}
 	}
-	f.recording = nil
+	f.dropRecording(rec)
 	h.changed()
 	h.storeLengthLocked(rec)
 	_ = h.Store.FinishRecording(context.Background(), rec.id, status, errText)
@@ -4045,14 +4078,14 @@ func (h *Hub) finishRecordingGen(id int64, gen uint64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, f := range h.feedsLocked() {
-		rec := f.recording
-		if rec == nil || rec.id != id {
+		rec := f.recordingByID(id)
+		if rec == nil {
 			continue
 		}
 		if rec.gen != gen {
 			return
 		}
-		h.finishRecordingLocked(f, "complete", "")
+		h.finishRecordingLocked(f, rec, "complete", "")
 		h.dropIfUnusedLocked(f)
 		return
 	}
@@ -4147,7 +4180,7 @@ func (h *Hub) claimWarmLocked(host string, ok func(*mux) bool) (*mux, int, strin
 func warmSince(m *mux) (time.Time, bool) {
 	var last time.Time
 	for _, f := range m.feeds {
-		if f.recording != nil || f.tuneHeld() || f.heldOutside() {
+		if f.recordingNow() || f.tuneHeld() || f.heldOutside() {
 			return time.Time{}, false
 		}
 		for _, r := range f.renditions {

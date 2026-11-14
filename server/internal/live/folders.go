@@ -148,8 +148,10 @@ func (h *Hub) pruneEmptyLocked(dir string) {
 	root := h.Recordings()
 	var busy []string
 	for _, f := range h.feedsLocked() {
-		if f.recording != nil && !f.recording.finished {
-			busy = append(busy, f.recording.path)
+		for _, rec := range f.recordings {
+			if !rec.finished {
+				busy = append(busy, rec.path)
+			}
 		}
 	}
 	for {

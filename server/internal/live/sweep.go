@@ -211,7 +211,7 @@ func (h *Hub) sweepAllowed(ctx context.Context, ch store.SourceChannel) bool {
 	busy := h.hold > 0 || h.scanCancel != nil || len(h.guessTunes) > 0 || len(h.tunerMuxesLocked(host)) > 0
 	if !busy {
 		for _, f := range h.feedsLocked() {
-			if f.recording != nil || f.heldOutside() || f.tuneHeld() {
+			if f.recordingNow() || f.heldOutside() || f.tuneHeld() {
 				busy = true
 				break
 			}

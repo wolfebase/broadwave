@@ -359,7 +359,7 @@ func TestDeathsPastTheBudgetReleaseTheTuner(t *testing.T) {
 func TestDeathDuringARecordingReleasesTheRenditionOnly(t *testing.T) {
 	h, f, mark := restartHub(t, time.Nanosecond, "always")
 	h.mu.Lock()
-	f.recording = &recording{id: 7}
+	f.recordings = []*recording{&recording{id: 7}}
 	h.mu.Unlock()
 	startRendition(t, h, f, "1080.aac2.broadcast")
 	deadline := time.Now().Add(10 * time.Second)

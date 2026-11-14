@@ -233,7 +233,7 @@ func TestRecordingWarnsBeforeTheTileStops(t *testing.T) {
 	m3 := &mux{freq: 533000000, tuner: 2, host: "127.0.0.1:1", feeds: map[string]*feed{}, cancel: func() {}, body: fakeBody{}}
 	h.muxes[m3.freq] = m3
 	recorded := addTestFeed(h, m3, 3, "5.1")
-	recorded.recording = &recording{id: 9}
+	recorded.recordings = []*recording{&recording{id: 9}}
 
 	at := time.Date(2026, 9, 25, 15, 0, 0, 0, time.Local)
 	h.mu.Lock()
@@ -263,7 +263,7 @@ func TestRecordingWarnsBeforeTheTileStops(t *testing.T) {
 	if _, ok := h.channels[1]; !ok {
 		t.Fatal("4.1 stays on")
 	}
-	if _, ok := h.channels[3]; !ok || recorded.recording == nil {
+	if _, ok := h.channels[3]; !ok || !recorded.recordingNow() {
 		t.Fatal("the recording keeps its tuner")
 	}
 	events, err := st.Events(context.Background(), 5)
@@ -285,7 +285,7 @@ func TestSecondDropLeavesTheReplacementTune(t *testing.T) {
 	}
 	h.muxes[freq] = replacement
 	recorded := addTestFeed(h, replacement, 1, "4.1")
-	recorded.recording = &recording{id: 4}
+	recorded.recordings = []*recording{&recording{id: 4}}
 
 	h.mu.Lock()
 	h.stopFeedLocked(old)
@@ -294,7 +294,7 @@ func TestSecondDropLeavesTheReplacementTune(t *testing.T) {
 	if h.muxes[freq] != replacement {
 		t.Fatal("the replacement tune was released")
 	}
-	if replacement.feeds["4.1"] != recorded || recorded.recording == nil {
+	if replacement.feeds["4.1"] != recorded || !recorded.recordingNow() {
 		t.Fatal("the recording feed was removed from the mux")
 	}
 	if h.channels[1] != recorded {
@@ -331,7 +331,7 @@ func TestReleaseAbandonedFreesQuietViewersButKeepsRecordings(t *testing.T) {
 	addTestRendition(h, quiet, "copy.aac2", 1, time.Now().Add(-time.Minute))
 	recorded := addTestFeed(h, m, 2, "4.2")
 	addTestRendition(h, recorded, "copy.aac2", 1, time.Now().Add(-time.Minute))
-	recorded.recording = &recording{id: 9}
+	recorded.recordings = []*recording{&recording{id: 9}}
 
 	h.ReleaseAbandoned(30 * time.Second)
 	if _, ok := h.channels[1]; ok {
@@ -464,7 +464,7 @@ func stopAfterWrite(t *testing.T, h *Hub, m *mux, f *feed, id int64, path string
 	t.Helper()
 	h.mu.Lock()
 	sub := h.attachPipeLocked(m, w)
-	f.recording = &recording{id: id, path: path, stdin: w, sub: sub, ends: time.Now().Add(time.Hour)}
+	f.recordings = []*recording{&recording{id: id, path: path, stdin: w, sub: sub, ends: time.Now().Add(time.Hour)}}
 	h.mu.Unlock()
 	sub.ch <- []byte{0x47}
 	select {
@@ -866,8 +866,8 @@ func TestAStoppedRecordingHasALengthAtOnce(t *testing.T) {
 	}
 	for _, name := range []string{"news", "empty"} {
 		h.mu.Lock()
-		f.recording = &recording{id: ids[name], path: files[name], ends: ends}
-		h.finishRecordingLocked(f, "complete", "")
+		f.recordings = []*recording{&recording{id: ids[name], path: files[name], ends: ends}}
+		h.finishRecordingLocked(f, f.recordings[0], "complete", "")
 		h.mu.Unlock()
 	}
 	got, err := st.Recording(context.Background(), ids["news"])

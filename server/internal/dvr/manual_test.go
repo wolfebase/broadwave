@@ -229,14 +229,14 @@ func TestManualRetryAndAlreadyByPass(t *testing.T) {
 		t.Fatal("another pass's recording is not this slot's")
 	}
 	running := store.Recording{ID: 2, ChannelID: 2, Title: "Night News", Status: "recording", PassID: 4, StartedAt: start}
-	if !already([]store.Recording{running}, air) {
+	if !already([]store.Recording{running}, pass, air) {
 		t.Fatal("the slot is already recording")
 	}
 	listing := store.Airing{ID: 5, ChannelID: 2, Title: "Night News", Start: start, End: start.Add(time.Hour)}
-	if !already([]store.Recording{running}, listing) {
+	if !already([]store.Recording{running}, pass, listing) {
 		t.Fatal("a listing on the same channel is the same feed")
 	}
-	if already([]store.Recording{{ID: 3, ChannelID: 2, Title: "Night News", Status: "recording", PassID: 1, StartedAt: start}}, air) {
+	if already([]store.Recording{{ID: 3, ChannelID: 2, Title: "Night News", Status: "recording", PassID: 1, StartedAt: start}}, pass, air) {
 		t.Fatal("a series recording of the listing is not the manual slot")
 	}
 	if ok, minutes := StartDecision(pass, air, start.Add(-time.Minute)); !ok || minutes != 62 {

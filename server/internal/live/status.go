@@ -49,7 +49,7 @@ func (h *Hub) FeedStats() []FeedStat {
 	for _, f := range h.feedsLocked() {
 		st := FeedStat{
 			ChannelID: f.channel.ID, GuideNumber: f.channel.GuideNumber, Name: f.channel.DisplayName,
-			Recording: f.recording != nil, Exports: f.exports,
+			Recording: f.recordingNow(), Exports: f.exports,
 		}
 		for _, r := range f.renditions {
 			if r == nil {
@@ -60,8 +60,10 @@ func (h *Hub) FeedStats() []FeedStat {
 				st.FFmpeg++
 			}
 		}
-		if f.recording != nil && cmdRunning(f.recording.cmd) {
-			st.FFmpeg++
+		for _, rec := range f.recordings {
+			if cmdRunning(rec.cmd) {
+				st.FFmpeg++
+			}
 		}
 		out = append(out, st)
 	}
@@ -83,7 +85,7 @@ func (h *Hub) Status() []FeedStatus {
 	for _, f := range h.feedsLocked() {
 		st := FeedStatus{
 			ChannelID: f.channel.ID, GuideNumber: f.channel.GuideNumber, Name: f.channel.DisplayName,
-			FrequencyHz: f.channel.FrequencyHz, Tuner: -1, Recording: f.recording != nil, Exports: f.exports,
+			FrequencyHz: f.channel.FrequencyHz, Tuner: -1, Recording: f.recordingNow(), Exports: f.exports,
 			FieldOrder: f.channel.FieldOrder, Renditions: []RenditionStatus{},
 		}
 		if m := muxOf(h, f); m != nil {

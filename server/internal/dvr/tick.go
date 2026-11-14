@@ -66,11 +66,11 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 	var onTime, late []startPlan
 	soon := map[string]bool{}
 	for _, item := range planned {
-		if item.Skipped || already(active, item.Airing) {
+		if item.Skipped {
 			continue
 		}
 		pass, ok := findPass(passes, item.Airing)
-		if !ok {
+		if !ok || already(active, pass, item.Airing) {
 			continue
 		}
 		start, minutes := StartDecision(pass, item.Airing, now)
@@ -253,14 +253,17 @@ func failedTries(recs []store.Recording, pass store.Pass, airing store.Airing) (
 	return tries, last
 }
 
-func already(recs []store.Recording, airing store.Airing) bool {
+// already reports this airing's recording in progress. One of the airing
+// before (the last episode in its padding, a game that ran long) is not it:
+// the two record side by side. The window is the one attempted uses.
+func already(recs []store.Recording, pass store.Pass, airing store.Airing) bool {
+	lead := recordLead
+	if extra := time.Duration(pass.PadBefore) * time.Minute; extra > lead {
+		lead = extra
+	}
+	floor := airing.Start.Add(-lead)
 	for _, rec := range recs {
-		if rec.Status != "recording" || !sameSlot(rec, airing) {
-			continue
-		}
-		// A manual slot runs at most 8 hours, so a slot still recording that
-		// started before this one ends is this one.
-		if airing.ManualPass == 0 || rec.StartedAt.Before(airing.End) {
+		if rec.Status == "recording" && sameSlot(rec, airing) && rec.StartedAt.Before(airing.End) && !rec.StartedAt.Before(floor) {
 			return true
 		}
 	}
