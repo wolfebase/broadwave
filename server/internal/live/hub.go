@@ -2866,7 +2866,10 @@ func (h *Hub) abortStart(ctx context.Context, f *feed, rec *recording, id int64)
 	h.dropIfUnusedLocked(f)
 	h.mu.Unlock()
 	if id != 0 {
-		_ = h.Store.FinishRecording(ctx, id, "failed", "Could not start the recording.")
+		// Not the request's: a client that left would leave the row recording.
+		saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		_ = h.Store.FinishRecording(saveCtx, id, "failed", "Could not start the recording.")
+		cancel()
 	}
 	if rec.path != "" {
 		h.pruneEmpty(filepath.Dir(rec.path))

@@ -117,3 +117,23 @@ func TestARawBackfillThatCantWriteFails(t *testing.T) {
 	t.Cleanup(func() { h.StopRecord(rec.ID) })
 	waitFailed(t, h, st, rec.ID, city)
 }
+
+// A start that failed wrote the failure with the request's context: a client
+// that had gone left the row recording until the next boot.
+func TestAFailedStartIsSavedAfterTheClientLeaves(t *testing.T) {
+	h, st, city, _ := rawLabTune(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	prev := createRecording
+	createRecording = func(string) (io.WriteCloser, error) {
+		cancel()
+		return nil, &os.PathError{Op: "open", Path: "show.ts", Err: syscall.EIO}
+	}
+	t.Cleanup(func() { createRecording = prev })
+	if _, err := h.RecordMeta(ctx, 60, store.Recording{ChannelID: city, Title: "Evening"}); err == nil {
+		t.Fatal("a start that could not make its file succeeded")
+	}
+	recs, err := st.Recordings(context.Background())
+	if err != nil || len(recs) != 1 || recs[0].Status != "failed" {
+		t.Fatalf("recordings %+v %v", recs, err)
+	}
+}
