@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.18.1
+
+### Fixed
+
+- Server: the next show on a channel that is already recording starts on time as its own recording. The next episode in the last one's padding, or the show after a game that ran long, was taken for the recording already on and never recorded without a buffer.
+- Server: an ATSC 3.0 recording whose file stops taking writes (a full disk, a share that went away) fails at once and lets its tuner go, so it is tried again. It used to stay recording, hold the tuner, and end complete with nothing written.
+- Server: playlists no longer stall while a recording starts or ends on a slow share.
+- Server: going back before a resume point no longer answers "not ready" for good when a fill encode stalls or keeps dying. A stalled one is replaced while the player waits, and three deaths in a row give up with "not found".
+- Server: What's on now (`GET /api/v1/now`) opens on a device paired with Watch access.
+- Server: the pairing rate limit forgets addresses once their window passes.
+- Server: an ATSC 3.0 channel whose sound can't be copied starts its next encode with the sound converted, instead of failing once on every tune.
+- Server: a reopen the tuner doesn't answer says "the tuner didn't answer in 5 s", once per silence, instead of "context canceled" on every try.
+
 ## 0.18.0 — 2026-11-07
 
 ### Added
