@@ -166,16 +166,8 @@ func main() {
 	hub.Alternates = os.Getenv("BROADWAVE_ALTERNATES") != "0"
 	if *staging {
 		slog.Info("staging: scheduled recordings and guide pulls, background tunes, and the tuner emulator are off; a recording or guide refresh you start still runs")
-	} else if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {
-		// The pass, game, and episode carry over; a failed start here is
-		// tried again by the pass tick for the time still left.
-		if _, err := dvr.Resume(context.Background(), st, hub, rec, left); err != nil {
-			slog.Error(fmt.Sprintf("recording: resume %s: %v", rec.Title, err))
-		}
-		return nil
-	}); err != nil {
-		slog.Error(fmt.Sprintf("recording: %v", err))
 	}
+	recoverRecordings(st, hub, *staging)
 	breakQueue := dvr.NewBreakQueue(st, hub)
 	go breakQueue.Run(context.Background())
 	hub.OnSaved = func(rec store.Recording) {
@@ -632,4 +624,25 @@ func hasAC4Channel(st *store.Store) bool {
 		}
 	}
 	return false
+}
+
+// recoverRecordings closes the recordings the last run left "recording" and,
+// outside staging, records the rest of each show still on. Staging resumes
+// nothing, but a row left "recording" with nothing writing it could be neither
+// stopped nor deleted.
+func recoverRecordings(st *store.Store, hub dvr.Recorder, staging bool) {
+	resume := func(rec store.Recording, left time.Duration) error {
+		// The pass, game, and episode carry over; a failed start here is
+		// tried again by the pass tick for the time still left.
+		if _, err := dvr.Resume(context.Background(), st, hub, rec, left); err != nil {
+			slog.Error(fmt.Sprintf("recording: resume %s: %v", rec.Title, err))
+		}
+		return nil
+	}
+	if staging {
+		resume = nil
+	}
+	if err := dvr.Recover(context.Background(), st, time.Now(), resume); err != nil {
+		slog.Error(fmt.Sprintf("recording: %v", err))
+	}
 }
