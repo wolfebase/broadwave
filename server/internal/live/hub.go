@@ -3671,6 +3671,7 @@ func recordingOnLocked(m *mux) bool {
 // before. False ends the tune.
 func (h *Hub) reopenInput(ctx context.Context, m *mux, silent time.Time) bool {
 	budget := h.stallAfter() * (stallReopens + 1)
+	told := ""
 	for attempt := 0; ; attempt++ {
 		h.mu.Lock()
 		u, current, recording := m.reopen, h.muxes[m.freq] == m, recordingOnLocked(m)
@@ -3688,11 +3689,20 @@ func (h *Hub) reopenInput(ctx context.Context, m *mux, silent time.Time) bool {
 		} else {
 			slog.Warn(fmt.Sprintf("mux %d: the tuner sent nothing for %.0f s; opening its stream again", m.freq, time.Since(silent).Seconds()))
 		}
-		openCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		openCtx, cancel := context.WithTimeout(ctx, reopenWithin)
 		body, err := openKept(openCtx, u)
+		late := errors.Is(openCtx.Err(), context.DeadlineExceeded)
 		cancel()
 		if err != nil {
-			slog.Warn(fmt.Sprintf("mux %d: reopen: %v", m.freq, err))
+			why := err.Error()
+			if late && ctx.Err() == nil {
+				why = fmt.Sprintf("the tuner didn't answer in %g s", reopenWithin.Seconds())
+			}
+			// The tries of one silence fail the same way: once is enough.
+			if why != told {
+				slog.Warn(fmt.Sprintf("mux %d: reopen: %s", m.freq, why))
+				told = why
+			}
 			continue
 		}
 		h.mu.Lock()
@@ -3706,6 +3716,9 @@ func (h *Hub) reopenInput(ctx context.Context, m *mux, silent time.Time) bool {
 		return true
 	}
 }
+
+// reopenWithin is how long a reopen waits for the tuner to answer.
+var reopenWithin = 5 * time.Second
 
 // shiftClocks moves every encode's clock on a mux past a silence, so the
 // program date-times after it stay on the wall clock.
