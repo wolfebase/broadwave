@@ -320,8 +320,11 @@ func TestRemoveDeletesTheTunnelAndItsName(t *testing.T) {
 			t.Fatal(err)
 		}
 		waitState(t, m, cloudflare.StateIdle)
-		// Remove signs in again; the sign-in deletes as soon as it lands.
-		signIn(t, m, cloudflare.PurposeRemove)
+		// Remove signs in again; the sign-in deletes as soon as it lands, which
+		// can be before StartLogin reads the state back.
+		if _, err := m.StartLogin(cloudflare.PurposeRemove); err != nil {
+			t.Fatal(err)
+		}
 		deadline := time.Now().Add(5 * time.Second)
 		for host.uninstallsNow() == 0 || m.Status().State != cloudflare.StateIdle {
 			if time.Now().After(deadline) {
