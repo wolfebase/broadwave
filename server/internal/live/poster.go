@@ -37,6 +37,10 @@ const (
 	posterRetry = 10 * time.Minute
 )
 
+// posterLimit is how long one poster may take, waits for a still slot
+// included.
+var posterLimit = 20 * time.Second
+
 // ErrNoPoster is a recording where no still tried has a picture in it.
 var ErrNoPoster = errors.New("no picture for a poster")
 
@@ -71,25 +75,49 @@ func PosterTimes(length float64, breaks []store.Marker) []float64 {
 	return times
 }
 
-type posterMisses struct {
-	mu   sync.Mutex
-	when map[int64]time.Time
+// posterMaker makes one poster per recording at a time and remembers
+// recordings with no picture for one.
+type posterMaker struct {
+	mu       sync.Mutex
+	when     map[int64]time.Time
+	inflight map[int64]chan struct{}
 }
 
-func (m *posterMisses) recent(id int64, now time.Time) bool {
+func (m *posterMaker) recent(id int64, now time.Time) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	at, ok := m.when[id]
 	return ok && now.Sub(at) < posterRetry
 }
 
-func (m *posterMisses) set(id int64, now time.Time) {
+func (m *posterMaker) set(id int64, now time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.when == nil {
 		m.when = map[int64]time.Time{}
 	}
 	m.when[id] = now
+}
+
+// claim makes the caller the one making id's poster and returns its release,
+// or returns the channel that closes when the one making it is done.
+func (m *posterMaker) claim(id int64) (release func(), wait <-chan struct{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if done, busy := m.inflight[id]; busy {
+		return nil, done
+	}
+	if m.inflight == nil {
+		m.inflight = map[int64]chan struct{}{}
+	}
+	done := make(chan struct{})
+	m.inflight[id] = done
+	return func() {
+		m.mu.Lock()
+		delete(m.inflight, id)
+		m.mu.Unlock()
+		close(done)
+	}, nil
 }
 
 // RecordingPoster returns a JPEG for recording id's card: the first of a few
@@ -99,15 +127,33 @@ func (m *posterMisses) set(id int64, now time.Time) {
 // keeps no poster. When every still tried is flat there is no poster, and
 // the recording is looked at again after posterRetry. measure gives the
 // length and breaks, only when a poster is made.
+//
+// A list asks for many posters at once and does not ask again, so a poster
+// waits its turn for a still slot for up to posterLimit, where a chapter
+// still gives up sooner. Requests for one recording share one making.
 func (h *Hub) RecordingPoster(ctx context.Context, id int64, src string, growing bool, measure func() (float64, []store.Marker)) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, posterLimit)
+	defer cancel()
 	dest := PosterPath(h.Dir, id)
-	if !growing {
-		if info, err := os.Stat(dest); err == nil && info.Size() > 0 {
-			return dest, nil
+	for {
+		if !growing {
+			if info, err := os.Stat(dest); err == nil && info.Size() > 0 {
+				return dest, nil
+			}
 		}
-	}
-	if h.posters.recent(id, time.Now()) {
-		return "", ErrNoPoster
+		if h.posters.recent(id, time.Now()) {
+			return "", ErrNoPoster
+		}
+		release, wait := h.posters.claim(id)
+		if release != nil {
+			defer release()
+			break
+		}
+		select {
+		case <-wait:
+		case <-ctx.Done():
+			return "", ErrStillBusy
+		}
 	}
 	length, breaks := measure()
 	if growing {
@@ -126,8 +172,12 @@ func (h *Hub) RecordingPoster(ctx context.Context, id int64, src string, growing
 	}
 	best, bestScore := "", -1.0
 	for _, at := range PosterTimes(length, breaks) {
-		still, err := h.RecordingStill(ctx, id, src, at, 480)
+		still, err := h.still(ctx, id, src, at, 480)
 		if errors.Is(err, ErrStillBusy) {
+			// Out of time: a picture already found will do.
+			if bestScore >= flatPicture {
+				break
+			}
 			return "", err
 		}
 		if err != nil {

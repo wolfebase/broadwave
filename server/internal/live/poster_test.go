@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -159,11 +160,13 @@ func TestFirstPosterRequestsAtOnceAllGetIt(t *testing.T) {
 	h := &Hub{Dir: dir, FFmpeg: "ffmpeg"}
 	var wg sync.WaitGroup
 	errs := make([]error, 4)
+	var makings atomic.Int32
+	count := func() (float64, []store.Marker) { makings.Add(1); return 10, nil }
 	for i := range errs {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, errs[i] = h.RecordingPoster(context.Background(), 4, src, false, measured(10, nil))
+			_, errs[i] = h.RecordingPoster(context.Background(), 4, src, false, count)
 		}()
 	}
 	wg.Wait()
@@ -172,8 +175,68 @@ func TestFirstPosterRequestsAtOnceAllGetIt(t *testing.T) {
 			t.Fatalf("request %d: %v", i, err)
 		}
 	}
+	if n := makings.Load(); n != 1 {
+		t.Fatalf("one poster was made %d times", n)
+	}
 	left, _ := filepath.Glob(filepath.Join(dir, "posters", "*.part"))
 	if len(left) > 0 {
 		t.Fatalf("left behind: %v", left)
+	}
+}
+
+// A list asks for many posters at once and never asks again, so posters wait
+// their turn for a still slot past the time a chapter still gives up.
+func TestPostersWaitTheirTurnForASlot(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "show.ts")
+	flatThenScene(t, src, 1, 9)
+	h := &Hub{Dir: dir, FFmpeg: "ffmpeg"}
+	ctx := context.Background()
+	oldLimit := stillLimit
+	stillLimit = 300 * time.Millisecond
+	t.Cleanup(func() { stillLimit = oldLimit })
+	// Something else holds both slots for longer than a still waits.
+	h.stills.init()
+	for range stillSlots {
+		h.stills.slots <- struct{}{}
+	}
+	go func() {
+		time.Sleep(time.Second)
+		for range stillSlots {
+			<-h.stills.slots
+		}
+	}()
+	if _, err := h.RecordingStill(ctx, 99, src, 5, 480); !errors.Is(err, ErrStillBusy) {
+		t.Fatalf("a chapter still waited: %v", err)
+	}
+	var wg sync.WaitGroup
+	errs := make([]error, 6)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = h.RecordingPoster(ctx, int64(10+i), src, false, measured(10, nil))
+		}()
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("poster %d: %v", i, err)
+		}
+	}
+	// Past its own limit a poster still gives up, and says the slots were busy.
+	oldPoster := posterLimit
+	posterLimit = 200 * time.Millisecond
+	t.Cleanup(func() { posterLimit = oldPoster })
+	for range stillSlots {
+		h.stills.slots <- struct{}{}
+	}
+	defer func() {
+		for range stillSlots {
+			<-h.stills.slots
+		}
+	}()
+	if _, err := h.RecordingPoster(ctx, 20, src, false, measured(10, nil)); !errors.Is(err, ErrStillBusy) {
+		t.Fatalf("waited past the limit: %v", err)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -89,5 +90,52 @@ func TestAFlatPosterIsMadeAgainFromAPicture(t *testing.T) {
 	}
 	if _, err := os.Stat(live.PosterPath(dir, flat)); !os.IsNotExist(err) {
 		t.Fatalf("flat poster kept: %v", err)
+	}
+}
+
+// A recordings list loads its posters together; each one answers.
+func TestManyPostersAtOnceAllAnswer(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	st := testStore(t)
+	dir := t.TempDir()
+	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: "ffmpeg"}
+	src := filepath.Join(hub.Recordings(), "show.ts")
+	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+		"-i", "testsrc2=s=640x360:r=30:d=10,noise=alls=12:allf=t+u,format=yuv420p",
+		"-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-pix_fmt", "yuv420p", "-f", "mpegts", src)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("sample: %v %s", err, out)
+	}
+	ctx := context.Background()
+	h := (&Server{Store: st, Hub: hub}).Handler()
+	ids := make([]int64, 6)
+	for i := range ids {
+		id, err := st.CreateRecording(ctx, store.Recording{Title: "Show " + strconv.Itoa(i), GuideNumber: "4.1", Status: "complete", Path: src, StartedAt: time.Now()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[i] = id
+	}
+	codes := make([]int, len(ids))
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/poster/"+strconv.FormatInt(id, 10), nil))
+			codes[i] = rec.Code
+		}()
+	}
+	wg.Wait()
+	for i, code := range codes {
+		if code != http.StatusOK {
+			t.Fatalf("poster %d: %d", i, code)
+		}
 	}
 }

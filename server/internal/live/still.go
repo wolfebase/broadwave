@@ -31,15 +31,14 @@ func StillWidth(w int) int {
 	return StillWidths[len(StillWidths)-1]
 }
 
-const (
-	// stillSlots is how many stills are made at once. Each is one short
-	// decode, but a chapter strip asks for a dozen together.
-	stillSlots = 2
-	// stillLimit is how long one still may take, the wait for a slot
-	// included. A seek in a long MPEG-TS file reads a little at several
-	// places; a decode past the keyframe before at reads up to a group.
-	stillLimit = 15 * time.Second
-)
+// stillSlots is how many stills are made at once. Each is one short
+// decode, but a chapter strip asks for a dozen together.
+const stillSlots = 2
+
+// stillLimit is how long one still may take, the wait for a slot
+// included. A seek in a long MPEG-TS file reads a little at several
+// places; a decode past the keyframe before at reads up to a group.
+var stillLimit = 15 * time.Second
 
 var (
 	// ErrNoStill is a time with no picture: past the end of the file, or
@@ -78,14 +77,19 @@ func (h *Hub) RecordingStill(ctx context.Context, id int64, src string, at float
 	if at < 0 || math.IsNaN(at) || math.IsInf(at, 0) {
 		return "", ErrNoStill
 	}
+	ctx, cancel := context.WithTimeout(ctx, stillLimit)
+	defer cancel()
+	return h.still(ctx, id, src, at, width)
+}
+
+// still is RecordingStill waiting for a slot as long as ctx lives.
+func (h *Hub) still(ctx context.Context, id int64, src string, at float64, width int) (string, error) {
 	dest := StillPath(h.Dir, id, at, width)
 	if info, err := os.Stat(dest); err == nil && info.Size() > 0 {
 		return dest, nil
 	}
 	m := &h.stills
 	m.init()
-	ctx, cancel := context.WithTimeout(ctx, stillLimit)
-	defer cancel()
 	for {
 		m.mu.Lock()
 		wait, busy := m.inflight[dest]

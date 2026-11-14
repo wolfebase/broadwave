@@ -7143,7 +7143,7 @@ export interface operations {
                     "text/plain": string;
                 };
             };
-            /** @description Plain text. Stills are busy making other pictures; try again after Retry-After seconds. */
+            /** @description Plain text. A poster waits its turn behind other pictures for up to about 20 seconds; this is the answer when that wait ran out. Try again after Retry-After seconds. */
             503: {
                 headers: {
                     "Retry-After"?: number;
