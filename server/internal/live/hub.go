@@ -2774,7 +2774,7 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 	row := h.Store.WithEpisode(ctx, store.Recording{
 		ChannelID: channelID, GuideNumber: channel.GuideNumber, Title: title,
 		Subtitle: meta.Subtitle, Description: meta.Description, Category: meta.Category, ProgramID: meta.ProgramID, GameID: meta.GameID,
-		Status: "recording", StartedAt: started, EndsAt: &ends, PassID: meta.PassID,
+		Status: "recording", StartedAt: started, EndsAt: &ends, PassID: meta.PassID, AiringStart: meta.AiringStart,
 	})
 	row.Path = h.pickRecordingPath(rec, row, channel, byShow)
 	id, err := h.Store.CreateRecording(ctx, row)

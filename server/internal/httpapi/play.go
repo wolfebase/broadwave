@@ -350,6 +350,7 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 		meta.Category = air.Category
 		meta.ProgramID = air.ProgramID
 		meta.GameID = air.GameID
+		meta.AiringStart = &air.Start
 		minutes, meta.StartedAt = recordSpan(body.Minutes, air, time.Now())
 	}
 	rec, err := s.Hub.RecordMeta(r.Context(), minutes, meta)

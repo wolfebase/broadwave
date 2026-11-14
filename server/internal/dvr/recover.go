@@ -93,7 +93,7 @@ func Resume(ctx context.Context, st *store.Store, rec Recorder, prev store.Recor
 	got, err := rec.RecordMeta(ctx, minutes, store.Recording{
 		ChannelID: prev.ChannelID, Title: prev.Title, Subtitle: prev.Subtitle,
 		Description: prev.Description, Category: prev.Category, ProgramID: prev.ProgramID, GameID: prev.GameID,
-		PassID: prev.PassID, EndsAt: prev.EndsAt,
+		PassID: prev.PassID, EndsAt: prev.EndsAt, AiringStart: prev.AiringStart,
 	})
 	if err != nil {
 		return got, err

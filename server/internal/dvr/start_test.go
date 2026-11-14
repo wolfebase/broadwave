@@ -1,6 +1,7 @@
 package dvr
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -100,5 +101,42 @@ func TestAFinishedEpisodeDoesNotBlockTheNextOne(t *testing.T) {
 	mine.StartedAt = secondStart.Add(-time.Minute)
 	if !already([]store.Recording{open, mine}, pass, second) {
 		t.Fatal("this airing's own recording in progress blocks a second start")
+	}
+}
+
+// A retry of one airing that started in its last 90 s fell in the next
+// airing's start window and counted as that one's recording: the next airing
+// never recorded. A recording names the airing it was made for.
+func TestALateRetryIsNotTheNextAiringsRecording(t *testing.T) {
+	st := openStore(t)
+	ctx := context.Background()
+	first := time.Now().UTC().Truncate(time.Minute).Add(-29 * time.Minute)
+	next := first.Add(30 * time.Minute)
+	airing := store.Airing{ChannelID: 1, Title: "News", Start: next, End: next.Add(30 * time.Minute)}
+	pass := store.Pass{PadBefore: 1, PadAfter: 2}
+	ends := next.Add(2 * time.Minute)
+	id, err := st.CreateRecording(ctx, store.Recording{
+		ChannelID: 1, Title: "News", Path: "retry.ts", Status: "recording",
+		StartedAt: next.Add(-time.Minute), EndsAt: &ends, AiringStart: &first,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry, err := st.Recording(ctx, id)
+	if err != nil || retry.AiringStart == nil || !retry.AiringStart.Equal(first) {
+		t.Fatalf("the row lost its airing: %+v %v", retry.AiringStart, err)
+	}
+	recs := []store.Recording{retry}
+	if already(recs, pass, airing) || attempted(recs, pass, airing) {
+		t.Fatal("the last airing's retry counted as the next airing's recording")
+	}
+	retry.Status = "failed"
+	if tries, _ := failedTries([]store.Recording{retry}, pass, airing); tries != 0 {
+		t.Fatalf("the last airing's failed retry counted as %d tries of the next", tries)
+	}
+	// A row with no airing named is still judged by its start.
+	retry.Status, retry.AiringStart = "recording", nil
+	if !already([]store.Recording{retry}, pass, airing) {
+		t.Fatal("an older row in the window no longer counts")
 	}
 }

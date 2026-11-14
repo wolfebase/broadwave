@@ -145,6 +145,7 @@ func runStart(ctx context.Context, st *store.Store, hub *live.Hub, open map[wait
 		ChannelID: air.ChannelID, Title: air.Title, Subtitle: air.Subtitle,
 		Description: air.Description, Category: air.Category, ProgramID: air.ProgramID, GameID: air.GameID,
 		StartedAt: air.Start.Add(-time.Duration(plan.pass.PadBefore) * time.Minute), PassID: plan.pass.ID,
+		AiringStart: &air.Start,
 	})
 	if err != nil {
 		noteRefused(ctx, st, open, plan.pass, air, err, now)
@@ -171,17 +172,32 @@ func findPass(passes []store.Pass, airing store.Airing) (store.Pass, bool) {
 // The window is the same lead StartDecision uses. An earlier episode of the
 // same title started before that lead, and must not count as this one.
 func attempted(recs []store.Recording, pass store.Pass, airing store.Airing) bool {
-	lead := recordLead
-	if extra := time.Duration(pass.PadBefore) * time.Minute; extra > lead {
-		lead = extra
-	}
-	floor := airing.Start.Add(-lead)
 	for _, rec := range recs {
-		if sameSlot(rec, airing) && rec.StartedAt.Before(airing.End) && !rec.StartedAt.Before(floor) {
+		if ofAiring(rec, pass, airing) {
 			return true
 		}
 	}
 	return false
+}
+
+// ofAiring reports a recording made for this airing: one of its slot whose
+// airing, or for a row that names none its start, is in the airing's start
+// window. A retry late in the airing before starts in this one's window, and
+// names the airing it was for; a guide that moves a start by a few minutes
+// keeps the recording its airing's.
+func ofAiring(rec store.Recording, pass store.Pass, airing store.Airing) bool {
+	if !sameSlot(rec, airing) {
+		return false
+	}
+	lead := recordLead
+	if extra := time.Duration(pass.PadBefore) * time.Minute; extra > lead {
+		lead = extra
+	}
+	at := rec.StartedAt
+	if rec.AiringStart != nil {
+		at = *rec.AiringStart
+	}
+	return at.Before(airing.End) && !at.Before(airing.Start.Add(-lead))
 }
 
 // sameSlot reports a recording made for this airing's channel and show: by
@@ -227,15 +243,10 @@ func retriesLeft(recs []store.Recording, pass store.Pass, airing store.Airing, n
 // failedTries counts this airing's failed attempts and when the last one
 // ended. Zero tries means there is none to repeat: any other attempt took.
 func failedTries(recs []store.Recording, pass store.Pass, airing store.Airing) (int, time.Time) {
-	lead := recordLead
-	if extra := time.Duration(pass.PadBefore) * time.Minute; extra > lead {
-		lead = extra
-	}
-	floor := airing.Start.Add(-lead)
 	tries := 0
 	var last time.Time
 	for _, rec := range recs {
-		if !sameSlot(rec, airing) || !rec.StartedAt.Before(airing.End) || rec.StartedAt.Before(floor) {
+		if !ofAiring(rec, pass, airing) {
 			continue
 		}
 		if rec.Status != "failed" && rec.Status != "interrupted" {
@@ -255,15 +266,10 @@ func failedTries(recs []store.Recording, pass store.Pass, airing store.Airing) (
 
 // already reports this airing's recording in progress. One of the airing
 // before (the last episode in its padding, a game that ran long) is not it:
-// the two record side by side. The window is the one attempted uses.
+// the two record side by side.
 func already(recs []store.Recording, pass store.Pass, airing store.Airing) bool {
-	lead := recordLead
-	if extra := time.Duration(pass.PadBefore) * time.Minute; extra > lead {
-		lead = extra
-	}
-	floor := airing.Start.Add(-lead)
 	for _, rec := range recs {
-		if rec.Status == "recording" && sameSlot(rec, airing) && rec.StartedAt.Before(airing.End) && !rec.StartedAt.Before(floor) {
+		if rec.Status == "recording" && ofAiring(rec, pass, airing) {
 			return true
 		}
 	}

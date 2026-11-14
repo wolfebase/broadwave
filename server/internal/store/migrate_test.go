@@ -197,7 +197,7 @@ func TestWaitsTableGetsToldAfterTheFirstForm(t *testing.T) {
 			category TEXT NOT NULL DEFAULT '', program_id TEXT NOT NULL DEFAULT '', game_id TEXT NOT NULL DEFAULT '',
 			reason TEXT NOT NULL DEFAULT '', failure TEXT NOT NULL DEFAULT '', since INTEGER NOT NULL,
 			PRIMARY KEY (channel_id, airing_start))`,
-		`DELETE FROM schema_migrations WHERE version >= 46`,
+		`DELETE FROM schema_migrations WHERE version = 46`,
 	} {
 		if _, err := st.db.ExecContext(ctx, q); err != nil {
 			t.Fatal(err)
@@ -219,7 +219,7 @@ func TestWaitsTableGetsToldAfterTheFirstForm(t *testing.T) {
 // A database that ran the edited 0045 already has the column. It must still start.
 func TestWaitsTableMigratesWhenToldIsThere(t *testing.T) {
 	st := openTestStore(t)
-	if _, err := st.db.ExecContext(context.Background(), `DELETE FROM schema_migrations WHERE version >= 46`); err != nil {
+	if _, err := st.db.ExecContext(context.Background(), `DELETE FROM schema_migrations WHERE version = 46`); err != nil {
 		t.Fatal(err)
 	}
 	if err := Migrate(st.db); err != nil {

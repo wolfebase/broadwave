@@ -215,10 +215,11 @@ func tryPastListing(ctx context.Context, st *store.Store, hub *live.Hub, open ma
 		default:
 			continue
 		}
+		start := w.Start
 		rec, err := hub.RecordIfFree(ctx, minutes, store.Recording{
 			ChannelID: w.ChannelID, Title: w.Title, Subtitle: w.Subtitle, Description: w.Description,
 			Category: w.Category, ProgramID: w.ProgramID, GameID: w.GameID, PassID: w.PassID,
-			StartedAt: w.Start,
+			StartedAt: start, AiringStart: &start,
 		})
 		if err != nil {
 			slog.Debug(fmt.Sprintf("pass record: %s: %v", w.Title, err))
@@ -261,12 +262,12 @@ func failWait(ctx context.Context, st *store.Store, w store.RecordingWait) {
 	if ch, err := st.SourceChannel(ctx, w.ChannelID); err == nil {
 		guide = ch.GuideNumber
 	}
-	until := w.Until
+	until, start := w.Until, w.Start
 	id, err := st.CreateRecording(ctx, store.Recording{
 		ChannelID: w.ChannelID, GuideNumber: guide, Title: w.Title, Status: "failed",
 		Subtitle: w.Subtitle, Description: w.Description, Category: w.Category,
 		ProgramID: w.ProgramID, GameID: w.GameID, PassID: w.PassID,
-		StartedAt: w.Start, EndsAt: &until,
+		StartedAt: start, EndsAt: &until, AiringStart: &start,
 	})
 	if err != nil {
 		slog.Warn(fmt.Sprintf("recording wait: %v", err))

@@ -138,6 +138,9 @@ type Recording struct {
 	GameID      string     `json:"gameId,omitempty"`
 	// PassID is the pass that started the recording; 0 for one started by hand or found in a folder.
 	PassID int64 `json:"passId,omitempty"`
+	// AiringStart is the start of the airing the recording was made for, when
+	// one was: a retry late in one airing starts in the next one's window.
+	AiringStart *time.Time `json:"-"`
 	// Watched is 0 when inferred from the playhead, 1 when marked watched, 2 when marked unwatched.
 	Watched int `json:"watched,omitempty"`
 	// Health is counted from the file after the recording finishes.
@@ -639,18 +642,21 @@ func (s *Store) WithEpisode(ctx context.Context, rec Recording) Recording {
 }
 
 func (s *Store) CreateRecording(ctx context.Context, rec Recording) (int64, error) {
-	ends := ""
+	ends, airing := "", ""
 	if rec.EndsAt != nil {
 		ends = rec.EndsAt.UTC().Format(time.RFC3339)
+	}
+	if rec.AiringStart != nil {
+		airing = rec.AiringStart.UTC().Format(time.RFC3339)
 	}
 	rec = s.WithEpisode(ctx, rec)
 	res, err := s.db.ExecContext(ctx, `
 INSERT INTO recordings (channel_id, guide_number, title, path, status, started_at, ends_at, subtitle, description, category, program_id, watched, game_id, pass_id,
-	season, episode, episode_label, original_air)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	season, episode, episode_label, original_air, airing_start)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.ChannelID, rec.GuideNumber, rec.Title, rec.Path, rec.Status,
 		rec.StartedAt.UTC().Format(time.RFC3339), ends, rec.Subtitle, rec.Description, rec.Category, rec.ProgramID, rec.Watched, rec.GameID, rec.PassID,
-		rec.Season, rec.Episode, rec.EpisodeLabel, rec.OriginalAir)
+		rec.Season, rec.Episode, rec.EpisodeLabel, rec.OriginalAir, airing)
 	if err != nil {
 		return 0, err
 	}
@@ -702,7 +708,7 @@ const recordingColumns = `r.id, r.channel_id, r.guide_number, r.title, r.path, r
 	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id, r.gaps, COALESCE(r.lost_seconds, 0),
 	r.season, r.episode, r.episode_label, r.original_air, r.breaks_scanned,
 	r.intro_start, r.intro_end, r.credits_start, EXISTS (SELECT 1 FROM episode_prints e WHERE e.recording_id = r.id),
-	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, ''), r.partial`
+	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, ''), r.partial, r.airing_start`
 
 // recordingSelect is one recording, joined to its playhead. The library
 // orders by id. One recording adds WHERE r.id = ?, which is the primary key.
@@ -728,13 +734,13 @@ func scanRecordings(rows *sql.Rows) ([]Recording, error) {
 	var out []Recording
 	for rows.Next() {
 		var rec Recording
-		var start, ends, ended, played, watchedAt string
+		var start, ends, ended, played, watchedAt, airing string
 		var continuity, transport, syncLoss, packets sql.NullInt64
 		var gaps sql.NullInt64
 		var lost float64
 		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID, &gaps, &lost,
 			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.BreaksScanned,
-			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Keep, &watchedAt, &rec.Position, &played, &rec.Partial); err != nil {
+			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Keep, &watchedAt, &rec.Position, &played, &rec.Partial, &airing); err != nil {
 			return nil, err
 		}
 		// Position 0 still counts: someone who starts a recording over saves
@@ -749,6 +755,9 @@ func scanRecordings(rows *sql.Rows) ([]Recording, error) {
 			rec.WatchedAt = &t
 		}
 		rec.StartedAt, _ = time.Parse(time.RFC3339, start)
+		if t, err := time.Parse(time.RFC3339, airing); err == nil {
+			rec.AiringStart = &t
+		}
 		if ends != "" {
 			t, _ := time.Parse(time.RFC3339, ends)
 			rec.EndsAt = &t
