@@ -670,6 +670,20 @@ UPDATE recordings SET status = ?, error = ?, ended_at = ? WHERE id = ?`,
 	return err
 }
 
+// CloseCut closes a row still "recording" that nothing writes as an
+// interrupted, partial recording with note. A row in any other state is left
+// alone. It reports whether it closed one.
+func (s *Store) CloseCut(ctx context.Context, id int64, note string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `
+UPDATE recordings SET status = 'interrupted', error = ?, ended_at = ?, partial = 1 WHERE id = ? AND status = 'recording'`,
+		note, time.Now().UTC().Format(time.RFC3339), id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // SetRecordingHealth stores the damage counted in a finished file.
 // A row that was deleted while the file was read is left alone.
 func (s *Store) SetRecordingHealth(ctx context.Context, id int64, h RecordingHealth) error {

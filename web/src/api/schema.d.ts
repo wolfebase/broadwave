@@ -925,6 +925,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Stops a recording in progress. A recording left in progress with nothing writing it, cut by a restart that did not resume it, is closed as interrupted and partial; its file is kept as it is. A recording already finished is left alone. */
         post: operations["stopRecording"];
         delete?: never;
         options?: never;
@@ -5051,6 +5052,16 @@ export interface operations {
         responses: {
             200: components["responses"]["Ok"];
             400: components["responses"]["Error"];
+            /** @description A recording was starting, so which recording it is couldn't be told yet. Try again after Retry-After seconds. */
+            409: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["Error"];
         };
     };

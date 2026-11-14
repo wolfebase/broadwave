@@ -3019,18 +3019,48 @@ func freePath(path string, taken func(string) bool) string {
 	}
 }
 
+// ErrRecordingStarting is a stop that came while a recording was starting:
+// until its writer is set, which row it is can't be told.
+var ErrRecordingStarting = errors.New("a recording is starting; try again")
+
+// StopRecord stops recording id when this process is writing it.
 func (h *Hub) StopRecord(id int64) {
+	h.stopRecord(id)
+}
+
+// EndRecording is StopRecord for a request to stop. A row still "recording"
+// that nothing in this process writes, one cut by a restart that did not
+// resume it, is closed as an interrupted, partial recording; its file is left
+// as it is.
+func (h *Hub) EndRecording(ctx context.Context, id int64) error {
+	found, starting := h.stopRecord(id)
+	if found || h.Store == nil {
+		return nil
+	}
+	if starting {
+		return ErrRecordingStarting
+	}
+	_, err := h.Store.CloseCut(ctx, id, "Stopped when the server restarted.")
+	return err
+}
+
+// stopRecord reports whether it found recording id, and when it did not,
+// whether a start had made its row but not yet taken it.
+func (h *Hub) stopRecord(id int64) (found, starting bool) {
 	h.mu.Lock()
 	save := func() {}
 	for _, f := range h.feedsLocked() {
 		if rec := f.recordingByID(id); rec != nil {
 			save = h.finishRecordingLocked(f, rec, "complete", "")
 			h.dropIfUnusedLocked(f)
+			found = true
 			break
 		}
+		starting = starting || f.recordingByID(0) != nil
 	}
 	h.mu.Unlock()
 	save()
+	return found, starting
 }
 
 // ExtendRecording moves the end of an in-progress recording.

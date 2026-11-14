@@ -386,7 +386,15 @@ func (s *Server) stopRecording(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "player is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	s.Hub.StopRecord(id)
+	if err := s.Hub.EndRecording(r.Context(), id); err != nil {
+		if errors.Is(err, live.ErrRecordingStarting) {
+			w.Header().Set("Retry-After", "1")
+			httpError(w, err.Error(), http.StatusConflict)
+			return
+		}
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

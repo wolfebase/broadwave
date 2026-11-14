@@ -1403,11 +1403,21 @@ paths:
     post:
       tags: [recordings]
       operationId: stopRecording
+      description: |
+        Stops a recording in progress. A recording left in progress with nothing writing it, cut by a restart that did not resume it, is closed as interrupted and partial; its file is kept as it is. A recording already finished is left alone.
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }
+        "409":
+          description: A recording was starting, so which recording it is couldn't be told yet. Try again after Retry-After seconds.
+          headers:
+            Retry-After:
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "503": { $ref: "#/components/responses/Error" }
   /recordings/{id}/play:
     post:
