@@ -17,6 +17,8 @@ function hexToRGBA(hex) {
   return { r: n(0), g: n(2), b: n(4), a: h.length === 8 ? n(6) / 255 : 1 };
 }
 
+const rem = (px) => `${+(px / 16).toFixed(4)}rem`;
+
 function css() {
   const lines = [`/* ${header} */`, ":root {"];
   for (const [k, v] of Object.entries(t.color)) lines.push(`  --color-${kebab(k)}: ${v};`);
@@ -24,7 +26,8 @@ function css() {
   for (const [k, v] of Object.entries(t.radius)) lines.push(`  --radius-${k}: ${v}px;`);
   for (const [k, v] of Object.entries(t.space)) lines.push(`  --space-${k}: ${v}px;`);
   for (const [k, v] of Object.entries(t.type)) {
-    lines.push(`  --type-${k}-size: ${v.size}px;`);
+    // rem, so a larger default font size in the browser makes the text larger.
+    lines.push(`  --type-${k}-size: ${rem(v.size)};`);
     lines.push(`  --type-${k}-weight: ${v.weight};`);
     lines.push(`  --type-${k}-tracking: ${v.tracking}em;`);
   }
@@ -39,7 +42,7 @@ function css() {
   lines.push("}", "", 'html[data-layout="tv"] {');
   for (const [k, v] of Object.entries(t.type)) {
     const tv = Math.round(v.size * t.tvScale);
-    lines.push(`  --type-${k}-size: clamp(${v.size}px, ${Math.ceil((tv / 1920) * 100_000) / 1000}vw, ${tv}px);`);
+    lines.push(`  --type-${k}-size: clamp(${rem(v.size)}, ${Math.ceil((tv / 1920) * 100_000) / 1000}vw, ${tv}px);`);
   }
   lines.push("}", "");
   return lines.join("\n");
