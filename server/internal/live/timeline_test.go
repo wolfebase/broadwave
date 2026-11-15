@@ -3,6 +3,7 @@ package live
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -257,5 +258,108 @@ func TestStampUsesThePackedStart(t *testing.T) {
 	pts, _, ok := tl.Anchor()
 	if !ok || pts != 990000 {
 		t.Fatalf("open part anchored at %d %v", pts, ok)
+	}
+}
+
+// windowPlaylist is a live playlist of the last segments, as the packer
+// writes it: each with its measured start and a duration rounded to a
+// millisecond.
+func windowPlaylist(first int, starts, durs []int64) []byte {
+	var b strings.Builder
+	b.WriteString("#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:2\n")
+	b.WriteString("#EXT-X-MEDIA-SEQUENCE:" + strconv.Itoa(first) + "\n")
+	for i := range starts {
+		name := "seg" + strconv.Itoa(first+i) + ".m4s"
+		b.WriteString("#EXT-X-PTS:" + name + ":" + strconv.FormatInt(starts[i], 10) + "\n")
+		b.WriteString("#EXTINF:" + fmtDur(durs[i]) + ",\n" + name + "\n")
+	}
+	return []byte(b.String())
+}
+
+// A long game keeps its dates on the broadcast clock. Durations are written
+// to the millisecond, and a rounded-up one once pushed every later date
+// forward a fraction of a millisecond, by a different amount on each
+// encode: two rooms on different pictures ended a game an echo apart.
+func TestDatesFollowTheBroadcastClockForHours(t *testing.T) {
+	fixed := time.Date(2026, 11, 14, 18, 0, 0, 0, time.UTC)
+	patterns := [][]int64{
+		{91592, 76581, 70570, 93093, 51051},
+		{90090, 180180, 45045, 135135},
+	}
+	for _, pattern := range patterns {
+		tl := NewTimeline()
+		tl.now = func() time.Time { return fixed }
+		var p playlistStamper
+		dir := t.TempDir()
+		const window = 30
+		var starts, durs []int64
+		// Near the 33-bit wrap, so the run crosses it.
+		base := ptsWrap - 90000*1800
+		pts, first := base, 0
+		for elapsed := int64(0); elapsed < 90000*3600*3; {
+			d := pattern[(first+len(starts))%len(pattern)]
+			starts, durs = append(starts, pts%ptsWrap), append(durs, d)
+			if len(starts) > window {
+				starts, durs = starts[1:], durs[1:]
+				first++
+			}
+			walls := dateWalls(t, string(p.stamp(dir, windowPlaylist(first, starts, durs), tl)))
+			if len(walls) != len(starts) {
+				t.Fatalf("%d dates for %d segments", len(walls), len(starts))
+			}
+			last := walls[len(walls)-1]
+			want := fixed.Add(-4*time.Second + time.Duration(elapsed)*time.Second/90000)
+			if off := last.Sub(want); off > time.Millisecond || off < -time.Millisecond {
+				t.Fatalf("after %v the date is %v off the broadcast clock", time.Duration(elapsed)*time.Second/90000, off)
+			}
+			pts += d
+			elapsed += d
+		}
+	}
+}
+
+// The clock holds for as long as a channel stays tuned. Measured from an
+// anchor that never moved, a picture an hour in looked like a station
+// clock reset, and the dates stepped onto the wall clock every hour.
+func TestTheClockDoesNotStepAfterAnHour(t *testing.T) {
+	fixed := time.Date(2026, 11, 14, 18, 0, 0, 0, time.UTC)
+	now := fixed
+	tl := NewTimeline()
+	tl.now = func() time.Time { return now }
+	base := ptsWrap - 90000*600
+	first := tl.Wall(base)
+	for s := int64(1); s <= 3600*30; s++ {
+		// The wall clock runs a little off the broadcast clock.
+		now = fixed.Add(time.Duration(s) * 1001 * time.Millisecond)
+		got := tl.Wall((base + s*90000) % ptsWrap)
+		if want := first.Add(time.Duration(s) * time.Second); !got.Equal(want) {
+			t.Fatalf("second %d: %v, want %v", s, got, want)
+		}
+	}
+	// A picture of a few seconds ago still dates from the same clock.
+	back := tl.Wall((base + (3600*30-5)*90000) % ptsWrap)
+	if want := first.Add((3600*30 - 5) * time.Second); !back.Equal(want) {
+		t.Fatalf("an earlier picture: %v, want %v", back, want)
+	}
+	// A station that resets its clock still re-anchors.
+	jump := tl.Wall((base + (3600*30+2*3600)*90000) % ptsWrap)
+	if !jump.Equal(now.Add(-4 * time.Second)) {
+		t.Fatalf("a two-hour jump: %v, want the wall clock %v", jump, now.Add(-4*time.Second))
+	}
+}
+
+// A real backward step still pins to the end of the segment before it.
+func TestABackwardStepStillPinsToTheLastEnd(t *testing.T) {
+	fixed := time.Date(2026, 11, 14, 18, 0, 0, 0, time.UTC)
+	tl := NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	var p playlistStamper
+	src := windowPlaylist(0, []int64{900000, 990000, 1035000}, []int64{90000, 90000, 90000})
+	walls := dateWalls(t, string(p.stamp(t.TempDir(), src, tl)))
+	if len(walls) != 3 {
+		t.Fatalf("%d dates", len(walls))
+	}
+	if want := walls[1].Add(time.Second); !walls[2].Equal(want) {
+		t.Fatalf("the segment after a half-second step back is at %v, want %v", walls[2], want)
 	}
 }
