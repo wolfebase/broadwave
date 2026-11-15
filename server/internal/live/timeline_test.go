@@ -396,3 +396,45 @@ func TestACarriedClockGivesWayToAStationReset(t *testing.T) {
 		t.Fatalf("a sibling's seed gave way: %v", got)
 	}
 }
+
+// A segment listed first by its part and then closed keeps the broadcast
+// clock too. The open segment's date may sit a fraction of a millisecond
+// past its own (the rounded end before it); carried into the closed
+// segment, those fractions added up until the clock was pinned forward.
+func TestDatesFollowTheBroadcastClockThroughOpenSegments(t *testing.T) {
+	fixed := time.Date(2026, 11, 14, 18, 0, 0, 0, time.UTC)
+	// Every duration rounds up.
+	pattern := []int64{91592, 76590, 91592, 60030}
+	tl := NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	var p playlistStamper
+	dir := t.TempDir()
+	const window = 12
+	var starts, durs []int64
+	base := int64(900000)
+	pts, first := base, 0
+	for n := 0; pts-base < 90000*3600*3; n++ {
+		d := pattern[n%len(pattern)]
+		// The segment is open: one part is listed after the closed ones.
+		part := "part" + strconv.Itoa(n) + ".m4s"
+		open := string(windowPlaylist(first, starts, durs)) +
+			"#EXT-X-PTS:" + part + ":" + strconv.FormatInt(pts, 10) + "\n" +
+			"#EXT-X-PART:DURATION=0.334,URI=\"" + part + "\",INDEPENDENT=YES\n"
+		p.stamp(dir, []byte(open), tl)
+		// Then it closes.
+		starts, durs = append(starts, pts), append(durs, d)
+		if len(starts) > window {
+			starts, durs = starts[1:], durs[1:]
+			first++
+		}
+		closed := string(windowPlaylist(first, starts, durs))
+		closed = strings.Replace(closed, "#EXT-X-PTS:seg"+strconv.Itoa(n)+".m4s", "#EXT-X-PTS:"+part+":"+strconv.FormatInt(pts, 10)+"\n#EXT-X-PART:DURATION=0.334,URI=\""+part+"\",INDEPENDENT=YES\n#EXT-X-PTS:seg"+strconv.Itoa(n)+".m4s", 1)
+		walls := dateWalls(t, string(p.stamp(dir, []byte(closed), tl)))
+		last := walls[len(walls)-1]
+		want := fixed.Add(-4*time.Second + time.Duration(pts-base)*time.Second/90000)
+		if off := last.Sub(want); off > 2*time.Millisecond || off < -2*time.Millisecond {
+			t.Fatalf("after %v the date is %v off the broadcast clock", time.Duration(pts-base)*time.Second/90000, off)
+		}
+		pts += d
+	}
+}

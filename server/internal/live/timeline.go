@@ -467,10 +467,16 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 					// Dated while open at the previous segment's end, below.
 					tl.Reanchor(pts, given)
 					wall = given
-				case wasOpen:
+				case wasOpen && wall.Sub(given) > stampSlack:
 					// Players have this date from its parts. A silence that
 					// moved the clock on since lands on the next segment.
 					wall = given
+				case wasOpen:
+					// The open date was this one, or the rounded end before it
+					// a fraction of a millisecond later. The segment takes its
+					// own: kept, those fractions add up until the clock is
+					// pinned forward.
+					tl.Settle()
 				case haveEnd && lastEnd.Sub(wall) > stampSlack:
 					// A short step the jump check missed overlaps the previous
 					// segment. Pin it to that segment's end and re-anchor, so the
