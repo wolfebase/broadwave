@@ -51,3 +51,17 @@ test("the captions playlist numbers segments and counts breaks", () => {
     { sn: 41, cc: 4, url: "http://server/media/live/1/720/41.vtt", date: Date.parse("2026-09-28T20:00:02Z") },
   ]);
 });
+
+test("a break that left the playlist keeps the break count of the segments after it", () => {
+  const base = "http://server/media/live/1/720/captions.m3u8";
+  // The server lists a gap, then slides past it and counts it in DISCONTINUITY-SEQUENCE.
+  const before = parseCaptionPlaylist(
+    "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:10\n#EXTINF:1,\nseg00010.vtt\n#EXT-X-DISCONTINUITY\n#EXTINF:1,\nseg00011.vtt\n#EXTINF:1,\nseg00012.vtt\n",
+    base,
+  );
+  const after = parseCaptionPlaylist("#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:12\n#EXT-X-DISCONTINUITY-SEQUENCE:1\n#EXTINF:1,\nseg00012.vtt\n#EXTINF:1,\nseg00013.vtt\n", base);
+  const cc = (list: typeof before, sn: number) => list.segments.find((s) => s.sn === sn)?.cc;
+  assert.equal(cc(before, 12), 1);
+  assert.equal(cc(after, 12), cc(before, 12));
+  assert.equal(cc(after, 13), 1);
+});

@@ -769,6 +769,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	var closed []packedSeg
 	var partN int
 	var msn int
+	// disc is the breaks on segments that left the window: the first listed
+	// segment's discontinuity sequence number.
+	var disc int
 	var segGap bool
 	// segCont and segStep are the open segment's continuation (packedSeg.cont);
 	// segSame marks a gap inside one encode.
@@ -800,7 +803,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 
 	var hold playlistCeiling
 	flush := func() error {
-		brk := openBreak{gap: segGap, cont: segGap && segCont, same: segSame, step: segStep, hint: fmt.Sprintf("part%05d.m4s", partN)}
+		brk := openBreak{gap: segGap, cont: segGap && segCont, same: segSame, step: segStep, disc: disc, hint: fmt.Sprintf("part%05d.m4s", partN)}
 		return writePackedOpen(dir, init, closed, open, msn-len(closed), allSync, brk, &hold, gate)
 	}
 	closeSeg := func(end int64) error {
@@ -833,6 +836,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 			old := closed[0]
 			kept -= old.dur
 			closed = closed[1:]
+			if old.gap {
+				disc++
+			}
 			_ = os.Remove(filepath.Join(dir, old.name))
 			for _, n := range old.parts {
 				_ = os.Remove(filepath.Join(dir, n.name))
@@ -1315,6 +1321,8 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 type openBreak struct {
 	gap, cont, same bool
 	step            int64
+	// disc is the first listed segment's discontinuity sequence number.
+	disc int
 	// hint is the next part's name, for EXT-X-PRELOAD-HINT. Empty writes none.
 	hint string
 }
@@ -1398,6 +1406,9 @@ func writePackedOpen(dir string, init []byte, closed []packedSeg, open []packedP
 		b = append(b, "#EXT-X-INDEPENDENT-SEGMENTS\n"...)
 	}
 	b = append(b, "#EXT-X-MEDIA-SEQUENCE:"+strconv.Itoa(origin)+"\n"...)
+	if brk.disc > 0 {
+		b = append(b, "#EXT-X-DISCONTINUITY-SEQUENCE:"+strconv.Itoa(brk.disc)+"\n"...)
+	}
 	b = append(b, "#EXT-X-MAP:URI=\"init.mp4\"\n"...)
 	// A recent segment keeps its parts in the list. A player that was
 	// playing them finds where they went when the segment closes.

@@ -257,3 +257,85 @@ func TestASilenceBeforeAShortGapCountsOnce(t *testing.T) {
 		}
 	}
 }
+
+// A break that leaves the window counts in EXT-X-DISCONTINUITY-SEQUENCE, as
+// the HLS spec requires: hls.js keeps each segment's break count across
+// reloads, and the web captions read theirs from the playlist, so a count
+// that went back by one put every caption a gap's length off.
+func TestABreakThatLeavesTheWindowIsCounted(t *testing.T) {
+	dir := t.TempDir()
+	raw := videoInit()
+	const group = 90090
+	pts := int64(900000)
+	add := func(n int) {
+		for range n {
+			raw = append(raw, fragmentAt(pts, group, 0, 0)...)
+			pts += group
+		}
+	}
+	add(5)
+	pts += 3 * 90000 // three seconds of pictures lost
+	add(5)
+	pts += 40 * 90000 // a station's jump forward
+	add(5)
+	pts -= 20 * 90000 // and back
+	add(5)
+	// Every break is in the window.
+	if err := Pack(dir, bytes.NewReader(raw), nil); err != nil {
+		t.Fatal(err)
+	}
+	text := readIndex(t, dir)
+	if n := strings.Count(text, "#EXT-X-DISCONTINUITY\n"); n != 3 || strings.Contains(text, "DISCONTINUITY-SEQUENCE") {
+		t.Fatalf("three breaks in the window, none gone:\n%s", text)
+	}
+	// Ninety minutes more push the first two out.
+	dir = t.TempDir()
+	add(int(windowTicks/group) - 8)
+	if err := Pack(dir, bytes.NewReader(raw), nil); err != nil {
+		t.Fatal(err)
+	}
+	text = readIndex(t, dir)
+	if n := strings.Count(text, "#EXT-X-DISCONTINUITY\n"); n != 1 {
+		t.Fatalf("%d breaks listed, want the last:\n%.600s", n, text)
+	}
+	if !strings.Contains(text, "#EXT-X-DISCONTINUITY-SEQUENCE:2\n") {
+		t.Fatalf("two breaks left the window:\n%.600s", text)
+	}
+	// It comes before the first segment, and a stamp keeps it and reads it
+	// as no break of its own.
+	if strings.Index(text, "DISCONTINUITY-SEQUENCE") > strings.Index(text, "#EXTINF") {
+		t.Fatalf("the sequence comes after a segment:\n%.600s", text)
+	}
+	stamped := string((&playlistStamper{}).stamp(dir, []byte(text), NewTimeline()))
+	if !strings.Contains(stamped, "#EXT-X-DISCONTINUITY-SEQUENCE:2\n") {
+		t.Fatalf("the stamp dropped the sequence:\n%.600s", stamped)
+	}
+	if delta := string(DeltaPlaylist([]byte(stamped))); !strings.Contains(delta, "#EXT-X-SKIP:") || !strings.Contains(delta, "#EXT-X-DISCONTINUITY-SEQUENCE:2\n") {
+		t.Fatalf("the delta update dropped the sequence:\n%.600s", delta)
+	}
+	if captions := string(captionPlaylist([]byte(stamped))); !strings.Contains(captions, "#EXT-X-DISCONTINUITY-SEQUENCE:2\n") {
+		t.Fatalf("the captions playlist dropped the sequence:\n%.600s", captions)
+	}
+}
+
+func readIndex(t *testing.T, dir string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// EXT-X-DISCONTINUITY-SEQUENCE starts like EXT-X-DISCONTINUITY. The stamper
+// must not take it for a break and re-anchor the second segment on the end
+// of the first.
+func TestTheDiscontinuitySequenceIsNoBreak(t *testing.T) {
+	text := "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:40\n#EXT-X-DISCONTINUITY-SEQUENCE:2\n#EXT-X-MAP:URI=\"init.mp4\"\n" +
+		"#EXT-X-PTS:seg00040.m4s:900000\n#EXTINF:1.000,\nseg00040.m4s\n" +
+		"#EXT-X-PTS:seg00041.m4s:1035000\n#EXTINF:1.000,\nseg00041.m4s\n"
+	walls, _ := stampedAt(t, t.TempDir(), text)
+	if d := walls[1].Sub(walls[0]); d != 1500*time.Millisecond {
+		t.Fatalf("the second segment is %v after the first, its picture 1.5 s", d)
+	}
+}

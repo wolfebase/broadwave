@@ -510,7 +510,8 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 			out.WriteString(l + "\n")
 		}
 		pending = pending[:0]
-		if strings.HasPrefix(trimmed, "#EXT-X-DISCONTINUITY") {
+		// Not EXT-X-DISCONTINUITY-SEQUENCE, which counts breaks gone by.
+		if trimmed == "#EXT-X-DISCONTINUITY" {
 			breakNext, contNext, same = true, false, false
 		}
 		if line != "" {
