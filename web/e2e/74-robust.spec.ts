@@ -183,20 +183,33 @@ test("installed on a phone, the pages start below the status bar and clear the n
   expect(grid!.x + grid!.width).toBeLessThanOrEqual(844 - 59 + 1);
 });
 
-test("setup's card holds everything in it on a phone", async ({ page }) => {
-  await setupDone(page);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/setup");
-  const card = page.locator(".setup-card").first();
-  await expect(card.getByText("Not seeing your tuner?")).toBeVisible();
-  const spill = await card.evaluate((el) => {
+async function spill(page: Page, selector: string) {
+  return page.locator(selector).first().evaluate((el) => {
     const edge = el.getBoundingClientRect().right;
-    return [...el.querySelectorAll("input, button, p")]
+    return [...el.querySelectorAll("input, button, select, p")]
       .filter((child) => {
         const r = child.getBoundingClientRect();
         return r.width > 0 && r.right > edge + 1;
       })
-      .map((child) => child.textContent?.trim().slice(0, 30) || child.tagName);
+      .map((child) => child.textContent?.trim().slice(0, 30) || (child as HTMLInputElement).type || child.tagName);
   });
-  expect(spill).toEqual([]);
+}
+
+test("setup and the tuner settings hold everything in their cards on a 320 px phone", async ({ page }) => {
+  await setupDone(page);
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/setup");
+  const card = page.locator(".setup-card").first();
+  await expect(card.getByText("Not seeing your tuner?")).toBeVisible();
+  await card.locator("summary").filter({ hasText: "Other sources" }).click();
+  await expect(card.getByText("Playlist or Xtream server")).toBeVisible();
+  expect(await spill(page, ".setup-card")).toEqual([]);
+
+  await page.goto("/settings/tuners");
+  await settle(page);
+  const cards = page.locator(".set-card");
+  await expect(cards.first()).toBeVisible();
+  for (let i = 0; i < (await cards.count()); i++) {
+    expect(await spill(page, `.set-card >> nth=${i}`), `card ${i}`).toEqual([]);
+  }
 });

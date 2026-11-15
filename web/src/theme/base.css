@@ -749,6 +749,8 @@ html[data-layout="tv"] .source-row input {
 
 .field {
   display: grid;
+  /* No wider than the form: a file picker's own width pushed past a phone's edge. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   font-size: var(--type-footnote-size);
   color: var(--color-text-secondary);

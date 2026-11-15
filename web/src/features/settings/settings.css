@@ -343,6 +343,13 @@ a.set-row-label:hover {
   overflow-wrap: anywhere;
 }
 
+/* A long button label wraps instead of running past the card on a narrow phone. */
+.set-row-control > .btn,
+.set-row > .btn {
+  max-width: 100%;
+  white-space: normal;
+}
+
 .set-row-control {
   flex: none;
   display: flex;
@@ -445,8 +452,15 @@ a.set-row-label:hover {
   min-width: 0;
 }
 
+/* A field and its button share a row until the field would be too narrow to read,
+   then the button goes under it. */
+.set-inline {
+  flex-wrap: wrap;
+}
+
 .set-inline > input {
   flex: 1 1 auto;
+  min-width: min(12rem, 100%);
 }
 
 .set-inline > .btn {
