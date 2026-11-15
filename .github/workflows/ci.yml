@@ -42,6 +42,9 @@ jobs:
       - run: test -z "$(gofmt -l docs/sitegen)" || { gofmt -l docs/sitegen; exit 1; }
       - run: go test ./...
         working-directory: docs/sitegen
+      # The one-command install, against a fake docker.
+      - run: shellcheck -x scripts/install.sh scripts/install.test.sh
+      - run: bash scripts/install.test.sh
 
   web:
     runs-on: ubuntu-latest

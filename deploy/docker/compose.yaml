@@ -1,9 +1,8 @@
 services:
   broadwave:
+    # latest is the newest release. A version such as 0.18.2 stays on that build.
+    # To build from a checkout instead: make docker, then use image: broadwave.
     image: ghcr.io/wolfebase/broadwave:latest
-    build:
-      context: ../..
-      dockerfile: deploy/docker/Dockerfile
     # Host networking lets a Linux server hear HDHomeRun discovery and lets
     # phones and TVs find the server over Bonjour. On Docker Desktop this
     # network stays inside the virtual machine, so use the published-port
