@@ -769,6 +769,7 @@ func (h *Hub) applyDeferredAudio(f *feed, id int64, tracks []AudioTrack) {
 		return
 	}
 	f.tracks = tracks
+	h.noteRecordingSoundLocked(f)
 	h.learnCodecsLocked(f, "", mainCodec(tracks))
 	// Unchanged args stay up. A described or second-language choice, or a
 	// main that is not the first audio stream, builds a different map and

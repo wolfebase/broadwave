@@ -648,6 +648,10 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	// A tune that is up plays the choice now, not on the next watch.
+	if body.SoundSwapped != nil && s.Hub != nil {
+		s.Hub.ApplySound(id, *body.SoundSwapped, live.SoundCheckedByHand, time.Now())
+	}
 	writeJSON(w, http.StatusOK, withNetworks([]store.Channel{ch})[0])
 }
 

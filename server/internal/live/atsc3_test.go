@@ -974,7 +974,7 @@ func TestASilentRecordingLeavesOutItsSound(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := &Hub{Encoder: "libx264", NoAC4: true}
-	g := h.fileGraphFor(ac4, "hevc", "broadcast", "progressive")
+	g := h.fileGraphFor(ac4, "hevc", "broadcast", "progressive", 0)
 	if g.Audio != "none" {
 		t.Fatalf("graph %+v", g)
 	}
@@ -983,11 +983,11 @@ func TestASilentRecordingLeavesOutItsSound(t *testing.T) {
 	if !slices.Contains(list, "-an") || strings.Contains(args, "0:a:0") || strings.Contains(args, "-c:a") {
 		t.Fatalf("args %s", args)
 	}
-	if g := h.fileGraphFor(other, "mpeg2video", "broadcast", ""); g.Audio == "none" {
+	if g := h.fileGraphFor(other, "mpeg2video", "broadcast", "", 0); g.Audio == "none" {
 		t.Fatal("a 1.0 recording keeps its sound")
 	}
 	h.NoAC4 = false
-	voiced := h.fileGraphFor(ac4, "hevc", "broadcast", "progressive")
+	voiced := h.fileGraphFor(ac4, "hevc", "broadcast", "progressive", 0)
 	if voiced.Audio == "none" || graphStamp(voiced) == graphStamp(g) {
 		t.Fatalf("with a decoder: %+v, stamps %q %q", voiced, graphStamp(voiced), graphStamp(g))
 	}

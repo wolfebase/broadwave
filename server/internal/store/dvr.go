@@ -141,6 +141,10 @@ type Recording struct {
 	// AiringStart is the start of the airing the recording was made for, when
 	// one was: a retry late in one airing starts in the next one's window.
 	AiringStart *time.Time `json:"-"`
+	// SoundPID is the track the channel played as its main sound while this
+	// recorded, and SoundLanguage its language; 0 plays the file's first sound.
+	SoundPID      int    `json:"-"`
+	SoundLanguage string `json:"-"`
 	// Watched is 0 when inferred from the playhead, 1 when marked watched, 2 when marked unwatched.
 	Watched int `json:"watched,omitempty"`
 	// Health is counted from the file after the recording finishes.
@@ -271,17 +275,17 @@ func (s *Store) SourceChannel(ctx context.Context, id int64) (SourceChannel, err
 func (s *Store) sourceChannel(ctx context.Context, id int64) (SourceChannel, error) {
 	var ch SourceChannel
 	var hd, fav, en, hidden, present, protected, long, swapped int
-	var customNumber, customName string
+	var customNumber, customName, soundAt string
 	err := s.db.QueryRowContext(ctx, `
 SELECT c.id, c.device_id, c.guide_number, c.guide_name, c.custom_number, c.custom_name,
-	c.video_codec, c.audio_codec, c.hd, c.favorite, c.enabled, c.hidden, c.present, c.protected, c.sound_swapped,
+	c.video_codec, c.audio_codec, c.hd, c.favorite, c.enabled, c.hidden, c.present, c.protected, c.sound_swapped, c.sound_checked_at, c.sound_checked_by,
 	c.stream_url, c.frequency_hz, c.program_num, c.field_order, c.audio_tracks, c.picture_height, c.picture_rate, c.long_groups, c.user_agent, c.referrer,
 	d.base_url, d.tuner_count, d.model_number,
 	COALESCE((SELECT stream_limit FROM sources WHERE device_id = c.device_id LIMIT 1), 0),
 	COALESCE((SELECT stream_format FROM sources WHERE device_id = c.device_id LIMIT 1), '')
 FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id).Scan(
 		&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
-		&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &protected, &swapped,
+		&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &protected, &swapped, &soundAt, &ch.SoundCheckedBy,
 		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.AudioTracks, &ch.PictureHeight, &ch.PictureRate, &long, &ch.UserAgent, &ch.Referrer,
 		&ch.BaseURL, &ch.TunerCount, &ch.ModelNumber, &ch.StreamLimit, &ch.StreamFormat,
 	)
@@ -292,6 +296,7 @@ FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id)
 	ch.Protected = protected != 0
 	ch.LongGroups = long != 0
 	ch.SoundSwapped = swapped != 0
+	ch.SoundCheckedAt = soundTime(soundAt)
 	ch.DisplayNumber = ch.GuideNumber
 	if strings.TrimSpace(customNumber) != "" {
 		ch.DisplayNumber = strings.TrimSpace(customNumber)
@@ -355,6 +360,32 @@ WHERE device_id = ? AND guide_number = ?`, freq, program, deviceID, guide)
 
 func (s *Store) SetFieldOrder(ctx context.Context, channelID int64, order string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE channels SET field_order = ? WHERE id = ?`, order, channelID)
+	return err
+}
+
+// SetChannelSound stores a settled choice of the channel's main sound: swapped
+// or not, when, and by what ("twin" or "hand"). A change clears the stored
+// tracks, which carry the old labels; the caller stores them again.
+// One channel on two tuners is one station, so every row of it changes.
+func (s *Store) SetChannelSound(ctx context.Context, channelID int64, swapped bool, at time.Time, by string) error {
+	ids, err := s.sameChannel(ctx, channelID)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if _, err := s.db.ExecContext(ctx, `UPDATE channels SET
+	audio_tracks = CASE WHEN sound_swapped = ? THEN audio_tracks ELSE '' END,
+	sound_swapped = ?, sound_checked_at = ?, sound_checked_by = ? WHERE id = ?`,
+			boolInt(swapped), boolInt(swapped), at.UTC().Format(time.RFC3339), by, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetRecordingSound stores the track a recording plays as its main sound.
+func (s *Store) SetRecordingSound(ctx context.Context, id int64, pid int, language string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE recordings SET sound_pid = ?, sound_language = ? WHERE id = ?`, pid, language, id)
 	return err
 }
 
@@ -747,7 +778,7 @@ const recordingColumns = `r.id, r.channel_id, r.guide_number, r.title, r.path, r
 	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id, r.gaps, COALESCE(r.lost_seconds, 0),
 	r.season, r.episode, r.episode_label, r.original_air, r.breaks_scanned,
 	r.intro_start, r.intro_end, r.credits_start, EXISTS (SELECT 1 FROM episode_prints e WHERE e.recording_id = r.id),
-	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, ''), r.partial, r.airing_start`
+	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, ''), r.partial, r.airing_start, r.sound_pid, r.sound_language`
 
 // recordingSelect is one recording, joined to its playhead. The library
 // orders by id. One recording adds WHERE r.id = ?, which is the primary key.
@@ -779,7 +810,7 @@ func scanRecordings(rows *sql.Rows) ([]Recording, error) {
 		var lost float64
 		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID, &gaps, &lost,
 			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.BreaksScanned,
-			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Keep, &watchedAt, &rec.Position, &played, &rec.Partial, &airing); err != nil {
+			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Keep, &watchedAt, &rec.Position, &played, &rec.Partial, &airing, &rec.SoundPID, &rec.SoundLanguage); err != nil {
 			return nil, err
 		}
 		// Position 0 still counts: someone who starts a recording over saves
@@ -1707,4 +1738,13 @@ func blank(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// soundTime reads sound_checked_at; empty is never.
+func soundTime(raw string) *time.Time {
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil
+	}
+	return &t
 }

@@ -954,7 +954,7 @@ func TestAResumedEncodeJoinsTheOneBeforeIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	job := &fileJob{path: abs, graph: h.fileGraphFor(rec, "mpeg2video", "broadcast", "progressive"), clock: newFileClock(0)}
+	job := &fileJob{path: abs, graph: h.fileGraphFor(rec, "mpeg2video", "broadcast", "progressive", 0), clock: newFileClock(0)}
 	job.clock.scan(abs, func() bool { return false })
 	if !job.clock.safe(false) {
 		t.Fatal("a generated file's clock reads as unsteady")

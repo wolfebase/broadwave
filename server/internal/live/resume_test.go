@@ -250,7 +250,7 @@ func TestPlayFileKeepsAFinishedEncode(t *testing.T) {
 	if err := os.MkdirAll(play, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	g := h.fileGraphFor(path, "mpeg2video", "broadcast", "progressive")
+	g := h.fileGraphFor(path, "mpeg2video", "broadcast", "progressive", 0)
 	g.Live = false
 	if err := os.WriteFile(filepath.Join(play, "graph.txt"), []byte(graphStamp(g)), 0o644); err != nil {
 		t.Fatal(err)
@@ -289,7 +289,7 @@ func TestAnOpenEncodeDoesNotCoverADeepResume(t *testing.T) {
 	if err := os.MkdirAll(play, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	g := h.fileGraphFor(path, "mpeg2video", "broadcast", "progressive")
+	g := h.fileGraphFor(path, "mpeg2video", "broadcast", "progressive", 0)
 	g.Live = false
 	if err := os.WriteFile(filepath.Join(play, "graph.txt"), []byte(graphStamp(g)), 0o644); err != nil {
 		t.Fatal(err)

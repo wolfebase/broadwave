@@ -25,6 +25,8 @@ type Graph struct {
 	// FullRate keeps field rate on a 540p or 360p tile. Saver and background
 	// tiles stay at one frame per broadcast frame.
 	FullRate bool
+	// AudioPID is the sound track to play, by PID; 0 plays the first one.
+	AudioPID int
 	// Start is an input seek, in seconds. A recording resume begins here so
 	// the encode does not play the file from the beginning.
 	Start float64
@@ -160,8 +162,12 @@ func PictureArgs(g Graph) []string {
 		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", g.Program))
 	case g.Audio == "none":
 		args = append(args, "-map", "0:v:0")
+	case g.Program > 0 && g.AudioPID > 0:
+		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", g.Program), "-map", fmt.Sprintf("0:i:%d", g.AudioPID))
 	case g.Program > 0:
 		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", g.Program), "-map", fmt.Sprintf("0:p:%d:a:0?", g.Program))
+	case g.AudioPID > 0:
+		args = append(args, "-map", "0:v:0", "-map", fmt.Sprintf("0:i:%d", g.AudioPID))
 	default:
 		// A recording with no sound track still plays its picture.
 		args = append(args, "-map", "0:v:0", "-map", "0:a:0?")

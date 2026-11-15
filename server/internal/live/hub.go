@@ -301,6 +301,12 @@ type Hub struct {
 	swept       map[int64]time.Time
 	sweepTunes  map[string][]time.Time
 	sweepMisses map[int64]int
+	// soundTune is a sound check's twin tune, while it runs; soundTries are
+	// the channels whose last check did not decide, and when to try again.
+	soundTune  *sweepState
+	soundTries map[int64]soundTry
+	// recSoundMu keeps a recording's stored main sound in the order chosen.
+	recSoundMu sync.Mutex
 	// guessTunes are the tunes guesses opened without a picture, oldest first.
 	guessTunes []*feed
 	// warmMu runs one guessed tune at a time: two at once would each count
@@ -542,6 +548,8 @@ type recording struct {
 	// failed. endStatus and endNote are a stop that came before it was.
 	ready              chan struct{}
 	endStatus, endNote string
+	// soundPID is the main sound stored for it; touched only under h.mu.
+	soundPID int
 }
 
 func (rec *recording) noteWriteErr(err error) {
@@ -2843,6 +2851,7 @@ func (h *Hub) recordMeta(ctx context.Context, minutes int, meta store.Recording,
 
 	h.mu.Lock()
 	rec.id, rec.cmd, rec.stdin = id, cmd, stdin
+	h.noteRecordingSoundLocked(f)
 	if cmd != nil {
 		rec.exited = make(chan struct{})
 		go h.watchRecording(f, rec, cmd)
