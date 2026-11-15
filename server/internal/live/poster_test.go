@@ -80,7 +80,7 @@ func TestAPosterIsAPictureWhenTheRecordingStartsFlat(t *testing.T) {
 	if err := os.WriteFile(old, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	poster, err := h.RecordingPoster(ctx, 1, src, false, measured(20, nil))
+	poster, err := h.RecordingPoster(ctx, 1, src, false, PosterOptions{}, measured(20, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestAPosterIsAPictureWhenTheRecordingStartsFlat(t *testing.T) {
 		t.Fatalf("looked past a scene: %v", err)
 	}
 	// Made once: the next request reads the file, not the recording.
-	again, err := h.RecordingPoster(ctx, 1, filepath.Join(dir, "gone.ts"), false, func() (float64, []store.Marker) {
+	again, err := h.RecordingPoster(ctx, 1, filepath.Join(dir, "gone.ts"), false, PosterOptions{}, func() (float64, []store.Marker) {
 		t.Fatal("measured a recording that has a poster")
 		return 0, nil
 	})
@@ -113,7 +113,7 @@ func TestAFlatRecordingKeepsNoPosterAndIsLookedAtAgain(t *testing.T) {
 	flatThenScene(t, src, 10, 0)
 	h := &Hub{Dir: dir, FFmpeg: "ffmpeg"}
 	ctx := context.Background()
-	if _, err := h.RecordingPoster(ctx, 2, src, false, measured(10, nil)); !errors.Is(err, ErrNoPoster) {
+	if _, err := h.RecordingPoster(ctx, 2, src, false, PosterOptions{}, measured(10, nil)); !errors.Is(err, ErrNoPoster) {
 		t.Fatalf("flat recording: %v", err)
 	}
 	if _, err := os.Stat(PosterPath(dir, 2)); !os.IsNotExist(err) {
@@ -122,12 +122,12 @@ func TestAFlatRecordingKeepsNoPosterAndIsLookedAtAgain(t *testing.T) {
 	// Soon after, the answer is remembered and no ffmpeg runs.
 	calls := 0
 	count := func() (float64, []store.Marker) { calls++; return 10, nil }
-	if _, err := h.RecordingPoster(ctx, 2, src, false, count); !errors.Is(err, ErrNoPoster) || calls != 0 {
+	if _, err := h.RecordingPoster(ctx, 2, src, false, PosterOptions{}, count); !errors.Is(err, ErrNoPoster) || calls != 0 {
 		t.Fatalf("looked again at once: %v, %d", err, calls)
 	}
 	// Later it is looked at again: a file can be replaced or finish writing.
-	h.posters.set(2, time.Now().Add(-posterRetry))
-	if _, err := h.RecordingPoster(ctx, 2, src, false, count); !errors.Is(err, ErrNoPoster) || calls != 1 {
+	h.posters.set(PosterPath(dir, 2), time.Now().Add(-posterRetry))
+	if _, err := h.RecordingPoster(ctx, 2, src, false, PosterOptions{}, count); !errors.Is(err, ErrNoPoster) || calls != 1 {
 		t.Fatalf("never looked again: %v, %d", err, calls)
 	}
 }
@@ -138,7 +138,7 @@ func TestAGrowingRecordingKeepsNoPoster(t *testing.T) {
 	flatThenScene(t, src, 1, 19)
 	h := &Hub{Dir: dir, FFmpeg: "ffmpeg"}
 	ctx := context.Background()
-	got, err := h.RecordingPoster(ctx, 3, src, true, measured(19, nil))
+	got, err := h.RecordingPoster(ctx, 3, src, true, PosterOptions{}, measured(19, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestAGrowingRecordingKeepsNoPoster(t *testing.T) {
 	if _, err := os.Stat(PosterPath(dir, 3)); !os.IsNotExist(err) {
 		t.Fatalf("poster file: %v", err)
 	}
-	if _, err := h.RecordingPoster(ctx, 3, src, true, measured(4, nil)); !errors.Is(err, ErrNoPoster) {
+	if _, err := h.RecordingPoster(ctx, 3, src, true, PosterOptions{}, measured(4, nil)); !errors.Is(err, ErrNoPoster) {
 		t.Fatalf("a few seconds in: %v", err)
 	}
 }
@@ -166,7 +166,7 @@ func TestFirstPosterRequestsAtOnceAllGetIt(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, errs[i] = h.RecordingPoster(context.Background(), 4, src, false, count)
+			_, errs[i] = h.RecordingPoster(context.Background(), 4, src, false, PosterOptions{}, count)
 		}()
 	}
 	wg.Wait()
@@ -215,7 +215,7 @@ func TestPostersWaitTheirTurnForASlot(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, errs[i] = h.RecordingPoster(ctx, int64(10+i), src, false, measured(10, nil))
+			_, errs[i] = h.RecordingPoster(ctx, int64(10+i), src, false, PosterOptions{}, measured(10, nil))
 		}()
 	}
 	wg.Wait()
@@ -236,7 +236,85 @@ func TestPostersWaitTheirTurnForASlot(t *testing.T) {
 			<-h.stills.slots
 		}
 	}()
-	if _, err := h.RecordingPoster(ctx, 20, src, false, measured(10, nil)); !errors.Is(err, ErrStillBusy) {
+	if _, err := h.RecordingPoster(ctx, 20, src, false, PosterOptions{}, measured(10, nil)); !errors.Is(err, ErrStillBusy) {
 		t.Fatalf("waited past the limit: %v", err)
+	}
+}
+
+// A TV asks for the poster full screen: the same picture as the card's, at
+// that width, kept beside it and removed with the recording.
+func TestAWidePosterIsTheSamePictureAtItsWidth(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "show.ts")
+	flatThenScene(t, src, 7, 13)
+	h := &Hub{Dir: dir, FFmpeg: "ffmpeg"}
+	ctx := context.Background()
+	card, err := h.RecordingPoster(ctx, 1, src, false, PosterOptions{}, measured(20, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wide, err := h.RecordingPoster(ctx, 1, src, false, PosterOptions{Width: 1920}, measured(20, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wide == card || wide != posterPath(dir, 1, PosterOptions{Width: 2000}) {
+		t.Fatalf("wide poster at %s", wide)
+	}
+	if got := jpegSize(t, wide); got != "1920,1080,1:1" {
+		t.Fatalf("wide poster %s", got)
+	}
+	// The card's picture is the one at 8 s (40%), the first scene.
+	if _, err := os.Stat(StillPath(dir, 1, 8, 1920)); err != nil {
+		t.Fatalf("not the card's picture: %v", err)
+	}
+	removePosters(dir, 1)
+	for _, path := range []string{card, wide} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("%s left: %v", path, err)
+		}
+	}
+}
+
+// A game whose score is hidden gets a poster from around its listed start,
+// before kickoff: never later than two minutes past it, and none when the
+// file starts after that.
+func TestPregamePosterTimes(t *testing.T) {
+	if got := PregameTimes(3600, 300, nil); !reflect.DeepEqual(got, []float64{330, 240, 390, 150, 305}) {
+		t.Fatalf("times %v", got)
+	}
+	if got := PregameTimes(3600, 300, []store.Marker{{Start: 320, End: 430}}); !reflect.DeepEqual(got, []float64{240, 150, 305}) {
+		t.Fatalf("a break past the cut-off: %v", got)
+	}
+	if got := PregameTimes(0, 0, nil); !reflect.DeepEqual(got, []float64{30, 90, 5}) {
+		t.Fatalf("a file that starts on the listing: %v", got)
+	}
+	if got := PregameTimes(3600, -200, nil); len(got) != 0 {
+		t.Fatalf("a file that starts after kickoff: %v", got)
+	}
+}
+
+func TestAPregamePosterKeepsToTheStart(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "game.ts")
+	flatThenScene(t, src, 1, 19)
+	h := &Hub{Dir: dir, FFmpeg: "ffmpeg"}
+	ctx := context.Background()
+	got, err := h.RecordingPoster(ctx, 5, src, false, PosterOptions{Pregame: true, Lead: 2}, measured(20, nil))
+	if err != nil || got != posterPath(dir, 5, PosterOptions{Pregame: true}) {
+		t.Fatalf("pregame poster %q %v", got, err)
+	}
+	// The plain poster's first try, 10% in, is never looked at.
+	if _, err := os.Stat(StillPath(dir, 5, 2, 480)); !os.IsNotExist(err) {
+		t.Fatal("tried the plain poster's times")
+	}
+	if _, err := os.Stat(StillPath(dir, 5, 7, 480)); err != nil {
+		t.Fatalf("not 5 s past the listed start: %v", err)
+	}
+	if _, err := h.RecordingPoster(ctx, 6, src, false, PosterOptions{Pregame: true, Lead: -300}, measured(20, nil)); !errors.Is(err, ErrNoPoster) {
+		t.Fatalf("a file from after kickoff: %v", err)
+	}
+	// The plain poster of the same recording is not held back by it.
+	if _, err := h.RecordingPoster(ctx, 6, src, false, PosterOptions{}, measured(20, nil)); err != nil {
+		t.Fatal(err)
 	}
 }

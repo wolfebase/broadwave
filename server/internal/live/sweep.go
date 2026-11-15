@@ -34,7 +34,18 @@ const (
 	// sweepFreeTuners is the free tuners a device needs before the sweep
 	// takes one: it never takes the last, or one another app holds.
 	sweepFreeTuners = 2
+	// sweepProgramGap is the youngest still a new program replaces early.
+	sweepProgramGap = 10 * time.Minute
+	// sweepDailyTunes is the most a target is tuned in a day: what
+	// sweepRefresh alone allows. A new program moves a tune earlier and
+	// never adds one past it.
+	sweepDailyTunes = int(24 * time.Hour / sweepRefresh)
 )
+
+// StillSettle is the start of a program a still from is counted as the
+// program before: a station often ends the last show or runs a break over
+// the boundary.
+const StillSettle = 2 * time.Minute
 
 // sweepGrabWait is the longest a swept tune waits for its stills.
 var sweepGrabWait = 30 * time.Second
@@ -48,7 +59,23 @@ type sweepTarget struct {
 	key      string
 	first    store.SourceChannel
 	channels []int64
+	// rank is how likely a viewer opens it, lowest first (sweepRank).
+	rank int
+	// lead are its channels a viewer opens (rank under sweepRest), and
+	// program the start of the latest of their programs on now. A still
+	// from before it shows the program before.
+	lead    []int64
+	program time.Time
 }
+
+// Sweep ranks: a game, live show, or new episode on now; a favorite; a
+// station's main channel; the rest.
+const (
+	sweepOnNow = iota
+	sweepFavorite
+	sweepMain
+	sweepRest
+)
 
 // sweepState is the running sweep's tune, for a watch to stop.
 type sweepState struct {
@@ -57,8 +84,10 @@ type sweepState struct {
 }
 
 // RunStillSweep keeps a recent still for every channel by tuning, one at a
-// time, the frequencies no tune is on: favorites first, then guide order,
-// round and round. It tunes only while nothing on that device is watched,
+// time, the frequencies no tune is on. Each tune goes to the first target
+// due in sweepTargets' order, so the channels a viewer opens are refreshed
+// first and again as soon as a new program starts on them. It tunes only
+// while nothing on that device is watched,
 // recorded, or warm, no recording starts within three minutes, the device
 // reports at least two free tuners, and the stillSweep setting is not "0".
 // A watch, recording, or warm stops it at once (StopSweep), and the tuner
@@ -67,25 +96,28 @@ func (h *Hub) RunStillSweep(ctx context.Context) {
 	if os.Getenv("BROADWAVE_STILL_SWEEP") == "0" || h.Store == nil || h.FFmpeg == "" {
 		return
 	}
-	next := 0
 	// A pass ends when no target is due; its length is logged.
 	var passStart time.Time
 	passTunes := 0
 	for ctx.Err() == nil {
 		targets := h.sweepTargets(ctx)
 		swept, blocked := false, false
-		for range targets {
+		// A device that is busy is passed over; another may be free.
+		shut := map[string]bool{}
+		for _, t := range targets {
 			if ctx.Err() != nil {
 				return
 			}
-			t := targets[next%len(targets)]
-			next++
-			if !h.sweepDue(ctx, t) {
+			if !h.sweepDue(t, time.Now()) {
+				continue
+			}
+			host := hostOf(t.first.BaseURL)
+			if shut[host] {
 				continue
 			}
 			if !h.sweepAllowed(ctx, t.first) {
-				blocked = true
-				break
+				shut[host], blocked = true, true
+				continue
 			}
 			if passStart.IsZero() {
 				passStart = time.Now()
@@ -94,9 +126,6 @@ func (h *Hub) RunStillSweep(ctx context.Context) {
 			passTunes++
 			swept = true
 			break
-		}
-		if len(targets) > 0 {
-			next %= len(targets)
 		}
 		if !swept && !blocked && passTunes > 0 {
 			slog.Info(fmt.Sprintf("stills: swept %d tunes in %s", passTunes, time.Since(passStart).Round(time.Second)))
@@ -114,7 +143,7 @@ func (h *Hub) RunStillSweep(ctx context.Context) {
 	}
 }
 
-// sweepTargets is every tune the sweep may make, favorites first, then
+// sweepTargets is every tune the sweep may make, in sweepRank order, then
 // guide order. Hidden, disabled, absent, duplicate, and copy-protected channels (an
 // encrypted ATSC 3.0 channel's clear twin is swept instead) are left out,
 // and so are links and playlists, which have no tuner.
@@ -135,21 +164,38 @@ func (h *Hub) sweepTargets(ctx context.Context) []sweepTarget {
 			}
 		}
 	}
-	var favorites, rest []store.Channel
+	now := time.Now()
+	onNow := map[int64]store.Airing{}
+	if airings, err := h.Store.Airings(ctx, now, now.Add(time.Second)); err == nil {
+		for _, a := range airings {
+			onNow[a.ChannelID] = a
+		}
+	}
+	// A shown 3.0 channel can carry its 1.0 twin's listings.
+	airingOf := func(ch store.Channel) (store.Airing, bool) {
+		if a, ok := onNow[ch.ID]; ok {
+			return a, true
+		}
+		a, ok := onNow[ch.TwinID]
+		return a, ok && ch.TwinID != 0
+	}
+	var shown []store.Channel
 	for _, ch := range list {
 		// A SameAs row is the same channel on another tuner; the shown row is swept.
 		if ch.Hidden || !ch.Enabled || !ch.Present || ch.Protected || ch.SameAs != 0 || gone[ch.DeviceID] {
 			continue
 		}
-		if ch.Favorite {
-			favorites = append(favorites, ch)
-		} else {
-			rest = append(rest, ch)
-		}
+		shown = append(shown, ch)
 	}
+	ranks := make(map[int64]int, len(shown))
+	for _, ch := range shown {
+		a, ok := airingOf(ch)
+		ranks[ch.ID] = sweepRank(ch, a, ok)
+	}
+	slices.SortStableFunc(shown, func(a, b store.Channel) int { return ranks[a.ID] - ranks[b.ID] })
 	byKey := map[string]int{}
 	var out []sweepTarget
-	for _, ch := range append(favorites, rest...) {
+	for _, ch := range shown {
 		src, err := h.Store.SourceChannel(ctx, ch.ID)
 		if err != nil || src.TunerCount == 0 || src.BaseURL == "" || hlsStream(src) {
 			continue
@@ -162,19 +208,46 @@ func (h *Hub) sweepTargets(ctx context.Context) []sweepTarget {
 		if !NeedFor(src.VideoCodec, src.AudioCodec, src.ATSC3).ATSC3 && src.FrequencyHz > 0 {
 			key = hostOf(src.BaseURL) + ":" + strconv.Itoa(src.FrequencyHz)
 		}
-		if i, ok := byKey[key]; ok {
-			out[i].channels = append(out[i].channels, src.ID)
-			continue
+		i, ok := byKey[key]
+		if !ok {
+			i = len(out)
+			byKey[key] = i
+			out = append(out, sweepTarget{key: key, first: src, rank: ranks[ch.ID]})
 		}
-		byKey[key] = len(out)
-		out = append(out, sweepTarget{key: key, first: src, channels: []int64{src.ID}})
+		t := &out[i]
+		t.channels = append(t.channels, src.ID)
+		if ranks[ch.ID] < sweepRest {
+			t.lead = append(t.lead, src.ID)
+			if a, ok := airingOf(ch); ok && a.Start.After(t.program) {
+				t.program = a.Start
+			}
+		}
 	}
 	return out
 }
 
-// sweepDue reports a target with a channel whose still is stale, that no
-// tune is on now, and that did not find dark within the hour.
-func (h *Hub) sweepDue(ctx context.Context, t sweepTarget) bool {
+// sweepRank is how likely a viewer opens ch, with a its program on now when
+// on is set: a game, live show, sports, or new episode first, then a
+// favorite, then a station's main channel (its network is known, or it is
+// the .1), then the rest.
+func sweepRank(ch store.Channel, a store.Airing, on bool) int {
+	switch {
+	case on && (a.GameID != "" || a.Live || a.New || a.Premiere || strings.Contains(strings.ToLower(a.Category), "sport")):
+		return sweepOnNow
+	case ch.Favorite:
+		return sweepFavorite
+	case ch.Network != "" || strings.HasSuffix(ch.GuideNumber, ".1"):
+		return sweepMain
+	}
+	return sweepRest
+}
+
+// sweepDue reports a target that no tune is on now, that did not find dark
+// within the hour, that was not tuned in the last sweepProgramGap, that has
+// tunes left today (sweepDailyTunes), and with a
+// channel whose still is older than sweepRefresh, or a lead channel whose
+// still is from before its program and sweepProgramGap old.
+func (h *Hub) sweepDue(t sweepTarget, now time.Time) bool {
 	h.mu.Lock()
 	if at, ok := h.sweepDark[t.key]; ok && time.Since(at) < sweepDarkFor {
 		h.mu.Unlock()
@@ -190,15 +263,49 @@ func (h *Hub) sweepDue(ctx context.Context, t sweepTarget) bool {
 			return false
 		}
 	}
+	tunes := 0
+	var last time.Time
+	for _, at := range h.sweepTunes[t.key] {
+		if now.Sub(at) < 24*time.Hour {
+			tunes++
+		}
+		if at.After(last) {
+			last = at
+		}
+	}
 	h.mu.Unlock()
-	now := time.Now()
+	// A tune that brought back no new still (a slate kept the last one, the
+	// grab missed) waits sweepProgramGap like any other, not one pause.
+	if tunes >= sweepDailyTunes || now.Sub(last) < sweepProgramGap {
+		return false
+	}
 	for _, id := range t.channels {
 		info, err := os.Stat(FramePath(h.Dir, id, 0))
 		if err != nil || now.Sub(info.ModTime()) > sweepRefresh {
 			return true
 		}
 	}
+	settled := t.program.Add(StillSettle)
+	if t.program.IsZero() || now.Before(settled) {
+		return false
+	}
+	for _, id := range t.lead {
+		if at, ok := frameTime(h.Dir, id); ok && at.Before(settled) && now.Sub(at) >= sweepProgramGap {
+			return true
+		}
+	}
 	return false
+}
+
+// noteSweepTune counts a tune of target key against its day.
+func (h *Hub) noteSweepTune(key string, at time.Time) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.sweepTunes == nil {
+		h.sweepTunes = map[string][]time.Time{}
+	}
+	tunes := slices.DeleteFunc(h.sweepTunes[key], func(t time.Time) bool { return at.Sub(t) >= 24*time.Hour })
+	h.sweepTunes[key] = append(tunes, at)
 }
 
 // sweepAllowed reads every gate for a tune on ch's device.
@@ -211,6 +318,12 @@ func (h *Hub) sweepAllowed(ctx context.Context, ch store.SourceChannel) bool {
 	busy := h.hold > 0 || h.scanCancel != nil || len(h.guessTunes) > 0 || len(h.tunerMuxesLocked(host)) > 0
 	if !busy {
 		for _, f := range h.feedsLocked() {
+			// A recording or a viewer on another tuner leaves this one to
+			// its own free-tuner count: a recording all evening on one box
+			// stopped every still on the other.
+			if m := muxOf(h, f); m != nil && hostOf(m.host) != host && hostOf(m.base) != host {
+				continue
+			}
 			if f.recordingNow() || f.heldOutside() || f.tuneHeld() {
 				busy = true
 				break
@@ -259,6 +372,7 @@ func (h *Hub) sweepOne(ctx context.Context, t sweepTarget) {
 		h.mu.Unlock()
 	}()
 	began := time.Now()
+	h.noteSweepTune(t.key, began)
 	f, err := h.tuneFeed(ctx, t.first, nil)
 	if err != nil {
 		// tuneFeed returns holding h.mu.

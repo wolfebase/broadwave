@@ -460,11 +460,18 @@ export interface paths {
         };
         /**
          * Channels that already have a fresh preview, and channels with no signal.
-         * @description A channel is listed when its preview JPEG exists and is newer than 10 minutes, or
-         *     45 minutes for a still the idle sweep made (`sweep: true`). The sweep tunes, one
-         *     frequency at a time, only tuners nobody uses (two at least free on the device, nothing
-         *     watched, recorded, or warm there, no recording within 3 minutes); the `stillSweep`
-         *     setting or BROADWAVE_STILL_SWEEP=0 turns it off. Cards ask for `/channels/{id}/frame` only for these ids.
+         * @description A channel is listed when its preview JPEG, or that of another row of the same broadcast
+         *     (the row a duplicate on another tuner stands for, the other half of an ATSC 1.0/3.0 pair),
+         *     exists and is newer than 45 minutes; the newer of the two is listed. The idle sweep tunes,
+         *     one frequency at a time, only tuners nobody uses (two at least free on the device, nothing
+         *     watched, recorded, or warm there, no recording within 3 minutes): first channels with a
+         *     game, live show, or new episode on now, then favorites, then each station's main channel,
+         *     then the rest. It refreshes a still at 30 minutes, or sooner once a new program has run
+         *     2 minutes on a channel it leads with, and tunes a frequency at most 48 times a day and
+         *     never twice in 10 minutes. A grab that lands on a flat picture (a fade to black, a slate)
+         *     keeps the last still while that one is listed. The
+         *     `stillSweep` setting or BROADWAVE_STILL_SWEEP=0 turns it off. Cards ask for
+         *     `/channels/{id}/frame` only for these ids.
          *     `noSignal` lists the channels a tune found off the air in the last 10 minutes.
          */
         get: operations["listFrames"];
@@ -483,7 +490,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Latest preview from a mux that is already tuned. */
+        /** Latest preview from a mux that is already tuned, or of the same broadcast on another row. */
         get: operations["channelFrame"];
         put?: never;
         post?: never;
@@ -2005,7 +2012,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description JPEG still from a recording, 480 wide: the first of a few pictures through it (10%, 25%, 40%, 60% of its length, out of known breaks) that is a scene, or the one with the most picture. A finished recording keeps its poster until it is removed. One still recording gets a picture looked for again as it grows. */
+        /**
+         * @description JPEG still from a recording, 480 wide unless `w` asks for more: the first of a few pictures through it (10%, 25%, 40%, 60% of its length, out of known breaks) that is a scene, or the one with the most picture. Every width is the same picture. A finished recording keeps its poster until it is removed. One still recording gets a picture looked for again as it grows.
+         *
+         *     A game (a recording with a `gameId`, or a sports category) asked for with `scores=hide`, or without `scores=show` while the server's `hideScores` setting is 1, gets a pregame poster instead: a picture from around the listed start (5 s to 2 minutes past it, or up to 2.5 minutes before it), before kickoff, so no score is on screen. A file that starts more than 2 minutes after the listed start has none (404); show the program's artwork instead.
+         */
         get: operations["recordingPoster"];
         put?: never;
         post?: never;
@@ -2464,7 +2475,7 @@ export interface components {
             /** Format: date-time */
             at: string;
         };
-        /** @description Channel ids whose preview JPEG exists and is newer than 10 minutes (45 for a swept still). */
+        /** @description Channel ids whose preview JPEG, or a same-broadcast row's, exists and is newer than 45 minutes. */
         FrameList: {
             channels: number[];
             /** @description The same channels, each with when its stills were written. Adding `at` to the still's address makes it cacheable. */
@@ -2478,6 +2489,8 @@ export interface components {
                 at: number;
                 /** @description The idle still sweep made this still; nobody is tuned to the channel. Omitted otherwise. */
                 sweep?: boolean;
+                /** @description The still was grabbed before the program on now began, or in its first 2 minutes, so it shows the program before (or a break). A card for the program on now should not use it as that program's picture. Omitted otherwise, and when the guide lists nothing on now. */
+                earlier?: boolean;
             }[];
             /**
              * @description Channels whose last tune in the past 10 minutes found no signal. A watch of
@@ -7115,7 +7128,12 @@ export interface operations {
     };
     recordingPoster: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The width wanted, as for `/channels/{id}/frame`, 480, 1280, or 1920 (the largest not wider than this; 480 when omitted or smaller). A TV full screen asks for 1920. */
+                w?: string;
+                /** @description hide asks a game for its pregame poster; show asks for the plain one even when the server hides scores. Ignored for a recording that is not a game. */
+                scores?: "hide" | "show";
+            };
             header?: never;
             path: {
                 id: components["parameters"]["Id"];
@@ -7134,7 +7152,7 @@ export interface operations {
                     "image/jpeg": string;
                 };
             };
-            /** @description Plain text. No such recording, or no poster could be made: every picture tried is one flat colour (a slate, a fade). Such a recording is looked at again after 10 minutes. */
+            /** @description Plain text. No such recording, or no poster could be made: every picture tried is one flat colour (a slate, a fade), or a pregame poster was asked of a file that starts after kickoff. Such a recording is looked at again after 10 minutes. */
             404: {
                 headers: {
                     [name: string]: unknown;

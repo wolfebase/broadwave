@@ -194,6 +194,7 @@ export type Event = {
 
 export type FrameListFrames = {
   at: number;
+  earlier?: boolean;
   id: number;
   sweep?: boolean;
 };

@@ -123,7 +123,7 @@ func FrameArgs(jobs []FrameJob, dir string) []string {
 		// ffmpeg refuses the file and the still never lands.
 		for _, width := range FrameWidths {
 			part := filepath.Join(dir, frameName(job.ChannelID, width)+".part")
-			args = append(args, "-map", mapSpec, "-vf", fmt.Sprintf("scale=%d:-2", width), "-frames:v", "1", "-f", "image2", part)
+			args = append(args, "-map", mapSpec, "-vf", displayScale(width, ""), "-frames:v", "1", "-f", "image2", part)
 		}
 	}
 	return args
@@ -173,8 +173,9 @@ func (h *Hub) watchFrames(ctx context.Context, m *mux) {
 					tries++
 					missing = left
 					next = frameRetry
-				case routineKill(err):
-					// A tune ending or a viewer taking the tuner stops the grab.
+				case routineKill(err) || errors.Is(err, errFlatPicture):
+					// A tune ending or a viewer taking the tuner stops the grab;
+					// a fade or a slate keeps the last picture.
 					slog.Debug(fmt.Sprintf("frames freq %d: %v", m.freq, err))
 					last, missing, tries = now, nil, 0
 				default:
@@ -270,9 +271,17 @@ func (h *Hub) grabFramesOf(ctx context.Context, m *mux, only []int64) ([]int64, 
 	}
 	_ = pr.Close()
 	var missing []int64
+	flat := 0
 	for _, job := range jobs {
-		if job.ChannelID > 0 && !publishFrame(dir, job.ChannelID) {
+		if job.ChannelID <= 0 {
+			continue
+		}
+		switch publishFrame(dir, job.ChannelID, time.Now()) {
+		case frameMissing:
 			missing = append(missing, job.ChannelID)
+		case frameKept:
+			missing = append(missing, job.ChannelID)
+			flat++
 		}
 	}
 	// ffmpeg can be stopped after the last still is written; that grab worked.
@@ -281,23 +290,61 @@ func (h *Hub) grabFramesOf(ctx context.Context, m *mux, only []int64) ([]int64, 
 	}
 	if err == nil {
 		err = errors.New("no keyframe")
+		if flat == len(missing) {
+			err = errFlatPicture
+		}
 	}
 	return missing, fmt.Errorf("channels %v: %w", missing, err)
 }
 
-// publishFrame reports whether every size landed.
-func publishFrame(dir string, channelID int64) bool {
+// errFlatPicture is a grab whose only misses are flat pictures that kept
+// the last one.
+var errFlatPicture = errors.New("a flat picture; the last one is kept")
+
+// What publishFrame did with a grab.
+const (
+	framePublished = iota
+	frameMissing
+	frameKept
+)
+
+// publishFrame puts a grab's stills in place. A size that did not land is
+// missing. A flat picture (a fade to black, a slate) is a break's edge
+// more often than the show: it keeps a still that is still listed
+// (SweepStaleAfter), and the grab tries again.
+func publishFrame(dir string, channelID int64, now time.Time) int {
+	parts := make([]string, len(FrameWidths))
 	ok := true
-	for _, width := range FrameWidths {
-		name := frameName(channelID, width)
-		part := filepath.Join(dir, name+".part")
-		info, err := os.Stat(part)
+	for i, width := range FrameWidths {
+		parts[i] = filepath.Join(dir, frameName(channelID, width)+".part")
+		info, err := os.Stat(parts[i])
 		if err != nil || info.Size() == 0 {
-			_ = os.Remove(part)
+			_ = os.Remove(parts[i])
 			ok = false
-			continue
 		}
-		_ = os.Rename(part, filepath.Join(dir, name))
 	}
-	return ok
+	if ok && flatGrab(parts[0]) {
+		if info, err := os.Stat(filepath.Join(dir, frameName(channelID, FrameWidths[0]))); err == nil && now.Sub(info.ModTime()) <= SweepStaleAfter {
+			for _, part := range parts {
+				_ = os.Remove(part)
+			}
+			return frameKept
+		}
+	}
+	for i, width := range FrameWidths {
+		if _, err := os.Stat(parts[i]); err == nil {
+			_ = os.Rename(parts[i], filepath.Join(dir, frameName(channelID, width)))
+		}
+	}
+	if !ok {
+		return frameMissing
+	}
+	return framePublished
+}
+
+// flatGrab is a still with next to no picture in it. One that does not
+// decode is not judged.
+func flatGrab(path string) bool {
+	score, err := pictureScore(path)
+	return err == nil && score < flatPicture
 }
