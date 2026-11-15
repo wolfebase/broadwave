@@ -403,7 +403,7 @@ func TestSoundCheckIsDueForAWatchedTwoLanguageChannel(t *testing.T) {
 		t.Fatalf("job %+v %v, want %d against %d", job, ok, three.ID, one.ID)
 	}
 	h.mu.Lock()
-	h.soundTries = map[int64]soundTry{three.ID: {until: time.Now().Add(time.Minute)}}
+	h.soundTries = map[int64]soundTry{three.ID: {until: time.Now().Add(time.Minute), why: "waiting: no tuner for 4.1; next try in 1m0s"}}
 	h.mu.Unlock()
 	if _, ok := h.soundJobDue(context.Background(), time.Now()); ok {
 		t.Fatal("a channel waiting out a retry is due")

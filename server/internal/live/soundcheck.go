@@ -59,6 +59,8 @@ const (
 type soundTry struct {
 	until time.Time
 	wait  time.Duration
+	// why is the state noted when it was set, kept while it waits.
+	why string
 }
 
 // soundJob is one channel due a check.
@@ -168,7 +170,7 @@ func (h *Hub) soundJobDue(ctx context.Context, now time.Time) (soundJob, bool) {
 			continue
 		}
 		if try, waiting := h.soundTries[id]; waiting && now.Before(try.until) {
-			skips = append(skips, skip{id, guide, "waiting: the last check had no answer; next try at " + try.until.Format("15:04")})
+			skips = append(skips, skip{id, guide, try.why})
 			continue
 		}
 		list = append(list, candidate{id, guide, f.channel.SoundCheckedAt, len(f.tracks) == 0})
@@ -336,16 +338,18 @@ func (h *Hub) runSoundCheck(ctx context.Context, job soundJob) {
 	if errors.As(err, &shut) {
 		// A shut gate is no failed check: it keeps the backoff it had.
 		try.until = time.Now().Add(soundGateRetry)
+		try.why = "waiting: " + shut.msg + "; next try in " + soundGateRetry.String()
 		h.soundTries[job.id] = try
 		h.mu.Unlock()
-		h.noteSound(job.id, job.guide, "waiting: "+shut.msg+"; next try in "+soundGateRetry.String())
+		h.noteSound(job.id, job.guide, try.why)
 		return
 	}
 	try.wait = min(max(try.wait*2, soundRetry), soundRetryMax)
 	try.until = time.Now().Add(try.wait)
+	try.why = fmt.Sprintf("no answer against %s after %s: %s (%s); next try in %s", job.twin.DisplayNumber, took, why, scores, try.wait)
 	h.soundTries[job.id] = try
 	h.mu.Unlock()
-	h.noteSound(job.id, job.guide, fmt.Sprintf("no answer against %s after %s: %s (%s); next try in %s", job.twin.DisplayNumber, took, why, scores, try.wait))
+	h.noteSound(job.id, job.guide, try.why)
 }
 
 // checkSound hears the channel's two tracks from soundLag before the twin to

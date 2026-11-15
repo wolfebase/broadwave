@@ -78,6 +78,7 @@
     "id": "contract-server",
     "name": "Home"
   },
+  "soundChecks": [],
   "starts": [],
   "storage": {
     "Free": 0,
