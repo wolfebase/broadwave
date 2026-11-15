@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -62,11 +63,21 @@ type soundTry struct {
 
 // soundJob is one channel due a check.
 type soundJob struct {
-	id   int64
-	twin store.Channel
+	id    int64
+	guide string
+	twin  store.Channel
 }
 
 var errSoundStopped = errors.New("the twin's tuner was needed")
+
+// soundGateError is a twin tune the background gates shut. It is tried
+// again soon: tuners free up as other tunes end.
+type soundGateError struct{ msg string }
+
+func (e soundGateError) Error() string { return e.msg }
+
+// soundGateRetry is the wait after a shut gate.
+const soundGateRetry = time.Minute
 
 // soundDue reports whether an answer from last (nil: none) is stale at now,
 // with program the start of the program on now (zero when unknown). A new
@@ -116,13 +127,21 @@ func (h *Hub) RunSoundChecks(ctx context.Context) {
 }
 
 // soundJobDue is the first channel due a check: watched or recording, ATSC
-// 3.0 with a regular twin, two languages, and not waiting out a retry.
+// 3.0 with a regular twin, two languages, and not waiting out a retry. Every
+// watched or recorded 3.0 channel's state is noted with its reason
+// (noteSound), so a check that does not run says why.
 func (h *Hub) soundJobDue(ctx context.Context, now time.Time) (soundJob, bool) {
 	type candidate struct {
-		id   int64
-		last *time.Time
+		id    int64
+		guide string
+		last  *time.Time
 	}
 	var list []candidate
+	type skip struct {
+		id           int64
+		guide, state string
+	}
+	var skips []skip
 	h.mu.Lock()
 	for _, f := range h.feedsLocked() {
 		if f.channel.PlaysAs != 0 || h.channels[f.channel.ID] != f {
@@ -131,16 +150,29 @@ func (h *Hub) soundJobDue(ctx context.Context, now time.Time) (soundJob, bool) {
 		if !f.recordingNow() && !f.watched() {
 			continue
 		}
-		main, _, ok := soundPair(f.tracks, f.channel.SoundSwapped)
-		if !ok || main.Codec == "ac4" && h.NoAC4 {
+		if !NeedFor(f.channel.VideoCodec, f.channel.AudioCodec, f.channel.ATSC3).ATSC3 {
 			continue
 		}
-		if try, waiting := h.soundTries[f.channel.ID]; waiting && now.Before(try.until) {
+		id, guide := f.channel.ID, f.channel.GuideNumber
+		main, _, ok := soundPair(f.soundTracks(), f.channel.SoundSwapped)
+		switch {
+		case !ok:
+			skips = append(skips, skip{id, guide, "waiting: " + soundPairWhy(f.soundTracks(), f.channel.SoundSwapped)})
+			continue
+		case main.Codec == "ac4" && h.NoAC4:
+			skips = append(skips, skip{id, guide, "waiting: this ffmpeg cannot decode AC-4"})
 			continue
 		}
-		list = append(list, candidate{f.channel.ID, f.channel.SoundCheckedAt})
+		if try, waiting := h.soundTries[id]; waiting && now.Before(try.until) {
+			skips = append(skips, skip{id, guide, "waiting: the last check had no answer; next try at " + try.until.Format("15:04")})
+			continue
+		}
+		list = append(list, candidate{id, guide, f.channel.SoundCheckedAt})
 	}
 	h.mu.Unlock()
+	for _, sk := range skips {
+		h.noteSound(sk.id, sk.guide, sk.state)
+	}
 	if len(list) == 0 {
 		return soundJob{}, false
 	}
@@ -161,10 +193,12 @@ func (h *Hub) soundJobDue(ctx context.Context, now time.Time) (soundJob, bool) {
 	for _, c := range list {
 		ch, ok := byID[c.id]
 		if !ok || ch.Standard != store.TwinATSC3 || ch.TwinID == 0 {
+			h.noteSound(c.id, c.guide, "waiting: no regular broadcast of this station to compare with")
 			continue
 		}
 		twin, ok := byID[ch.TwinID]
 		if !ok || twin.Standard == store.TwinATSC3 || twin.Protected {
+			h.noteSound(c.id, c.guide, "waiting: the station's regular broadcast cannot be read")
 			continue
 		}
 		program := onNow[ch.ID]
@@ -172,10 +206,83 @@ func (h *Hub) soundJobDue(ctx context.Context, now time.Time) (soundJob, bool) {
 			program = onNow[twin.ID]
 		}
 		if soundDue(c.last, program, now) {
-			return soundJob{id: c.id, twin: twin}, true
+			return soundJob{id: c.id, guide: c.guide, twin: twin}, true
 		}
+		h.noteSound(c.id, c.guide, "checked: "+c.last.Local().Format("15:04")+"; next at the next program or "+c.last.Add(soundRecheck).Local().Format("15:04"))
 	}
 	return soundJob{}, false
+}
+
+// soundTracks is the program's audio as the channel plays it: this tune's
+// PMT, or before it is read, the tracks the last tune stored.
+func (f *feed) soundTracks() []AudioTrack {
+	if len(f.tracks) > 0 {
+		return f.tracks
+	}
+	return f.stored
+}
+
+// soundPairWhy says why soundPair found no pair.
+func soundPairWhy(tracks []AudioTrack, swapped bool) string {
+	if len(tracks) == 0 {
+		return "the program's sound tracks are not read yet"
+	}
+	if swapped {
+		tracks = swapSounds(tracks)
+	}
+	if _, ok := PickTrack(tracks, "language"); !ok {
+		return "one sound language (" + trackLog(tracks) + ")"
+	}
+	return "the two tracks are not two named languages (" + trackLog(tracks) + ")"
+}
+
+// soundNoteEvery is how often an unchanged state is logged again.
+const soundNoteEvery = 5 * time.Minute
+
+// SoundCheck is one channel's sound check state for Diagnostics.
+type SoundCheck struct {
+	ChannelID   int64     `json:"channelId"`
+	GuideNumber string    `json:"guideNumber"`
+	State       string    `json:"state"`
+	At          time.Time `json:"at"`
+}
+
+// noteSound keeps a channel's check state and logs it when it changes, or
+// every soundNoteEvery while it stays.
+func (h *Hub) noteSound(id int64, guide, state string) {
+	now := time.Now()
+	h.mu.Lock()
+	if h.soundStates == nil {
+		h.soundStates = map[int64]soundState{}
+	}
+	prev := h.soundStates[id]
+	log := prev.state != state || now.Sub(prev.logged) >= soundNoteEvery
+	next := soundState{state: state, at: now, logged: prev.logged, guide: guide}
+	if log {
+		next.logged = now
+	}
+	h.soundStates[id] = next
+	h.mu.Unlock()
+	if log {
+		slog.Info(fmt.Sprintf("sound check for %s: %s", guide, state))
+	}
+}
+
+type soundState struct {
+	guide, state string
+	at, logged   time.Time
+}
+
+// SoundChecks is each channel's last sound check state, newest first.
+func (h *Hub) SoundChecks() []SoundCheck {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]SoundCheck, 0, len(h.soundStates))
+	for id, st := range h.soundStates {
+		out = append(out, SoundCheck{ChannelID: id, GuideNumber: st.guide, State: st.state, At: st.at})
+	}
+	slices.SortFunc(out, func(a, b SoundCheck) int { return b.At.Compare(a.At) })
+	return out
 }
 
 // watched is a feed with a viewer on one of its encodes.
@@ -191,12 +298,20 @@ func (f *feed) watched() bool {
 // runSoundCheck runs one check and keeps its answer, or waits longer before
 // the next try when it did not decide.
 func (h *Hub) runSoundCheck(ctx context.Context, job soundJob) {
+	h.noteSound(job.id, job.guide, "checking against "+job.twin.DisplayNumber)
+	began := time.Now()
 	v, err := h.checkSound(ctx, job)
+	took := time.Since(began).Round(time.Second)
+	scores := fmt.Sprintf("main %.2f, second %.2f, alike %.2f", v.main, v.lang, v.same)
 	if err == nil && v.ok {
 		h.mu.Lock()
 		delete(h.soundTries, job.id)
 		h.mu.Unlock()
-		slog.Info(fmt.Sprintf("sound check for channel %d against %s: swapped %v (main %.2f, second %.2f, alike %.2f)", job.id, job.twin.GuideNumber, v.swapped, v.main, v.lang, v.same))
+		answer := "the track marked as the main language is it"
+		if v.swapped {
+			answer = "the track marked as the second language is the main language"
+		}
+		h.noteSound(job.id, job.guide, fmt.Sprintf("checked against %s in %s: %s (%s)", job.twin.DisplayNumber, took, answer, scores))
 		h.settleSound(ctx, job.id, v.swapped, SoundCheckedByTwin, time.Now(), job.twin)
 		return
 	}
@@ -209,11 +324,20 @@ func (h *Hub) runSoundCheck(ctx context.Context, job soundJob) {
 		h.soundTries = map[int64]soundTry{}
 	}
 	try := h.soundTries[job.id]
+	var shut soundGateError
+	if errors.As(err, &shut) {
+		// A shut gate is no failed check: it keeps the backoff it had.
+		try.until = time.Now().Add(soundGateRetry)
+		h.soundTries[job.id] = try
+		h.mu.Unlock()
+		h.noteSound(job.id, job.guide, "waiting: "+shut.msg+"; next try in "+soundGateRetry.String())
+		return
+	}
 	try.wait = min(max(try.wait*2, soundRetry), soundRetryMax)
 	try.until = time.Now().Add(try.wait)
 	h.soundTries[job.id] = try
 	h.mu.Unlock()
-	slog.Info(fmt.Sprintf("sound check for channel %d against %s did not decide: %s (main %.2f, second %.2f, alike %.2f); next try in %s", job.id, job.twin.GuideNumber, why, v.main, v.lang, v.same, try.wait))
+	h.noteSound(job.id, job.guide, fmt.Sprintf("no answer against %s after %s: %s (%s); next try in %s", job.twin.DisplayNumber, took, why, scores, try.wait))
 }
 
 // checkSound hears the channel's two tracks from soundLag before the twin to
@@ -230,7 +354,7 @@ func (h *Hub) checkSound(ctx context.Context, job soundJob) (soundVerdict, error
 	ok := false
 	if f != nil {
 		m = muxOf(h, f)
-		main, lang, ok = soundPair(f.tracks, f.channel.SoundSwapped)
+		main, lang, ok = soundPair(f.soundTracks(), f.channel.SoundSwapped)
 	}
 	twinUp := h.channels[job.twin.ID] != nil
 	h.mu.Unlock()
@@ -238,8 +362,10 @@ func (h *Hub) checkSound(ctx context.Context, job soundJob) (soundVerdict, error
 		return soundVerdict{}, errors.New("the channel is no longer tuned")
 	}
 	// A shut gate is found before the channel is heard for nothing.
-	if !twinUp && !h.tunerGateOpen(ctx, src, tunerGate.backgroundOpen) {
-		return soundVerdict{}, errors.New("no tuner is free for the other broadcast")
+	if !twinUp {
+		if open, g := h.tunerGateOpen(ctx, src, tunerGate.backgroundOpen); !open {
+			return soundVerdict{}, soundGateError{fmt.Sprintf("no tuner for %s: %s", src.GuideNumber, g.why())}
+		}
 	}
 	dir, err := os.MkdirTemp(h.Dir, "sound-")
 	if err != nil {
@@ -346,8 +472,8 @@ func (h *Hub) holdTwin(ctx context.Context, src store.SourceChannel) (context.Co
 		}, nil
 	}
 	h.mu.Unlock()
-	if !h.tunerGateOpen(ctx, src, tunerGate.backgroundOpen) {
-		return nil, nil, nil, errors.New("no tuner is free for the other broadcast")
+	if open, g := h.tunerGateOpen(ctx, src, tunerGate.backgroundOpen); !open {
+		return nil, nil, nil, soundGateError{fmt.Sprintf("no tuner for %s: %s", src.GuideNumber, g.why())}
 	}
 	tctx, cancel := context.WithCancel(ctx)
 	state := &sweepState{cancel: cancel}

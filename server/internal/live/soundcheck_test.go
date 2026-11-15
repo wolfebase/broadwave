@@ -265,7 +265,7 @@ func TestSoundCheckGateShutByARecording(t *testing.T) {
 		asked = asked || g.free != sweepFreeTuners
 		return g.backgroundOpen()
 	}
-	if h.tunerGateOpen(context.Background(), store.SourceChannel{BaseURL: "http://tuner"}, open) {
+	if ok, g := h.tunerGateOpen(context.Background(), store.SourceChannel{BaseURL: "http://tuner"}, open); ok || g.why() != "a recording is on that tuner" {
 		t.Fatal("the gate opened while a recording was on the device")
 	}
 	if asked {
@@ -319,12 +319,16 @@ func TestSoundCheckSkipsOneLanguageChannels(t *testing.T) {
 	h, m := testHub(t)
 	f := addTestFeed(h, m, 1, "104.1")
 	h.mu.Lock()
+	f.channel.VideoCodec, f.channel.AudioCodec = "HEVC", "AC4"
 	f.tracks = []AudioTrack{ac4Eng}
 	f.renditions["x"] = &rendition{viewers: 1}
 	h.mu.Unlock()
 	// No store: a channel that qualified would read it and panic.
 	if _, ok := h.soundJobDue(context.Background(), time.Now()); ok {
 		t.Fatal("a one-language channel is due a check")
+	}
+	if got := h.SoundChecks(); len(got) != 1 || !strings.Contains(got[0].State, "one sound language") {
+		t.Fatalf("states %+v", got)
 	}
 }
 
@@ -370,7 +374,23 @@ func TestSoundCheckIsDueForAWatchedTwoLanguageChannel(t *testing.T) {
 	h.Store = st
 	f := addTestFeed(h, m, three.ID, "104.1")
 	h.mu.Lock()
-	f.tracks = []AudioTrack{ac4Eng, ac4Spa}
+	f.channel.VideoCodec, f.channel.AudioCodec = "HEVC", "AC4"
+	h.mu.Unlock()
+	h.mu.Lock()
+	f.renditions["x"] = &rendition{viewers: 1}
+	h.mu.Unlock()
+	// Before this tune reads the PMT, no tracks stored: it says so.
+	if _, ok := h.soundJobDue(context.Background(), time.Now()); ok {
+		t.Fatal("a channel with no tracks is due")
+	}
+	if got := h.SoundChecks(); len(got) != 1 || !strings.Contains(got[0].State, "not read yet") {
+		t.Fatalf("states %+v", got)
+	}
+	h.mu.Lock()
+	delete(f.renditions, "x")
+	// The tracks the last tune stored are enough: this tune's late PMT
+	// read must not hold the check (the first staging run).
+	f.stored = []AudioTrack{ac4Eng, ac4Spa}
 	h.mu.Unlock()
 	if _, ok := h.soundJobDue(context.Background(), time.Now()); ok {
 		t.Fatal("a channel nobody watches or records is due")
@@ -387,6 +407,21 @@ func TestSoundCheckIsDueForAWatchedTwoLanguageChannel(t *testing.T) {
 	h.mu.Unlock()
 	if _, ok := h.soundJobDue(context.Background(), time.Now()); ok {
 		t.Fatal("a channel waiting out a retry is due")
+	}
+	if got := h.SoundChecks(); !strings.Contains(got[0].State, "next try") {
+		t.Fatalf("states %+v", got)
+	}
+	// Checked a minute ago, with no listing on now: not due, and it says when.
+	h.mu.Lock()
+	h.soundTries = nil
+	at := time.Now().Add(-time.Minute)
+	f.channel.SoundCheckedAt = &at
+	h.mu.Unlock()
+	if _, ok := h.soundJobDue(context.Background(), time.Now()); ok {
+		t.Fatal("a channel checked a minute ago is due")
+	}
+	if got := h.SoundChecks(); !strings.HasPrefix(got[0].State, "checked: ") {
+		t.Fatalf("states %+v", got)
 	}
 }
 

@@ -305,6 +305,8 @@ type Hub struct {
 	// the channels whose last check did not decide, and when to try again.
 	soundTune  *sweepState
 	soundTries map[int64]soundTry
+	// soundStates are each channel's last sound check state (noteSound).
+	soundStates map[int64]soundState
 	// recSoundMu keeps a recording's stored main sound in the order chosen.
 	recSoundMu sync.Mutex
 	// guessTunes are the tunes guesses opened without a picture, oldest first.
