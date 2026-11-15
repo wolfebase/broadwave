@@ -81,8 +81,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
+# CSS raised 2026-11-15 (owner approved): Windows High Contrast shows the chosen
+# tab, chip and choice, progress, and the on-air line; a phone says when the
+# server is unreachable; a phone on its side keeps the guide's controls on one
+# row; type is in rem on every layout. These load up front. Measured entry gzip
+# 14155, plus 200 bytes of slack.
 JS_GZIP_MAX=106159
-CSS_GZIP_MAX=13823
+CSS_GZIP_MAX=14355
 
 if [[ ! -f "$INDEX" ]]; then
   echo "bundle budget: missing $INDEX" >&2
