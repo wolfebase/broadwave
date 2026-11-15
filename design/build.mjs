@@ -24,7 +24,8 @@ function css() {
   for (const [k, v] of Object.entries(t.radius)) lines.push(`  --radius-${k}: ${v}px;`);
   for (const [k, v] of Object.entries(t.space)) lines.push(`  --space-${k}: ${v}px;`);
   for (const [k, v] of Object.entries(t.type)) {
-    lines.push(`  --type-${k}-size: ${v.size}px;`);
+    // rem, so a larger default font size in the browser makes the text larger.
+    lines.push(`  --type-${k}-size: ${v.size / 16}rem;`);
     lines.push(`  --type-${k}-weight: ${v.weight};`);
     lines.push(`  --type-${k}-tracking: ${v.tracking}em;`);
   }
