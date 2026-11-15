@@ -1,6 +1,7 @@
 import Hls from "hls.js";
 import { events, type RoomState } from "./events.ts";
 import { roomStart, type Frag } from "./roomStart.ts";
+import { readSoundDelay } from "./soundDelay.ts";
 
 export { SyncEngine, type SyncEnv, type SyncStatus } from "./syncEngine.ts";
 
@@ -31,7 +32,7 @@ export function startOnRoom(hls: Hls, video: HTMLVideoElement, room: string, wai
   const start = () => {
     if (started) return;
     done();
-    const pos = st && frags ? roomStart(frags, st, bus.serverNow()) : null;
+    const pos = st && frags ? roomStart(frags, st, bus.serverNow(), readSoundDelay()) : null;
     video.dataset.syncStart = pos == null ? "edge" : "room";
     hls.startLoad(pos ?? -1);
   };

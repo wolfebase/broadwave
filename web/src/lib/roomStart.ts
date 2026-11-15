@@ -24,9 +24,10 @@ export function fragTime(frags: Frag[], media: number): number | null {
 
 /**
  * Where a player joining the room starts loading: the room's frame at the
- * moment its first picture shows. Null when the playlist does not hold that
- * frame yet (a fresh tune), so the player starts where it would have.
+ * moment its first picture shows, moved on by this screen's sound delay (ms).
+ * Null when the playlist does not hold that frame yet (a fresh tune), so the
+ * player starts where it would have.
  */
-export function roomStart(frags: Frag[], st: RoomState, now: number): number | null {
-  return fragTime(frags, roomTarget(st, now) + START_LEAD_MS * st.rate);
+export function roomStart(frags: Frag[], st: RoomState, now: number, soundDelayMs = 0): number | null {
+  return fragTime(frags, roomTarget(st, now) + soundDelayMs + START_LEAD_MS * st.rate);
 }

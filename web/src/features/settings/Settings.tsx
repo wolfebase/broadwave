@@ -13,6 +13,7 @@ import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
 import { blenderCreditText } from "../../legal";
 import { readLiveDelay, saveLiveDelay, type LiveDelay } from "../../lib/events";
+import { readSoundDelay, saveSoundDelay, soundDelayChoices } from "../../lib/soundDelay";
 import { settingTextCommit, settingTextDraft, shownSettingText } from "./field";
 import { Confirm } from "./Confirm";
 import { ChoiceRow, Group, Row, SelectRow, SwitchRow } from "./rows";
@@ -27,6 +28,7 @@ const onOff = (value: string | undefined, fallback: "0" | "1") => (value === "0"
 
 export function PlaybackSection({ settings, onChange }: { settings: Settings; onChange: Change }) {
   const [delay, setDelay] = useState<LiveDelay>(readLiveDelay);
+  const [sound, setSound] = useState(readSoundDelay);
   return (
     <>
       <Group title={h("playback.picture")}>
@@ -59,6 +61,16 @@ export function PlaybackSection({ settings, onChange }: { settings: Settings; on
           }}
         />
         <SelectRow
+          label={h("playback.soundDelay")}
+          hint={h("playback.soundDelayHint")}
+          value={String(sound)}
+          options={soundDelayChoices().map((ms) => ({ value: String(ms), label: soundDelayLabel(ms) }))}
+          onChange={(value) => {
+            saveSoundDelay(Number(value));
+            setSound(readSoundDelay());
+          }}
+        />
+        <SelectRow
           label={h("playback.bufferLabel")}
           hint={h("playback.bufferHint")}
           value={settings.bufferMinutes ?? "60"}
@@ -78,6 +90,11 @@ export function PlaybackSection({ settings, onChange }: { settings: Settings; on
       </Group>
     </>
   );
+}
+
+function soundDelayLabel(ms: number): string {
+  if (ms === 0) return h("playback.soundOnTime");
+  return ms > 0 ? h("playback.soundLate", { ms }) : h("playback.soundEarly", { ms: -ms });
 }
 
 export function GuideSection({ settings, onChange }: { settings: Settings; onChange: Change }) {

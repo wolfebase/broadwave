@@ -12,6 +12,8 @@ On the web, the player shows a Synced pill. With other screens on that channel i
 
 Each device aims at the room's moment. Settings, Live delay, is how far behind live a channel starts on that device. Lowest is about 6 seconds, Balanced is 16, and Stable is 20. Apple devices play at Balanced or Stable.
 
+Sound through a soundbar, AirPlay, or Bluetooth speakers can reach you a little after the picture, and after the other rooms. On the web, Settings, Playback, Sound delay sets how late that device's sound is, up to 300 ms in steps of 25. That screen then plays that much sooner, so its sound lands with the other rooms. "Early" is for the opposite case, when the other rooms are the ones with the slow speakers. The setting stays on that device.
+
 ## Pause for every screen
 
 On the web, the same panel offers Watch together. While nobody has joined, the line is "Watch together: pause and rewind for every screen that joins." and the button is "Watch together." When someone has already joined, the line names them and the button is "Join." After you join, the heading is Watching together, and the line is "Pause, rewind, and Live move every screen watching together." The panel lists the screens. Leave drops you out and leaves the others where they are.

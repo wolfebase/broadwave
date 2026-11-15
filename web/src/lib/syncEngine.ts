@@ -5,6 +5,7 @@ import { fragTime, roomTarget, type Frag } from "./roomStart.ts";
 import { nextSeekLead } from "./seekLead.ts";
 import { PauseHold } from "./pauseHold.ts";
 import { SETTLE_MS, newSettle, settleDue } from "./settle.ts";
+import { readSoundDelay } from "./soundDelay.ts";
 
 export type SyncStatus = {
   state: "off" | "waiting" | "syncing" | "locked";
@@ -46,6 +47,8 @@ export type SyncEnv = {
   cancelEvery: (id: number) => void;
   after: (fn: () => void, ms: number) => number;
   cancelAfter: (id: number) => void;
+  /** This screen's sound delay in ms (soundDelay.ts). It plays that far ahead of the room. */
+  soundDelay?: () => number;
 };
 
 function pageEnv(): SyncEnv {
@@ -57,6 +60,7 @@ function pageEnv(): SyncEnv {
     cancelEvery: (id) => window.clearInterval(id),
     after: (fn, ms) => window.setTimeout(fn, ms),
     cancelAfter: (id) => window.clearTimeout(id),
+    soundDelay: readSoundDelay,
   };
 }
 
@@ -188,8 +192,13 @@ export class SyncEngine {
     this.setStatus({ state: "off", drift: 0, members: 0 });
   }
 
+  /** mediaTime is a frame on this screen; the room's frame is that less this screen's sound delay. */
   command(action: "play" | "pause" | "seek" | "live", mediaTime?: number) {
-    this.env.bus.command(this.room, action, mediaTime ? { mediaTime } : {});
+    this.env.bus.command(this.room, action, mediaTime ? { mediaTime: mediaTime - this.soundDelay() } : {});
+  }
+
+  private soundDelay(): number {
+    return this.env.soundDelay?.() ?? 0;
   }
 
   private frags(): Frag[] {
@@ -328,7 +337,8 @@ export class SyncEngine {
     const now = this.env.now();
     const local = this.mediaNow();
     const ready = local != null && video.readyState >= 2 && !video.seeking;
-    const target = ready ? roomTarget(st, this.env.bus.serverNow()) : null;
+    // A screen whose sound arrives late plays that much ahead of the room.
+    const target = ready ? roomTarget(st, this.env.bus.serverNow()) + this.soundDelay() : null;
     const drift = target != null && local != null ? local - target : null;
     const groupRewind = drift != null && drift > GROUP_REWIND_MS && this.room.startsWith("group:");
     // The resume timer calls play() when the hold ends. A group pause, or a

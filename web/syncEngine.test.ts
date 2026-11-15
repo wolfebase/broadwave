@@ -104,7 +104,8 @@ function harness(room = "channel:1") {
   let timers: Timer[] = [];
   const handlers = new Map<string, Set<(d: unknown) => void>>();
   const cached = new Map<string, RoomState>();
-  const commands: { room: string; action: string }[] = [];
+  const commands: { room: string; action: string; mediaTime?: number }[] = [];
+  let sound = 0;
   const bus = {
     on(type: string, fn: (d: unknown) => void) {
       let set = handlers.get(type);
@@ -114,8 +115,8 @@ function harness(room = "channel:1") {
     },
     join() {},
     leave() {},
-    command(r: string, action: string) {
-      commands.push({ room: r, action });
+    command(r: string, action: string, extra: { mediaTime?: number } = {}) {
+      commands.push({ room: r, action, ...extra });
     },
     roomState(r: string) {
       return cached.get(r);
@@ -140,6 +141,7 @@ function harness(room = "channel:1") {
     cancelEvery: remove,
     after: (fn, ms) => add(fn, ms),
     cancelAfter: remove,
+    soundDelay: () => sound,
   };
   const video = new FakeVideo();
   const frags = Array.from({ length: 60 }, (_, i) => ({ start: i, duration: 1, programDateTime: P0 + i * 1000 }));
@@ -190,6 +192,11 @@ function harness(room = "channel:1") {
       const target = st.rate === 0 ? st.anchorMedia : st.anchorMedia + (WALL + now + offset - st.anchorServer) * st.rate;
       return local() - target;
     },
+    setSoundDelay(ms: number) {
+      sound = ms;
+    },
+    /** This screen's frame, in Unix ms. */
+    local,
     moveClock(ms: number) {
       offset += ms;
     },
@@ -449,4 +456,45 @@ test("a pause the engine did not make is the viewer's", () => {
   h.emit(h.state(0));
   h.video.pause();
   assert.equal(h.viewerPauses(), 1);
+});
+
+test("a screen with late sound plays that far ahead of the room, and one with early sound behind it", () => {
+  for (const delay of [200, -200, 300]) {
+    const h = harness();
+    h.setSoundDelay(delay);
+    h.engine.start();
+    // On the room's frame, so this screen is the delay off its own target.
+    h.emit(h.state(0));
+    h.run(15_000);
+    assert.ok(Math.abs(h.drift() - delay) <= 25, `${delay}: ${h.drift()} ms from the room`);
+    assert.equal(h.last().state, "locked");
+    assert.ok(Math.abs(h.last().drift) <= 25, `${delay}: status drift ${h.last().drift}`);
+    assert.deepEqual(backward(h.video), [], `${delay}: seeked backward`);
+  }
+});
+
+test("changing the sound delay moves a playing screen at once", () => {
+  const h = harness();
+  h.engine.start();
+  h.emit(h.state(0));
+  h.run(1000);
+  h.setSoundDelay(-300);
+  h.run(250);
+  // Now 300 ms ahead of its target, under the seek threshold: it slows down.
+  assert.ok(near(h.video.playbackRate, 0.97));
+  h.run(15_000);
+  assert.ok(Math.abs(h.drift() + 300) <= 25, `${h.drift()} ms from the room`);
+});
+
+test("a group seek names the room's frame, not this screen's", () => {
+  const h = harness("group:den");
+  h.setSoundDelay(250);
+  h.engine.start();
+  h.emit(h.state(0));
+  h.engine.command("seek", 1_000_000);
+  h.engine.command("pause");
+  assert.deepEqual(h.commands, [
+    { room: "group:den", action: "seek", mediaTime: 999_750 },
+    { room: "group:den", action: "pause" },
+  ]);
 });
