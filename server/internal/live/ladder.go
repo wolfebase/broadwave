@@ -452,21 +452,22 @@ func ladderPrimaryOf(r *rendition) *rendition {
 // establishLadderAnchor dates the primary from its playlist before any rung
 // stamps itself. A player asks for every rung at once. Each first stamp
 // would otherwise read the wall clock on its own, and the same frame would
-// carry a different program date on each rung.
-func establishLadderAnchor(primary *rendition) {
-	if primary == nil || primary.group == nil || primary.clock == nil || primary.dir == "" {
+// carry a different program date on each rung. clock and gen are the
+// primary's, read under the hub lock.
+func establishLadderAnchor(primary *rendition, clock *Timeline, gen uint64) {
+	if primary == nil || primary.group == nil || clock == nil || primary.dir == "" {
 		return
 	}
 	primary.group.anchor.Lock()
 	defer primary.group.anchor.Unlock()
-	if primary.clock.hasDate() {
+	if clock.hasDate() {
 		return
 	}
 	raw, err := readPlaylist(filepath.Join(primary.dir, "index.m3u8"))
 	if err != nil {
 		return
 	}
-	_ = primary.stamper.stamp(primary.dir, raw, primary.clock)
+	_ = primary.stamper.stampAt(gen, primary.dir, raw, clock)
 }
 
 // noteLadderSeen keeps the primary's idle clock fresh when a player fetches

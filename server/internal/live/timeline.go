@@ -299,12 +299,16 @@ type playlistStamper struct {
 	lastSrc   []byte
 	lastOut   []byte
 	lastTimed bool
+	// gen counts resets. A stamp of a playlist read before a restart carries
+	// the generation it read under (stampAt), and leaves this state alone.
+	gen uint64
 }
 
 // reset forgets segment times. A restarted encode reuses seg00001.m4s for a
 // new file, and the cached time would stamp that file with the old one.
 func (p *playlistStamper) reset() {
 	p.mu.Lock()
+	p.gen++
 	p.cache = nil
 	p.walls = nil
 	p.broke = nil
@@ -315,9 +319,34 @@ func (p *playlistStamper) reset() {
 	p.mu.Unlock()
 }
 
+// generation is the stamper's count of resets, for stampAt.
+func (p *playlistStamper) generation() uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.gen
+}
+
+// stampAt stamps a playlist read under generation gen. One read before a
+// reset is the old encode's: it is stamped on its own, so its names and
+// dates are not kept for the new encode's files of the same names.
+func (p *playlistStamper) stampAt(gen uint64, dir string, src []byte, tl *Timeline) []byte {
+	p.mu.Lock()
+	if gen != p.gen {
+		p.mu.Unlock()
+		var gone playlistStamper
+		return gone.stamp(dir, src, tl)
+	}
+	defer p.mu.Unlock()
+	return p.stampLocked(dir, src, tl)
+}
+
 func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.stampLocked(dir, src, tl)
+}
+
+func (p *playlistStamper) stampLocked(dir string, src []byte, tl *Timeline) []byte {
 	if p.lastOut != nil && p.lastTimed == (tl != nil) && bytes.Equal(p.lastSrc, src) {
 		return p.lastOut
 	}

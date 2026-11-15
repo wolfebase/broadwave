@@ -2433,6 +2433,8 @@ func (h *Hub) stamped(channelID int64, key string) ([]byte, error) {
 		}
 	}
 	var ladder *rendition
+	var ladderClock *Timeline
+	var ladderGen uint64
 	if r != nil && r.group != nil && !r.clock.hasDate() {
 		ladder = ladderPrimaryOf(r)
 		if ladder == nil {
@@ -2441,10 +2443,15 @@ func (h *Hub) stamped(channelID int64, key string) ([]byte, error) {
 		if ladder.clock == nil {
 			ladder.clock = NewTimeline()
 		}
+		ladderClock, ladderGen = ladder.clock, ladder.stamper.generation()
 	}
 	clock := (*Timeline)(nil)
+	// The generation goes with the clock: a restart after this unlock resets
+	// the stamper, and this playlist is then the old encode's.
+	var gen uint64
 	if r != nil {
 		clock = r.clock
+		gen = r.stamper.generation()
 	}
 	h.mu.Unlock()
 	if r == nil {
@@ -2456,7 +2463,7 @@ func (h *Hub) stamped(channelID int64, key string) ([]byte, error) {
 		if ladderAnchorHook != nil {
 			ladderAnchorHook()
 		}
-		establishLadderAnchor(ladder)
+		establishLadderAnchor(ladder, ladderClock, ladderGen)
 		h.mu.Lock()
 		if live := h.channels[channelID]; live != nil && live.renditions[key] == r && !r.clock.hasDate() {
 			seedClockLocked(live, r)
@@ -2467,7 +2474,7 @@ func (h *Hub) stamped(channelID int64, key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.stamper.stamp(r.dir, raw, clock), nil
+	return r.stamper.stampAt(gen, r.dir, raw, clock), nil
 }
 
 // WaitMedia blocks until the rendition's playlist contains that segment or

@@ -478,12 +478,14 @@ func (h *Hub) MosaicPlaylist(key string) ([]byte, error) {
 	h.mu.Lock()
 	mo := h.mosaics[key]
 	var out *rendition
+	var clock *Timeline
 	if mo != nil {
 		out = mo.out
 		out.seen = time.Now()
 		if out.clock == nil {
 			out.clock = NewTimeline()
 		}
+		clock = out.clock
 	}
 	h.mu.Unlock()
 	if out == nil {
@@ -493,7 +495,7 @@ func (h *Hub) MosaicPlaylist(key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return out.stamper.stamp(out.dir, raw, out.clock), nil
+	return out.stamper.stamp(out.dir, raw, clock), nil
 }
 
 // WaitMosaic holds a blocking playlist request until the mosaic's playlist
