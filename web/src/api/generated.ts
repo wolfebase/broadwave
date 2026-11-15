@@ -78,6 +78,8 @@ export type Channel = {
   playsAs?: number;
   sameAs?: number;
   soundSwapped?: boolean;
+  soundCheckedAt?: string;
+  soundCheckedBy?: string;
 };
 
 export type ChannelPatch = {
