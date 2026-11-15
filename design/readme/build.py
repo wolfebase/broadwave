@@ -490,7 +490,8 @@ def hero(social=False):
         "scan",
         '<pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="#FFFFFF" opacity=".03"/></pattern>',
     )
-    d.add(f'<rect width="{W}" height="{H}" fill="url(#scan)"/>')
+    if not social:
+        d.add(f'<rect width="{W}" height="{H}" fill="url(#scan)"/>')
     # Floor: a faint horizon the TV stands on.
     d.define(
         "floor",
@@ -544,7 +545,7 @@ def hero(social=False):
     if box:
         card_close(d, box, 0.05)
     else:
-        d.add(f'<rect width="{W}" height="{H}" filter="url(#grain)" opacity=".05"/>')
+        d.add(f'<rect width="{W}" height="{H}" filter="url(#grain)" opacity=".02"/>')
     return d
 
 
@@ -794,8 +795,12 @@ def tile_guide(d, x0):
         if fr:
             picture(d, gx + 7, y + 9, 38, 22, frame(d, fr, 160, 90, 78), 3)
         else:
-            d.add(f'<rect x="{gx + 7}" y="{y + 9}" width="38" height="22" rx="3" fill="#1F3B2C"/>')
-            d.text(gx + 26, y + 25, "HAR", 10, "bold", "#B9F5D0", anchor="middle")
+            # A game on: a little field.
+            d.add(
+                f'<rect x="{gx + 7}" y="{y + 9}" width="38" height="22" rx="3" fill="#1E7A47"/>'
+                f'<path d="M{gx + 26} {y + 9}v22M{gx + 14} {y + 9}v22M{gx + 38} {y + 9}v22" stroke="#FFFFFF" stroke-opacity=".45"/>'
+                f'<circle cx="{gx + 26}" cy="{y + 20}" r="4" fill="none" stroke="#FFFFFF" stroke-opacity=".6"/>'
+            )
         d.text(gx + 52, y + 26, num, 15, "bold", TEXT)
         d.add(f'<g clip-path="url(#{clip})">')
         for c, (title, a, b, cat) in enumerate(cells):
@@ -1102,9 +1107,24 @@ def terminal():
 
 
 def footer():
+    """Two strands that read on white and on GitHub dark, fading out at both ends."""
     W, H = 1280, 120
     d = Doc(W, H, "")
-    brand_wave(d, 0, W, 60, 26, 640, dur=20, ribbon=False, scale=0.7)
+    P = 640
+    d.style(f"@keyframes fd{{to{{transform:translateX({P}px)}}}}.fd{{animation:fd 24s linear infinite}}")
+    d.define(
+        "ff",
+        '<linearGradient id="ff" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFF" stop-opacity="0"/><stop offset=".2" stop-color="#FFF"/>'
+        '<stop offset=".8" stop-color="#FFF"/><stop offset="1" stop-color="#FFF" stop-opacity="0"/></linearGradient>'
+        f'<mask id="fm" maskContentUnits="userSpaceOnUse"><rect width="{W}" height="{H}" fill="url(#ff)"/></mask>',
+    )
+    a = smooth(wave_points(-P, W + P, 58, 22, P, 0.0, 16))
+    b = smooth(wave_points(-P, W + P, 64, 19, P, 1.05, 16))
+    d.add(
+        f'<g mask="url(#fm)"><g class="fd" fill="none" stroke-linecap="round">'
+        f'<path d="{a}" stroke="{VIOLET}" stroke-width="3" opacity=".75"/>'
+        f'<path d="{b}" stroke="{BLUE}" stroke-width="10" opacity=".14"/><path d="{b}" stroke="{BLUE}" stroke-width="3.5"/></g></g>'
+    )
     return d
 
 
@@ -1123,7 +1143,6 @@ def social_png(path):
             check=True, capture_output=True,
         )
         im = Image.open(png).convert("RGB").crop((0, 0, 1280, 640))
-        im = im.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG)
         im.save(path, optimize=True)
     print(f"{os.path.basename(path):28} {os.path.getsize(path) / 1024:7.1f} KB")
 

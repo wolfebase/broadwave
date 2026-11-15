@@ -25,7 +25,7 @@
   <a href="docs/guide/index.md"><b>Handbook</b></a>
 </p>
 
-<p align="center"><img src=".github/readme/devices.png" alt="Broadwave on a TV, a tablet, and a phone" width="100%"></p>
+<p align="center"><img src=".github/readme/devices.svg" alt="Broadwave on Apple TV, iPad, and iPhone: four channels at once on the TV, For You on the iPad, live TV on the iPhone" width="100%"></p>
 
 ## Quick start
 
@@ -41,7 +41,7 @@ Then open **`http://<that computer>:8477`**. Broadwave finds your tuner, scans t
 
 The script checks Docker, your time zone, your user, graphics, and the port, then starts one container with host networking. Run it again to update: it keeps your folders and settings, and holds off while a tuner is in use or a recording is near. Add `bash -s -- --dry-run` to see each command first, or [read what it does](docs/guide/install.md#one-command). On Unraid, a NAS, Docker Desktop, or without Docker, see [Install](#install).
 
-<p align="center"><img src=".github/readme/terminal.svg" alt="One command, then Broadwave finds your tuner, scans channels, and fills the guide" width="100%"></p>
+<p align="center"><img src=".github/readme/terminal.svg" alt="The one command, and what the install script prints: it pulls the image, starts the container, and gives the address to open" width="100%"></p>
 
 ## Why Broadwave
 
@@ -55,20 +55,9 @@ Plug an antenna into a network tuner, run Broadwave on one always-on box, and ev
 
 <p align="center"><img src=".github/readme/one-tuner.svg" alt="Antenna to tuner to Broadwave to every screen in the house, all on the same frame" width="100%"></p>
 
-<table>
-  <tr>
-    <td width="50%"><img src=".github/readme/tile-sync.svg" alt="Every room, the same frame" width="100%"></td>
-    <td width="50%"><img src=".github/readme/tile-multiview.svg" alt="Four channels at once" width="100%"></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/readme/tile-60fps.svg" alt="True 60 fps motion" width="100%"></td>
-    <td width="50%"><img src=".github/readme/tile-guide.svg" alt="A guide worth scrolling" width="100%"></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src=".github/readme/tile-sports.svg" alt="A DVR that gets sports" width="100%"></td>
-    <td width="50%"><img src=".github/readme/tile-private.svg" alt="Private by design" width="100%"></td>
-  </tr>
-</table>
+<p align="center"><img src=".github/readme/tiles-1.svg" alt="Every room, the same frame: four screens in four rooms on one moment. Watch together: pause on a phone, and the TV, tablet, and laptop pause too" width="100%"></p>
+<p align="center"><img src=".github/readme/tiles-2.svg" alt="The guide is the centerpiece: a dense grid with a now line and a focused game. Four channels at once: sound and 60 fps follow the tile you pick" width="100%"></p>
+<p align="center"><img src=".github/readme/tiles-3.svg" alt="A DVR that gets sports: the recording runs past the scheduled end of a game in overtime. True 60 fps: twice the frames of 30 fps for a moving ball" width="100%"></p>
 
 <details>
 <summary><b>Everything it does</b></summary>
@@ -87,6 +76,11 @@ Plug an antenna into a network tuner, run Broadwave on one always-on box, and ev
 </details>
 
 ## What it looks like
+
+The Apple TV, iPad, and iPhone apps. These are from the demo: Blender's open movies on made-up stations.
+
+<p align="center"><img src=".github/readme/apple-tv-1.svg" alt="Apple TV: the Live Guide with your channels along the top and a live preview, and For You with what's on now" width="100%"></p>
+<p align="center"><img src=".github/readme/apple-tv-2.svg" alt="Apple TV: the player's Screens tab with Watch together. iPad with four channels at once, and iPhone with the guide" width="100%"></p>
 
 The web app: Home, the guide, live TV, two channels side by side, and recordings. The phone uses the same server. The picture is a test pattern and the stations are made up.
 
