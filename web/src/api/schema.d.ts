@@ -161,7 +161,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Tuners and signal, encoder and ffmpeg (`encoder.ac4` is false when ffmpeg cannot decode ATSC 3.0 sound), the startup picture benchmark (class, speed, transcode height, the large tile, and how many tiles fit), storage, guide freshness, what the relay is carrying, the last ten channel starts (`starts`, seconds from the watch to the first segment split into tune, keyframe, encoder, and segment, newest first), feed counts, recent logs, connected apps, and recent activity. HDHomeRun emulators report no tuner status, so their tuners are not in `tuners`; `emulators` lists each one (`deviceId`, `name`, `model`, `tunerCount`, and `streams`, how many of its tuners this server has open). */
+        /** @description Tuners and signal, encoder and ffmpeg (`encoder.ac4` is false when ffmpeg cannot decode ATSC 3.0 sound), the startup picture benchmark (class, speed, transcode height, the large tile, and how many tiles fit), storage, guide freshness, what the relay is carrying, the last ten channel starts (`starts`, seconds from the watch to the first segment split into tune, keyframe, encoder, and segment, newest first), feed counts, recent logs, connected apps, recent activity, and `soundChecks`, each watched or recorded ATSC 3.0 channel's main-sound check ({channelId, guideNumber, state, at}), what it is doing or why it is not running. HDHomeRun emulators report no tuner status, so their tuners are not in `tuners`; `emulators` lists each one (`deviceId`, `name`, `model`, `tunerCount`, and `streams`, how many of its tuners this server has open). */
         get: operations["getDiagnostics"];
         put?: never;
         post?: never;
@@ -2448,8 +2448,18 @@ export interface components {
              * @description The row shown for this channel when another tuner on the same antenna carries it too. This row stays off the guide (guide=1) and still plays. A change to either row changes both.
              */
             sameAs?: number;
-            /** @description Set when the station labels its two languages the wrong way round; its second-language track plays as the main sound. */
+            /** @description Set when the station labels its two languages the wrong way round; its second-language track plays as the main sound. On an ATSC 3.0 channel with a regular twin, the server checks it while the channel plays: the track that sounds like the twin's main plays as the main sound. */
             soundSwapped?: boolean;
+            /**
+             * Format: date-time
+             * @description When soundSwapped was last settled, by a check or by hand. Omitted before either.
+             */
+            soundCheckedAt?: string;
+            /**
+             * @description How soundSwapped was last settled: twin (the server matched the sound against the station's regular broadcast) or hand (a PATCH). A choice by hand holds until the next program is checked.
+             * @enum {string}
+             */
+            soundCheckedBy?: "twin" | "hand";
         };
         ChannelPatch: {
             favorite?: boolean;
@@ -2463,7 +2473,7 @@ export interface components {
              * @enum {string}
              */
             twinChoice?: "atsc3" | "atsc1" | "both";
-            /** @description The station labels its two languages the wrong way round: play its second-language track as the main sound, and label both by what they carry. */
+            /** @description The station labels its two languages the wrong way round: play its second-language track as the main sound, and label both by what they carry. A tune that is up changes at once. On an ATSC 3.0 channel with a regular twin, the next program's check can change it again. */
             soundSwapped?: boolean;
         };
         /** @description A channel's last signal reading: from a tune of it (read from the tuner a moment after it locks) or a signal check. Omitted before either. */

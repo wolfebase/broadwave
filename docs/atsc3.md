@@ -15,7 +15,9 @@ Phones, TVs, and browsers do not decode AC-4. Broadwave reads each track and sen
 - A 5.1 mix goes out as Dolby Digital where the device plays it.
 - Auto sends stereo AAC otherwise. Surround sends 5.1 AAC when the device cannot play Dolby Digital.
 
-A recording of a clear 3.0 channel keeps the broadcast's own packets. The Docker image includes the decoder this needs. A server built without it still shows the picture, with no sound.
+Which language is the main sound comes from the station's labels, and a station has sent them the wrong way round. When a 3.0 channel has two languages and the station also sends a regular broadcast, Broadwave checks while the channel plays: it listens to both tracks and to the regular broadcast's main sound for about a minute, and the track that sounds like it plays as the main sound. The check runs again when a new program starts. It only takes a tuner for the regular broadcast when two are free and no recording is on or about to start, and gives it back at once when a viewer or a recording needs it. When the sound does not give a clear answer, the last choice stays, and the other language is always in the player's Audio menu. Activity says when the main sound changed.
+
+A recording of a clear 3.0 channel keeps the broadcast's own packets, every sound track included, and plays the language that was the main sound while it recorded. The Docker image includes the decoder this needs. A server built without it still shows the picture, with no sound.
 
 ## What does not play
 

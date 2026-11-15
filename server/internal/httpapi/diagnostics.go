@@ -146,6 +146,12 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		feeds[i].Name = scrubBody(feeds[i].Name, secrets)
 	}
 	out["feeds"] = feeds
+	// Each ATSC 3.0 channel's main-sound check: what it is doing, or why not.
+	sound := []live.SoundCheck{}
+	if s.Hub != nil {
+		sound = s.Hub.SoundChecks()
+	}
+	out["soundChecks"] = sound
 	out["logs"] = scrubLogs(logbuf.Tail(diagLogLines), secrets)
 	writeCachedJSON(w, r, out)
 }

@@ -195,7 +195,7 @@ func (h *Hub) fillSourceFromCopy(id int64, dir string) (fillSource, bool) {
 	if parts[5] == "progressive" || parts[5] == "film" {
 		order = parts[5]
 	}
-	g := h.fileGraphFor(path, parts[1], parts[0], order)
+	g := h.fileGraphFor(path, parts[1], parts[0], order, rec.SoundPID)
 	g.Live = false
 	g.Encoder, g.Deint, g.Profile = parts[2], parts[3], parts[4]
 	if graphStamp(g) != stamp {

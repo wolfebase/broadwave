@@ -341,6 +341,11 @@ func main() {
 			hub.RunStillSweep(context.Background())
 		}()
 	}
+	// A two-language 3.0 channel's main sound is checked against its regular
+	// broadcast while it plays (BROADWAVE_SOUND_CHECK=0 turns it off).
+	if (!*staging || os.Getenv("BROADWAVE_SOUND_CHECK") == "1") && os.Getenv("BROADWAVE_E2E") != "1" {
+		go hub.RunSoundChecks(context.Background())
+	}
 	go func() {
 		tick := time.NewTicker(20 * time.Second)
 		defer tick.Stop()

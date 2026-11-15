@@ -602,10 +602,16 @@ func swapSounds(tracks []AudioTrack) []AudioTrack {
 }
 
 // channelTracks reads a program's audio as this feed's channel plays it.
+// The caller holds h.mu: a sound check can change the choice.
 func (f *feed) channelTracks(data []byte, program int) []AudioTrack {
-	tracks := AudioTracks(data, program)
+	return f.viewTracks(AudioTracks(data, program))
+}
+
+// viewTracks is tracks as the PMT labels them, as the channel plays them.
+// The caller holds h.mu.
+func (f *feed) viewTracks(tracks []AudioTrack) []AudioTrack {
 	if f.channel.SoundSwapped {
-		tracks = swapSounds(tracks)
+		return swapSounds(tracks)
 	}
 	return tracks
 }
@@ -906,7 +912,7 @@ func (h *Hub) saveTracks(m *mux, f *feed, window time.Duration) {
 			return
 		}
 		full := m.pictureFull()
-		tracks = f.channelTracks(m.pictureBytes(), f.program)
+		tracks = AudioTracks(m.pictureBytes(), f.program)
 		// AC-4 is measured by a decoder, which wants more than the PMT.
 		ac4 := slices.ContainsFunc(tracks, func(t AudioTrack) bool { return t.Codec == "ac4" })
 		if allMeasured(tracks) && !ac4 || full {
@@ -926,16 +932,19 @@ func (h *Hub) saveTracks(m *mux, f *feed, window time.Duration) {
 			}
 		}
 	}
-	if err := h.Store.SetChannelStreamInfo(context.Background(), id, HasCaptions(m.pictureBytes(), f.program), AudioLayout(tracks)); err != nil {
-		slog.Warn(fmt.Sprintf("store stream info for %s: %v", f.channel.GuideNumber, err))
-	}
-	raw := encodeTracks(tracks)
+	// The view and the stored copy are set together: a sound check can
+	// trade the tracks meanwhile.
 	h.mu.Lock()
+	tracks = f.viewTracks(tracks)
+	raw := encodeTracks(tracks)
 	same := h.channels[id] == f && encodeTracks(f.stored) == raw
 	if h.channels[id] == f {
 		f.stored = tracks
 	}
 	h.mu.Unlock()
+	if err := h.Store.SetChannelStreamInfo(context.Background(), id, HasCaptions(m.pictureBytes(), f.program), AudioLayout(tracks)); err != nil {
+		slog.Warn(fmt.Sprintf("store stream info for %s: %v", f.channel.GuideNumber, err))
+	}
 	if same {
 		return
 	}

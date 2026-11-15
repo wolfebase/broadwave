@@ -742,7 +742,7 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 			h.mu.Unlock()
 		}
 		if !audioDone {
-			if tracks := f.channelTracks(data, program); len(tracks) > 0 {
+			if tracks := AudioTracks(data, program); len(tracks) > 0 {
 				seen = tracks
 				if audioReady(tracks) {
 					h.applyDeferredAudio(f, id, tracks)
@@ -762,13 +762,17 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 	}
 }
 
+// applyDeferredAudio takes a program's tracks as the PMT labels them and
+// sets them as the channel plays them.
 func (h *Hub) applyDeferredAudio(f *feed, id int64, tracks []AudioTrack) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.channels[id] != f || len(f.tracks) != 0 {
 		return
 	}
+	tracks = f.viewTracks(tracks)
 	f.tracks = tracks
+	h.noteRecordingSoundLocked(f)
 	h.learnCodecsLocked(f, "", mainCodec(tracks))
 	// Unchanged args stay up. A described or second-language choice, or a
 	// main that is not the first audio stream, builds a different map and

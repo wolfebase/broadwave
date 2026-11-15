@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Server: an ATSC 3.0 channel with two languages no longer plays the wrong one as its main sound after its station fixes its labels. While the channel plays, the server compares both tracks with the station's regular broadcast, and the one that sounds like its main plays as the main sound. It checks again when a new program starts and when the station changes back. It takes a tuner for this only when two are free and nothing is recording or about to, and hands it back at once when a viewer or recording needs it. With no clear answer, the last choice stays. Activity says when the main sound changed. On 2026-11-15 a game played its Spanish commentary as the main sound, because a swap set two weeks earlier for a station that had its labels the wrong way round stayed on after the station fixed them.
+- Server: a recording of a channel with two languages plays the one that was the main sound while it recorded, not whichever the file lists first. Recordings from before keep playing as they did.
+- Server: `soundSwapped` set on `PATCH /api/v1/channels/{id}` changes the sound of a channel that is playing at once, instead of on the next watch.
+
+### Added
+
+- API: `/channels` says when a channel's main sound was last settled and how (`soundCheckedAt`, `soundCheckedBy`: `twin` or `hand`).
+- Diagnostics: `soundChecks` says, for each ATSC 3.0 channel playing, what its sound check is doing or why it is waiting (no free tuner, one language, no regular broadcast), and the server log says the same when it changes.
+
 ## 0.19.2 — 2026-11-15
 
 ### Added

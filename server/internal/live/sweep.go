@@ -394,49 +394,110 @@ func (h *Hub) noteSweepTune(key string, at time.Time) {
 
 // sweepAllowed reads every gate for a tune on ch's device.
 func (h *Hub) sweepAllowed(ctx context.Context, ch store.SourceChannel) bool {
+	ok, _ := h.tunerGateOpen(ctx, ch, tunerGate.sweepOpen)
+	return ok
+}
+
+// tunerGate is what a background tune on one device (the still sweep, a
+// sound check's twin) is allowed by.
+type tunerGate struct {
+	// off is the stillSweep setting "0".
+	off bool
+	// held is a hold, a channel scan, or a guessed tune anywhere.
+	held bool
+	// opened is a tuner on the device this server opened by number.
+	opened bool
+	// recording is a recording on the device.
+	recording bool
+	// used is a viewer, an export, a mosaic, a guide dwell, or a warm
+	// picture on the device.
+	used bool
+	// soon is a recording due within sweepRecordingLead.
+	soon bool
+	// free is the tuners the device reports free.
+	free int
+}
+
+// sweepOpen is the still sweep's gate: nothing on the device is in use.
+func (g tunerGate) sweepOpen() bool {
+	return !g.off && !g.opened && !g.used && g.backgroundOpen()
+}
+
+// backgroundOpen is the gate a sound check's twin tune shares with the
+// sweep: a viewer may be watching, but nothing is recorded or about to be,
+// no scan or hold is on, and the tune never takes the last free tuner.
+func (g tunerGate) backgroundOpen() bool {
+	return !g.held && !g.recording && !g.soon && g.free >= sweepFreeTuners
+}
+
+// why names the first shut gate, for a background tune that did not run.
+func (g tunerGate) why() string {
+	switch {
+	case g.held:
+		return "a channel scan or a hold is on"
+	case g.recording:
+		return "a recording is on that tuner"
+	case g.soon:
+		return "a recording starts within 3 minutes"
+	case g.free < 0:
+		return "the tuner did not answer"
+	case g.free < sweepFreeTuners:
+		return fmt.Sprintf("%d tuner free, and the last one is never taken", g.free)
+	}
+	return "open"
+}
+
+// tunerGateOpen reads the gates for a tune on ch's device and asks open,
+// returning what it read. The schedule and the device are asked only while
+// the gates read so far leave it open.
+func (h *Hub) tunerGateOpen(ctx context.Context, ch store.SourceChannel, open func(tunerGate) bool) (bool, tunerGate) {
+	g := tunerGate{free: sweepFreeTuners}
 	if values, err := h.Store.Settings(ctx); err != nil || strings.TrimSpace(values[SettingStillSweep]) == "0" {
-		return false
+		g.off = true
 	}
 	host := hostOf(ch.BaseURL)
 	h.mu.Lock()
-	busy := h.hold > 0 || h.scanCancel != nil || len(h.guessTunes) > 0 || len(h.tunerMuxesLocked(host)) > 0
-	if !busy {
-		for _, f := range h.feedsLocked() {
-			// A recording or a viewer on another tuner leaves this one to
-			// its own free-tuner count: a recording all evening on one box
-			// stopped every still on the other.
-			if m := muxOf(h, f); m != nil && hostOf(m.host) != host && hostOf(m.base) != host {
-				continue
-			}
-			if f.recordingNow() || f.heldOutside() || f.tuneHeld() {
-				busy = true
-				break
-			}
-			for _, r := range f.renditions {
-				if r.viewers > 0 || r.guess {
-					busy = true
-				}
+	g.held = h.hold > 0 || h.scanCancel != nil || len(h.guessTunes) > 0
+	g.opened = len(h.tunerMuxesLocked(host)) > 0
+	for _, f := range h.feedsLocked() {
+		// A recording or a viewer on another tuner leaves this one to
+		// its own free-tuner count: a recording all evening on one box
+		// stopped every still on the other.
+		if m := muxOf(h, f); m != nil && hostOf(m.host) != host && hostOf(m.base) != host {
+			continue
+		}
+		if f.recordingNow() {
+			g.recording = true
+		}
+		if f.heldOutside() || f.tuneHeld() {
+			g.used = true
+		}
+		for _, r := range f.renditions {
+			if r.viewers > 0 || r.guess {
+				g.used = true
 			}
 		}
 	}
 	h.mu.Unlock()
-	if busy {
-		return false
+	if !open(g) {
+		return false, g
 	}
 	if h.RecordingSoon != nil && h.RecordingSoon(ctx, sweepRecordingLead) {
-		return false
+		g.soon = true
+		return false, g
 	}
 	raw, err := fetchTunerStatus(ctx, ch.BaseURL)
 	if err != nil {
-		return false
+		g.free = -1
+		return false, g
 	}
-	free := 0
+	g.free = 0
 	for _, row := range raw {
 		if row.VctNumber == "" && row.TargetIP == "" {
-			free++
+			g.free++
 		}
 	}
-	return free >= sweepFreeTuners
+	return open(g), g
 }
 
 // sweepOne tunes one target, waits for the stills of every channel on it,
@@ -582,17 +643,23 @@ func (h *Hub) SweptAt(id int64) (time.Time, bool) {
 	return at, true
 }
 
-// StopSweep stops the still sweep's tune for a watch, recording, or warm
-// that is about to tune. A watch of a channel on the swept frequency keeps
-// the tune and joins it; any other gets the tuner back before it tunes.
+// StopSweep stops the still sweep's tune, and a sound check's twin tune, for
+// a watch, recording, or warm that is about to tune. A watch of a channel on
+// the tuned frequency keeps the tune and joins it; any other gets the tuner
+// back before it tunes.
 func (h *Hub) StopSweep(freq int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	s := h.sweep
+	sweep, sound := h.sweep, h.soundTune
+	h.sweep, h.soundTune = nil, nil
+	h.stopBackgroundLocked(sweep, freq)
+	h.stopBackgroundLocked(sound, freq)
+}
+
+func (h *Hub) stopBackgroundLocked(s *sweepState, freq int) {
 	if s == nil {
 		return
 	}
-	h.sweep = nil
 	s.cancel()
 	f := s.feed
 	if f == nil {

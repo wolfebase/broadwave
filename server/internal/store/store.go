@@ -114,6 +114,11 @@ type Channel struct {
 	// SoundSwapped is set for a station that labels its two languages the
 	// wrong way round: its second-language track plays as the main sound.
 	SoundSwapped bool `json:"soundSwapped,omitempty"`
+	// SoundCheckedAt is when SoundSwapped was last settled, and SoundCheckedBy
+	// how: "twin" (the server matched the sound against the station's other
+	// broadcast) or "hand".
+	SoundCheckedAt *time.Time `json:"soundCheckedAt,omitempty"`
+	SoundCheckedBy string     `json:"soundCheckedBy,omitempty"`
 }
 
 type ChannelPatch struct {
@@ -720,7 +725,7 @@ WHERE id=?`, g.favorite, g.customName, g.customNumber, next); err != nil {
 func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error) {
 	q := `SELECT id, device_id, guide_number, guide_name, custom_number, custom_name,
 		video_codec, audio_codec, hd, favorite, enabled, hidden, present, guide_key, art_url, art_width, art_height, network,
-		protected, twin_choice, captions, audio_layout, sound_swapped, sig.quality, sig.strength, sig.checked_at
+		protected, twin_choice, captions, audio_layout, sound_swapped, sound_checked_at, sound_checked_by, sig.quality, sig.strength, sig.checked_at
 		FROM channels LEFT JOIN channel_signals sig ON sig.channel_id = channels.id`
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil {
@@ -731,17 +736,18 @@ func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error)
 	choices := map[int64]string{}
 	for rows.Next() {
 		var ch Channel
-		var customNumber, customName, choice string
+		var customNumber, customName, choice, soundAt string
 		var hd, fav, en, hidden, present, protected, captions, swapped int
 		var quality, strength *int
 		var checked *string
 		if err := rows.Scan(&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
 			&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &ch.GuideKey, &ch.ArtURL, &ch.ArtWidth, &ch.ArtHeight, &ch.Network,
-			&protected, &choice, &captions, &ch.Audio, &swapped, &quality, &strength, &checked); err != nil {
+			&protected, &choice, &captions, &ch.Audio, &swapped, &soundAt, &ch.SoundCheckedBy, &quality, &strength, &checked); err != nil {
 			return nil, err
 		}
 		ch.Captions = captions != 0
 		ch.SoundSwapped = swapped != 0
+		ch.SoundCheckedAt = soundTime(soundAt)
 		if quality != nil && strength != nil && checked != nil {
 			if at, err := time.Parse(time.RFC3339, *checked); err == nil {
 				ch.Signal = &SignalReading{Quality: *quality, Strength: *strength, At: at}
@@ -856,9 +862,10 @@ func (s *Store) PatchChannel(ctx context.Context, id int64, patch ChannelPatch) 
 		args = append(args, strings.TrimSpace(*patch.GuideKey))
 	}
 	if patch.SoundSwapped != nil {
-		// The stored tracks carry the old labels; the next tune reads them again.
-		sets = append(sets, "sound_swapped=?", "audio_tracks=''")
-		args = append(args, boolInt(*patch.SoundSwapped))
+		// The stored tracks carry the old labels; the next tune reads them
+		// again. A choice by hand holds until the next program is checked.
+		sets = append(sets, "sound_swapped=?", "audio_tracks=''", "sound_checked_at=?", "sound_checked_by='hand'")
+		args = append(args, boolInt(*patch.SoundSwapped), time.Now().UTC().Format(time.RFC3339))
 	}
 	if len(sets) == 0 {
 		return Channel{}, errors.New("no changes")

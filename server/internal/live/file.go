@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -91,8 +93,10 @@ func headAC4(head []byte) bool {
 }
 
 // fileGraphFor is fileGraph for the recording at path. Its sound is left out
-// when it is AC-4 and ffmpeg cannot decode it. The head is read once.
-func (h *Hub) fileGraphFor(path, codec, mode, fieldOrder string) Graph {
+// when it is AC-4 and ffmpeg cannot decode it. The head is read once. sound
+// is the recording's stored main track, played when the file lists it; 0,
+// or a track the file does not list, plays the file's first sound.
+func (h *Hub) fileGraphFor(path, codec, mode, fieldOrder string, sound int) Graph {
 	head, read := fileHead(path)
 	scanned, ok := "", false
 	if read {
@@ -104,7 +108,24 @@ func (h *Hub) fileGraphFor(path, codec, mode, fieldOrder string) Graph {
 	if h.NoAC4 && headAC4(head) {
 		g.Audio = "none"
 	}
+	if sound > 0 && g.Audio != "none" {
+		if i := slices.IndexFunc(AudioTracks(head, 0), func(t AudioTrack) bool { return t.PID == sound }); i >= 0 {
+			g.AudioPID = sound
+		}
+	}
 	return g
+}
+
+// recordingSound is the main track stored with recording id, 0 when none is.
+func (h *Hub) recordingSound(id int64) int {
+	if h.Store == nil {
+		return 0
+	}
+	rec, err := h.Store.Recording(context.Background(), id)
+	if err != nil {
+		return 0
+	}
+	return rec.SoundPID
 }
 
 func graphStamp(g Graph) string {
@@ -122,6 +143,10 @@ func graphStamp(g Graph) string {
 	// A silent playlist is redone once ffmpeg can decode the sound.
 	if g.Audio == "none" {
 		parts = append(parts, "silent")
+	}
+	// A copy that played the file's first sound is redone on the stored main.
+	if g.AudioPID > 0 {
+		parts = append(parts, "pid"+strconv.Itoa(g.AudioPID))
 	}
 	return strings.Join(parts, "|")
 }
@@ -180,7 +205,7 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 // recordingGraph is the picture for this recording: on the processor when the
 // GPU has failed on its copy, so opening it again finds the same copy.
 func (h *Hub) recordingGraph(id int64, path, videoCodec, mode, fieldOrder string) Graph {
-	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
+	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder, h.recordingSound(id))
 	g.Live = false
 	if h.fileOnSoftware(id) {
 		return softwareGraph(g)
