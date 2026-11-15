@@ -287,6 +287,10 @@ type playlistStamper struct {
 	// listed while its segment is open and for a while after; anchoring it
 	// again would drop the shift a silence added.
 	broke map[string]bool
+	// opens is the date the open segment was given, by its first part. A
+	// player has it, so the segment keeps it when it closes, also when a
+	// silence moved the clock on meanwhile.
+	opens map[string]time.Time
 	// lastSrc and lastOut are the previous playlist and the bytes handed
 	// out for it. A reload of the same file skips the rebuild. They stay
 	// empty when a part or segment had no timestamp yet, so the next reload
@@ -304,6 +308,7 @@ func (p *playlistStamper) reset() {
 	p.cache = nil
 	p.walls = nil
 	p.broke = nil
+	p.opens = nil
 	p.lastSrc = nil
 	p.lastOut = nil
 	p.lastTimed = false
@@ -325,17 +330,28 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	if p.broke == nil {
 		p.broke = map[string]bool{}
 	}
+	if p.opens == nil {
+		p.opens = map[string]time.Time{}
+	}
 	lines := strings.Split(string(src), "\n")
 	var out bytes.Buffer
 	seen := map[string]bool{}
 	pending := []string{}
 	var lastEnd time.Time
 	var haveEnd bool
+	// lastWall and lastPTS are the last segment's date and first picture.
+	var lastWall time.Time
+	var lastPTS int64
+	var haveLast bool
 	var breakNext bool
 	// cont is the step a continuing encode's first picture comes after the
-	// last end (#EXT-X-CONT), for the break it follows.
+	// last end (#EXT-X-CONT), for the break it follows. same is a gap inside
+	// one encode: its timestamps say where the next picture sits.
 	var cont time.Duration
-	var contNext bool
+	var contNext, same bool
+	// first is the first part listed since the last segment: the segment
+	// that follows starts with it.
+	first := ""
 	// missed is a part or segment the timeline still cannot date. Caching
 	// that playlist would keep the date off after the file shows up.
 	missed := false
@@ -346,7 +362,9 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	openAt, openWall := -1, time.Time{}
 	noteBreak := func(pts int64) {
 		if breakNext && haveEnd && tl != nil {
-			if contNext {
+			if contNext && same && haveLast {
+				tl.Continue(pts, lastWall.Add(time.Duration(ptsDiff(pts, lastPTS))*time.Second/90000))
+			} else if contNext {
 				tl.Continue(pts, lastEnd.Add(cont))
 			} else {
 				tl.Reanchor(pts, lastEnd)
@@ -362,8 +380,9 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 		case strings.HasPrefix(trimmed, "#EXT-X-CONT:"):
 			// The packer's note that the encode after this break continues
 			// the broadcast clock. The line is not served.
-			if v, err := strconv.ParseInt(strings.TrimPrefix(trimmed, "#EXT-X-CONT:"), 10, 64); err == nil && breakNext {
-				cont, contNext = time.Duration(v)*time.Second/90000, true
+			raw, mark, _ := strings.Cut(strings.TrimPrefix(trimmed, "#EXT-X-CONT:"), ",")
+			if v, err := strconv.ParseInt(raw, 10, 64); err == nil && breakNext {
+				cont, contNext, same = time.Duration(v)*time.Second/90000, true, mark == "SAME"
 			}
 			continue
 		case strings.HasPrefix(trimmed, "#EXT-X-PTS:"):
@@ -379,6 +398,9 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 			pending = pending[:0]
 			if name := ownName(partName(trimmed)); name != "" {
 				seen[name] = true
+				if first == "" {
+					first = name
+				}
 				pts, ok := p.cache[name]
 				if !ok {
 					if v, found := segmentStart(dir, name); found {
@@ -403,6 +425,10 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 						if haveEnd && wall.Before(lastEnd) {
 							wall = lastEnd
 						}
+						if given, ok := p.opens[name]; ok {
+							wall = given
+						}
+						p.opens[name] = wall
 						openAt, openWall = out.Len(), wall
 					}
 				}
@@ -430,19 +456,33 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 					lastEnd = wall.Add(d)
 					haveEnd = true
 				}
+				lastWall, lastPTS, haveLast = wall, pts, ok
 				breakNext = false
 			} else if ok && tl != nil {
 				noteBreak(pts)
 				wall := tl.Wall(pts)
-				// A short step the jump check missed overlaps the previous
-				// segment. Pin it to that segment's end and re-anchor, so the
-				// program timeline stays monotonic and the next segment continues.
-				if haveEnd && lastEnd.Sub(wall) > stampSlack {
+				given, wasOpen := p.opens[first]
+				switch {
+				case wasOpen && given.After(wall.Add(stampSlack)):
+					// Dated while open at the previous segment's end, below.
+					tl.Reanchor(pts, given)
+					wall = given
+				case wasOpen:
+					// Players have this date from its parts. A silence that
+					// moved the clock on since lands on the next segment.
+					wall = given
+				case haveEnd && lastEnd.Sub(wall) > stampSlack:
+					// A short step the jump check missed overlaps the previous
+					// segment. Pin it to that segment's end and re-anchor, so the
+					// program timeline stays monotonic and the next segment continues.
 					tl.Reanchor(pts, lastEnd)
 					wall = tl.Wall(pts)
+					tl.Settle()
+				default:
+					tl.Settle()
 				}
-				tl.Settle()
 				p.walls[name] = wall
+				lastWall, lastPTS, haveLast = wall, pts, true
 				out.WriteString("#EXT-X-PROGRAM-DATE-TIME:" + wall.UTC().Format("2006-01-02T15:04:05.000Z") + "\n")
 				if d := pendingDur(pending); d > 0 {
 					lastEnd = wall.Add(d)
@@ -457,6 +497,7 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 			pending = pending[:0]
 			out.WriteString(line + "\n")
 			openAt = -1
+			first = ""
 			continue
 		}
 		for _, l := range pending {
@@ -464,7 +505,7 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 		}
 		pending = pending[:0]
 		if strings.HasPrefix(trimmed, "#EXT-X-DISCONTINUITY") {
-			breakNext, contNext = true, false
+			breakNext, contNext, same = true, false, false
 		}
 		if line != "" {
 			out.WriteString(line + "\n")
@@ -475,6 +516,7 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 			delete(p.cache, name)
 			delete(p.walls, name)
 			delete(p.broke, name)
+			delete(p.opens, name)
 		}
 	}
 	body := out.Bytes()

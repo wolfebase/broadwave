@@ -38,6 +38,12 @@ const (
 	// a new timeline. ptsDiff already folds a 33-bit wrap of one group into
 	// a normal step, so that wrap is not a jump.
 	jumpTicks = 10 * 90000
+	// gapTicks is the forward step past which pictures went missing: a
+	// reception loss or the tuner falling silent. Up to jumpTicks the
+	// broadcast clock is taken to have run on through it, so the
+	// discontinuity keeps the pictures' own dates (packedSeg.same). A missed
+	// picture or two, or a lost group under a second, stays in the segment.
+	gapTicks = 90000
 	// minPartTicks is the shortest fragment published as its own part. An
 	// interlaced keyframe can come as a one-field fragment (17 ms) that holds
 	// no sound frame, and AVPlayer fails a sound view with an empty part.
@@ -307,6 +313,9 @@ type packedSeg struct {
 	// step is how far its first picture comes after where the last one ended.
 	cont bool
 	step int64
+	// same is a continuation inside one encode: pictures went missing for
+	// step and the encode carried on with the next ones.
+	same bool
 	// refs name the parts whose files gave way to a pointer into the segment.
 	refs []string
 }
@@ -761,8 +770,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	var partN int
 	var msn int
 	var segGap bool
-	// segCont and segStep are the open segment's continuation (packedSeg.cont).
-	var segCont bool
+	// segCont and segStep are the open segment's continuation (packedSeg.cont);
+	// segSame marks a gap inside one encode.
+	var segCont, segSame bool
 	var segStep int64
 	// encStart is where the current encode's fragment time zero sits on the
 	// broadcast clock, in ticks; encKnown is false when its header did not
@@ -790,7 +800,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 
 	var hold playlistCeiling
 	flush := func() error {
-		brk := openBreak{gap: segGap, cont: segGap && segCont, step: segStep, hint: fmt.Sprintf("part%05d.m4s", partN)}
+		brk := openBreak{gap: segGap, cont: segGap && segCont, same: segSame, step: segStep, hint: fmt.Sprintf("part%05d.m4s", partN)}
 		return writePackedOpen(dir, init, closed, open, msn-len(closed), allSync, brk, &hold, gate)
 	}
 	closeSeg := func(end int64) error {
@@ -811,8 +821,8 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if dur <= 0 {
 			dur = partTicks
 		}
-		closed = append(closed, packedSeg{name: name, pts: open[0].pts, dur: dur, parts: names, gap: segGap, timed: open[0].timed, cont: segGap && segCont, step: segStep})
-		segGap, segCont, segStep = false, false, 0
+		closed = append(closed, packedSeg{name: name, pts: open[0].pts, dur: dur, parts: names, gap: segGap, timed: open[0].timed, cont: segGap && segCont, same: segSame, step: segStep})
+		segGap, segCont, segSame, segStep = false, false, false, 0
 		msn++
 		open = nil
 		var kept int64
@@ -857,7 +867,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				expected = lastPTS + lastDur
 			}
 			d := ptsDiff(pts, expected)
-			if d < -int64(partTicks) || d > int64(jumpTicks) || handover {
+			if d < -int64(partTicks) || d > int64(gapTicks) || handover {
 				jumped = true
 				if len(open) > 0 {
 					if err := closeSeg(expected); err != nil {
@@ -869,8 +879,14 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				// a crash, keeps its pictures' dates: players see a short gap,
 				// not frames dated where the old encode stopped.
 				step, cont := continuation(handover, prevKnown, encKnown, expected+prevStart, pts+encStart)
-				segCont, segStep = cont, step
-				if cont {
+				same := !handover && d > 0 && d <= int64(jumpTicks)
+				if same {
+					step, cont = d, true
+				}
+				segCont, segSame, segStep = cont, same, step
+				if same {
+					slog.Info(fmt.Sprintf("pack %s: %.3fs of pictures missing", dir, float64(d)/90000))
+				} else if cont {
 					slog.Info(fmt.Sprintf("pack %s: the next encode continues %.3fs on", dir, float64(step)/90000))
 				} else {
 					slog.Warn(fmt.Sprintf("pack %s: timestamp jump %.3fs", dir, float64(d)/90000))
@@ -1023,7 +1039,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 			d := ptsDiff(pts, acc.pts+acc.dur)
 			merge := false
 			switch {
-			case fresh || handover || d < -int64(partTicks) || d > int64(jumpTicks) || len(acc.body)+len(frag) > maxOpenBytes:
+			case fresh || handover || d < -int64(partTicks) || d > int64(gapTicks) || len(acc.body)+len(frag) > maxOpenBytes:
 			case sync && acc.dur < splitMinTicks && (acc.sync || !closes(pts)):
 				// A field-rate transcode keys the first field and then the
 				// frame: one part, and the group starts on the first. A
@@ -1080,7 +1096,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		sync := fragmentIndependent(frag, track)
 		if short != nil {
 			d := ptsDiff(pts, short.pts+short.dur)
-			if fresh || handover || d < -int64(partTicks) || d > int64(jumpTicks) {
+			if fresh || handover || d < -int64(partTicks) || d > int64(gapTicks) {
 				if err := placeShort(); err != nil {
 					return err
 				}
@@ -1297,8 +1313,8 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 // openBreak is how the open segment starts: after a discontinuity, and
 // whether that discontinuity continues the broadcast clock (packedSeg.cont).
 type openBreak struct {
-	gap, cont bool
-	step      int64
+	gap, cont, same bool
+	step            int64
 	// hint is the next part's name, for EXT-X-PRELOAD-HINT. Empty writes none.
 	hint string
 }
@@ -1436,7 +1452,7 @@ func writePackedOpen(dir string, init []byte, closed []packedSeg, open []packedP
 	for i, s := range closed {
 		if s.gap {
 			b = append(b, "#EXT-X-DISCONTINUITY\n"...)
-			b = appendCont(b, s.cont, s.step)
+			b = appendCont(b, s.cont, s.same, s.step)
 		}
 		if listed, _ := partsKept(fromEnd[i], target); listed && closedFits(s) {
 			for _, p := range s.parts {
@@ -1449,7 +1465,7 @@ func writePackedOpen(dir string, init []byte, closed []packedSeg, open []packedP
 	}
 	if brk.gap && len(open) > 0 {
 		b = append(b, "#EXT-X-DISCONTINUITY\n"...)
-		b = appendCont(b, brk.cont, brk.step)
+		b = appendCont(b, brk.cont, brk.same, brk.step)
 	}
 	listedOpen := 0
 	if openFits {
@@ -1505,9 +1521,13 @@ func continuation(handover, lastKnown, nextKnown bool, last, next int64) (int64,
 
 // appendCont records a continuation for the stamper. Like the PTS lines, a
 // player never sees it.
-func appendCont(b []byte, cont bool, step int64) []byte {
+// same marks a gap inside one encode, whose timestamps carry on.
+func appendCont(b []byte, cont, same bool, step int64) []byte {
 	if !cont {
 		return b
+	}
+	if same {
+		return append(b, "#EXT-X-CONT:"+strconv.FormatInt(step, 10)+",SAME\n"...)
 	}
 	return append(b, "#EXT-X-CONT:"+strconv.FormatInt(step, 10)+"\n"...)
 }
