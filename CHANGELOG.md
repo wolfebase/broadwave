@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.19.1 — 2026-11-15
+
+### Added
+
+- Web: Sound delay (Settings › Playback). A screen whose sound comes through a soundbar or receiver and lands late can play up to 300 ms ahead of the room, so every room hears the same moment. It is kept on the device and never moves the other screens.
+
+### Fixed
+
+- Server: an encode that crashes and restarts keeps the same dates on the same broadcast frames. A restarted encode with no other encode of the channel beside it was dated about 4 s off, and lined-up screens paused or landed apart.
+- Server: when 1 to 10 s of the broadcast go missing (a reception loss), the segment ends where its pictures end and the playlist marks a break, with the dates still on the broadcast clock. The segment's length used to cover the hole while its parts did not, and a tuner silence of 5 to 10 s was counted twice.
+- Server: a segment first listed while still open keeps the broadcast clock when it closes.
+- Web: a page that can't load because the server went away says so and keeps the tab bar, then loads by itself when the server is back. The whole app used to go blank and stay blank.
+- Web: in a TV browser that reports 960 or 1280 px wide, the tabs no longer sit on top of each other, and the 10-foot type scales with the width.
+- Web: keyboard focus shows in Windows High Contrast.
+- Web: installed on an iPhone or iPad, pages no longer sit under the status bar or the notch.
+- Web: on a 320 px phone, a long channel name in the guide is cut instead of running under the title, a long title on Home stops at three lines, the multiview bar wraps, Settings labels no longer break mid-word, and Setup's address field and the tuner settings stay inside their cards. A phone on its side shows two guide rows instead of one.
+- Web: a recording with no picture shows its channel number instead of an empty box.
+
 ## 0.19.0 — 2026-11-15
 
 ### Added
