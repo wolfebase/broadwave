@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.19.0 — 2026-11-15
+
+### Added
+
+- Install: one command installs Broadwave on a Linux Docker host, and running it again updates it (`scripts/install.sh`). It checks Docker, the time zone, your user, graphics, and the port, holds off while a tuner is in use or a recording is near, and puts the old container back when a new one doesn't start. `--dry-run` shows each command first.
+- Unraid: the template is ready for Community Applications, with graphics as its own optional entry.
+- Server: a recording's poster comes at full width (`/media/poster/{id}?w=1280` or `1920`). A game whose score is hidden gets a picture from around its listed start instead of one that may show the scoreboard.
+- Server: `/frames` says when a channel's still is from the program before the one on now (`earlier`), so an app doesn't show it as this program's picture.
+
+### Fixed
+
+- Server: screens on different pictures of one channel stay together through a long game. The dates on a copied picture and an encoded one crept apart by about 40 ms an hour, enough to hear between rooms by the end of a game.
+- Server: a channel that stays tuned for more than an hour no longer steps its dates onto the wall clock once an hour, which made lined-up screens pause or jump.
+- Server: stills of SD channels have the picture's shape. They came back at the stored size, too tall.
+- Server: the channels a viewer is likely to open have a fresh still: a game, a live show, or a new episode on now first, then favorites, then each station's main channel, and again shortly after a new program starts. A recording on one tuner box no longer stops stills on another, a channel just watched keeps its still for 45 minutes, and both halves of a paired channel share one still.
+- Server: a still grabbed on a fade or a slate no longer replaces the picture before it.
+
 ## 0.18.2 — 2026-11-14
 
 ### Fixed
