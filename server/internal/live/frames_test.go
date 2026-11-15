@@ -1,10 +1,14 @@
 package live
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -201,7 +205,7 @@ func grabAtRealTime(t *testing.T, ffmpeg, sample string, length time.Duration, j
 		t.Fatalf("grab did not finish inside %s: %v %s", limit, err, out)
 	}
 	for _, job := range jobs {
-		if !publishFrame(dir, job.ChannelID) {
+		if publishFrame(dir, job.ChannelID, time.Now()) != framePublished {
 			t.Fatalf("no preview for channel %d", job.ChannelID)
 		}
 	}
@@ -317,5 +321,60 @@ func TestAGrabStoppedOnPurposeIsRoutine(t *testing.T) {
 	}
 	if routineKill(errors.New("no keyframe")) {
 		t.Fatal("a grab that found no picture is not")
+	}
+}
+
+// writeGrab writes a grab's .part stills: flat grey, or noise like a scene.
+func writeGrab(t *testing.T, dir string, id int64, flat bool) {
+	t.Helper()
+	img := image.NewGray(image.Rect(0, 0, 160, 90))
+	r := rand.New(rand.NewPCG(1, uint64(id)))
+	for i := range img.Pix {
+		img.Pix[i] = 40
+		if !flat {
+			img.Pix[i] = uint8(r.IntN(256))
+		}
+	}
+	for _, width := range FrameWidths {
+		f, err := os.Create(filepath.Join(dir, frameName(id, width)+".part"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := jpeg.Encode(f, img, nil); err != nil {
+			t.Fatal(err)
+		}
+		_ = f.Close()
+	}
+}
+
+// A grab that lands on a fade to black or a slate, the edge of a break,
+// keeps the picture before it while that one is still listed, and the grab
+// tries again for that channel.
+func TestAFlatGrabKeepsTheLastPicture(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	writeGrab(t, dir, 4, false)
+	if got := publishFrame(dir, 4, now); got != framePublished {
+		t.Fatalf("a scene: %d", got)
+	}
+	scene, _ := os.ReadFile(filepath.Join(dir, frameName(4, 1920)))
+	writeGrab(t, dir, 4, true)
+	if got := publishFrame(dir, 4, now); got != frameKept {
+		t.Fatalf("a flat grab after a scene: %d", got)
+	}
+	if kept, _ := os.ReadFile(filepath.Join(dir, frameName(4, 1920))); !bytes.Equal(kept, scene) {
+		t.Fatal("the scene was replaced")
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, "*.part")); len(left) != 0 {
+		t.Fatalf("left %v", left)
+	}
+	// Once the last picture is no longer listed, the flat one will do.
+	writeGrab(t, dir, 4, true)
+	if got := publishFrame(dir, 4, now.Add(SweepStaleAfter+time.Minute)); got != framePublished {
+		t.Fatalf("a flat grab after an old scene: %d", got)
+	}
+	writeGrab(t, dir, 5, true)
+	if got := publishFrame(dir, 5, now); got != framePublished {
+		t.Fatalf("a flat grab with nothing before it: %d", got)
 	}
 }

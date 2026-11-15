@@ -719,7 +719,9 @@ paths:
         watched, recorded, or warm there, no recording within 3 minutes): first channels with a
         game, live show, or new episode on now, then favorites, then each station's main channel,
         then the rest. It refreshes a still at 30 minutes, or sooner once a new program has run
-        2 minutes on a channel it leads with, and tunes a frequency at most 48 times a day. The
+        2 minutes on a channel it leads with, and tunes a frequency at most 48 times a day and
+        never twice in 10 minutes. A grab that lands on a flat picture (a fade to black, a slate)
+        keeps the last still while that one is listed. The
         `stillSweep` setting or BROADWAVE_STILL_SWEEP=0 turns it off. Cards ask for
         `/channels/{id}/frame` only for these ids.
         `noSignal` lists the channels a tune found off the air in the last 10 minutes.

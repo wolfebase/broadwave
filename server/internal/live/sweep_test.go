@@ -488,13 +488,18 @@ func TestSweepReplacesAStillFromTheProgramBefore(t *testing.T) {
 		t.Fatal("a still from this program is not due")
 	}
 	still(31 * time.Minute)
+	h.noteSweepTune("k", now.Add(-5*time.Minute))
+	if h.sweepDue(target, now) {
+		t.Fatal("a tune that kept the last still is tried again at once")
+	}
+	h.sweepTunes = nil
 	for i := range sweepDailyTunes {
 		h.noteSweepTune("k", now.Add(-23*time.Hour+time.Duration(i)*time.Minute))
 	}
 	if h.sweepDue(target, now) {
 		t.Fatal("a target with no tunes left today is due")
 	}
-	h.noteSweepTune("k", now.Add(2*time.Hour))
+	h.noteSweepTune("k", now.Add(2*time.Hour-11*time.Minute))
 	if !h.sweepDue(target, now.Add(2*time.Hour)) {
 		t.Fatal("tunes over a day old are not counted")
 	}

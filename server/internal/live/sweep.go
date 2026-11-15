@@ -243,7 +243,8 @@ func sweepRank(ch store.Channel, a store.Airing, on bool) int {
 }
 
 // sweepDue reports a target that no tune is on now, that did not find dark
-// within the hour, that has tunes left today (sweepDailyTunes), and with a
+// within the hour, that was not tuned in the last sweepProgramGap, that has
+// tunes left today (sweepDailyTunes), and with a
 // channel whose still is older than sweepRefresh, or a lead channel whose
 // still is from before its program and sweepProgramGap old.
 func (h *Hub) sweepDue(t sweepTarget, now time.Time) bool {
@@ -263,13 +264,19 @@ func (h *Hub) sweepDue(t sweepTarget, now time.Time) bool {
 		}
 	}
 	tunes := 0
+	var last time.Time
 	for _, at := range h.sweepTunes[t.key] {
 		if now.Sub(at) < 24*time.Hour {
 			tunes++
 		}
+		if at.After(last) {
+			last = at
+		}
 	}
 	h.mu.Unlock()
-	if tunes >= sweepDailyTunes {
+	// A tune that brought back no new still (a slate kept the last one, the
+	// grab missed) waits sweepProgramGap like any other, not one pause.
+	if tunes >= sweepDailyTunes || now.Sub(last) < sweepProgramGap {
 		return false
 	}
 	for _, id := range t.channels {
