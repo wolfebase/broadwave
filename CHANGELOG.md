@@ -11,6 +11,7 @@
 ### Added
 
 - API: `/channels` says when a channel's main sound was last settled and how (`soundCheckedAt`, `soundCheckedBy`: `twin` or `hand`).
+- Diagnostics: `soundChecks` says, for each ATSC 3.0 channel playing, what its sound check is doing or why it is waiting (no free tuner, one language, no regular broadcast), and the server log says the same when it changes.
 
 ## 0.19.2 — 2026-11-15
 
