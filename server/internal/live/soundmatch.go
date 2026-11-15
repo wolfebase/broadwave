@@ -81,9 +81,15 @@ func soundEnvelope(pcm []byte) ([]float64, bool) {
 // soundMatch slides short along long and returns the best correlation at any
 // offset where short lies wholly inside long; 0 when it cannot fit.
 func soundMatch(long, short []float64) float64 {
+	r, _ := soundMatchAt(long, short)
+	return r
+}
+
+// soundMatchAt is soundMatch and the offset into long, in steps, where it is.
+func soundMatchAt(long, short []float64) (float64, int) {
 	n := len(short)
 	if n == 0 || n > len(long) {
-		return 0
+		return 0, 0
 	}
 	var mean float64
 	for _, v := range short {
@@ -97,7 +103,7 @@ func soundMatch(long, short []float64) float64 {
 		norm += centered[i] * centered[i]
 	}
 	if norm == 0 {
-		return 0
+		return 0, 0
 	}
 	norm = math.Sqrt(norm)
 	sum := make([]float64, len(long)+1)
@@ -106,7 +112,7 @@ func soundMatch(long, short []float64) float64 {
 		sum[i+1] = sum[i] + v
 		sq[i+1] = sq[i] + v*v
 	}
-	best := 0.0
+	best, at := 0.0, 0
 	for k := 0; k+n <= len(long); k++ {
 		s := sum[k+n] - sum[k]
 		varSum := sq[k+n] - sq[k] - s*s/float64(n)
@@ -118,10 +124,10 @@ func soundMatch(long, short []float64) float64 {
 			dot += long[k+i] * c
 		}
 		if r := dot / (math.Sqrt(varSum) * norm); r > best {
-			best = r
+			best, at = r, k
 		}
 	}
-	return best
+	return best, at
 }
 
 // soundVerdict is one check's answer: whether the track labelled second

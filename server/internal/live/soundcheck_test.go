@@ -609,3 +609,39 @@ func TestATwinOnATunedFrequencyTakesNoTuner(t *testing.T) {
 		t.Fatal("a twin on another frequency rides a tune")
 	}
 }
+
+// TestSoundCheckOnRecordedPair judges real sound a person saved: in
+// SOUND_PAIR_DIR, <w>-41.pcm (the twin's main) and <w>-a2.pcm / <w>-a3.pcm (the
+// channel's tracks labelled main and second language), mono s16le at
+// soundRate, for each window w in SOUND_PAIR_WINDOWS. Broadcast sound is not
+// kept in the repo, so it skips without them. On 2026-11-15 WDAF 104.1
+// against 4.1 scored 0.958 and 0.111-0.127 in two windows, 6.1 s apart.
+func TestSoundCheckOnRecordedPair(t *testing.T) {
+	dir := os.Getenv("SOUND_PAIR_DIR")
+	if dir == "" {
+		t.Skip("SOUND_PAIR_DIR not set")
+	}
+	for _, w := range strings.Fields(os.Getenv("SOUND_PAIR_WINDOWS")) {
+		env := func(name string) []float64 {
+			b, err := os.ReadFile(filepath.Join(dir, w+"-"+name+".pcm"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			e, ok := soundEnvelope(b)
+			if !ok {
+				t.Fatalf("%s %s is silent", w, name)
+			}
+			return e
+		}
+		twin, main, lang := env("41"), env("a2"), env("a3")
+		rm, km := soundMatchAt(main, twin)
+		rl, kl := soundMatchAt(lang, twin)
+		t.Logf("%s: main %.3f at +%.2f s, second %.3f at +%.2f s", w, rm, float64(km)/100, rl, float64(kl)/100)
+		v := judgeSound(twin, main, lang)
+		r := judgeSound(twin, lang, main)
+		t.Logf("%s: as labelled %+v; reversed %+v", w, v, r)
+		if !v.ok || v.swapped || !r.ok || !r.swapped {
+			t.Fatalf("%s: labelled %+v, reversed %+v; want not swapped, then swapped", w, v, r)
+		}
+	}
+}
