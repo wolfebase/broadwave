@@ -4,6 +4,7 @@ import { channelMissing, channelToDock } from "./lineup";
 import { encryptedBroadcast } from "../strings/notice.ts";
 import type { Channel } from "../types";
 import { useData } from "./data";
+import { PageBoundary } from "./PageBoundary";
 import { inAppDepth, navigate, useRoute } from "./router";
 
 type Player = {
@@ -96,6 +97,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={value}>
       {children}
       {playing && path !== "/multiview" && !needsPair ? (
+        <PageBoundary path={path} quiet>
         <Suspense fallback={null}>
         <LivePlayer
           key="live"
@@ -112,6 +114,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           onClose={close}
         />
         </Suspense>
+        </PageBoundary>
       ) : null}
     </Ctx.Provider>
   );

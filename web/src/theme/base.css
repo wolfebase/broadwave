@@ -269,6 +269,7 @@ html[data-layout="tv"] :focus-visible {
   font-weight: 600;
   font-size: var(--type-footnote-size);
   white-space: nowrap;
+  flex-shrink: 0;
   transition: all var(--motion-fast) var(--ease-out);
 }
 

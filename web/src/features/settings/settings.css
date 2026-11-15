@@ -288,6 +288,16 @@ html[data-layout="tv"] .settings-menu .settings-menu-row:focus-visible {
   min-width: 0;
 }
 
+/* A control too wide for the row (a menu, a number field) moves under the name.
+   Beside it on a 320 px phone the name broke mid-word, "recordin gs". */
+.set-row:not(.stack, .switch):has(> .set-row-control :is(select, textarea, input:not([type="checkbox"], [type="radio"]))) {
+  flex-wrap: wrap;
+}
+
+.set-row:not(.stack, .switch):has(> .set-row-control :is(select, textarea, input:not([type="checkbox"], [type="radio"]))) > .set-row-text {
+  flex: 1 1 12rem;
+}
+
 .set-row.stack {
   flex-direction: column;
   align-items: stretch;
@@ -331,6 +341,13 @@ a.set-row-label:hover {
   font-size: var(--type-footnote-size);
   color: var(--color-text-secondary);
   overflow-wrap: anywhere;
+}
+
+/* A long button label wraps instead of running past the card on a narrow phone. */
+.set-row-control > .btn,
+.set-row > .btn {
+  max-width: 100%;
+  white-space: normal;
 }
 
 .set-row-control {
@@ -435,8 +452,15 @@ a.set-row-label:hover {
   min-width: 0;
 }
 
+/* A field and its button share a row until the field would be too narrow to read,
+   then the button goes under it. */
+.set-inline {
+  flex-wrap: wrap;
+}
+
 .set-inline > input {
   flex: 1 1 auto;
+  min-width: min(12rem, 100%);
 }
 
 .set-inline > .btn {
@@ -1328,4 +1352,16 @@ html[data-layout="tv"] .tuner-icon {
   grid-column: 1 / -1;
   justify-content: flex-start;
   padding: 0 0 12px var(--set-pad);
+}
+
+/* In forced colors the accent swatches keep their colour: they are the choice itself. */
+@media (forced-colors: active) {
+  .accent-dot {
+    forced-color-adjust: none;
+  }
+
+  .accent-choice:has(input:checked) .accent-dot {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
 }

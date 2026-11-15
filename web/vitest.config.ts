@@ -32,6 +32,7 @@ export default defineConfig({
       "stage.test.tsx",
       "playerChrome.test.ts",
       "cloudflareCard.test.tsx",
+      "pageBoundary.test.tsx",
     ],
   },
 });

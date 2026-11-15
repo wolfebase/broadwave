@@ -5,6 +5,7 @@ import "./theme/tokens.css";
 import "./theme/base.css";
 import "./theme/brand.css";
 import "./theme/light.css";
+import "./theme/forced.css";
 import { App } from "./app/App";
 import { shellMessages } from "./i18n/messages/shell";
 import { bind, setLocaleMode } from "./i18n/runtime";

@@ -93,6 +93,12 @@
   letter-spacing: var(--type-display-tracking);
   line-height: 0.98;
   text-wrap: balance;
+  /* A long college game filled a phone with seven lines. The padding keeps the last line's descenders. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  padding-bottom: 0.1em;
 }
 
 .hero-sub {

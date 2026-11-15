@@ -5,6 +5,7 @@
   min-height: 0;
   width: 100%;
   height: 100%;
+  padding-top: env(safe-area-inset-top, 0px);
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
@@ -194,8 +195,11 @@
 }
 
 /* A group of ways in, set off by a hairline. */
+/* One column no wider than the card. A long button set the column's width,
+   and the address field and its help ran past the card's edge on a phone. */
 .setup-block {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   padding-top: var(--space-6);
   border-top: 1px solid var(--color-line);
@@ -305,12 +309,17 @@
 
 .setup-pair {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
   gap: 10px;
 }
 
 .setup-form > .btn {
   justify-self: start;
+}
+
+/* No wider than the form: a file picker's own width pushed past a phone's edge. */
+.setup-form .field {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .setup-file input[type="file"] {
@@ -577,6 +586,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
+}
+
+.setup-row > .btn {
+  max-width: 100%;
+  white-space: normal;
 }
 
 .setup-row input {
@@ -685,6 +700,7 @@
 
 .setup-form {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 

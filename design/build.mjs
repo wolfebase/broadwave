@@ -33,9 +33,12 @@ function css() {
   lines.push(`  --motion-slow: ${t.motion.slow}ms;`);
   lines.push(`  --ease-spring: cubic-bezier(0.2, 0.9, 0.25, 1.05);`);
   lines.push(`  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);`);
-  lines.push("}", "", 'html[data-layout="tv"] {');
+  // The 10-foot sizes are for a 1920 px page, in rem of a root that follows the
+  // width: many TV browsers report 960 or 1280 px, where the full sizes crowd
+  // the screen. The root never drops below what keeps text at the desktop size.
+  lines.push("}", "", 'html[data-layout="tv"] {', "  font-size: clamp(10px, 0.834vw, 16px);");
   for (const [k, v] of Object.entries(t.type)) {
-    lines.push(`  --type-${k}-size: ${Math.round(v.size * t.tvScale)}px;`);
+    lines.push(`  --type-${k}-size: ${Math.round(v.size * t.tvScale) / 16}rem;`);
   }
   lines.push("}", "");
   return lines.join("\n");

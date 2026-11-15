@@ -77,14 +77,14 @@
 }
 
 html[data-layout="tv"] {
-  --type-caption-size: 19px;
-  --type-footnote-size: 21px;
-  --type-body-size: 26px;
-  --type-headline-size: 27px;
-  --type-title3-size: 32px;
-  --type-title2-size: 42px;
-  --type-title1-size: 54px;
-  --type-display-size: 90px;
-  --type-channel-size: 35px;
+  font-size: clamp(10px, 0.834vw, 16px);
+  --type-caption-size: 1.1875rem;
+  --type-footnote-size: 1.3125rem;
+  --type-body-size: 1.625rem;
+  --type-headline-size: 1.6875rem;
+  --type-title3-size: 2rem;
+  --type-title2-size: 2.625rem;
+  --type-title1-size: 3.375rem;
+  --type-display-size: 5.625rem;
+  --type-channel-size: 2.1875rem;
 }
-

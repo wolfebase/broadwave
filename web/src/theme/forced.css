@@ -1,0 +1,7 @@
+/* Forced colors (Windows High Contrast) drop box-shadows, and the focus ring is one. */
+@media (forced-colors: active) {
+  :root :focus-visible {
+    outline: 3px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+}

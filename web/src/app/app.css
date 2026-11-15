@@ -4,9 +4,15 @@
   flex-direction: column;
 }
 
+/* Installed on an iPhone or iPad the page draws under the status bar and, on its
+   side, the notch (viewport-fit=cover). In a browser tab the insets are 0. */
+.shell:not(.immersive) {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+
 .topbar {
   position: sticky;
-  top: 10px;
+  top: calc(10px + env(safe-area-inset-top));
   z-index: 40;
   margin: 10px auto 0;
   width: min(var(--content-max), calc(100% - 24px));
@@ -69,9 +75,10 @@
   display: none;
 }
 
+/* A tab keeps its width; when they don't fit, the bar scrolls instead of drawing them over each other. */
 .tabs > li {
   display: flex;
-  min-width: 0;
+  flex: none;
 }
 
 .tab {
@@ -637,12 +644,12 @@ html[data-theater="1"] .topbar {
 }
 
 .layout-tv .tab {
-  padding: 14px 26px;
+  padding: 0.875rem 1.625rem;
   font-size: var(--type-headline-size);
 }
 
 .layout-tv .tab-icon {
-  font-size: 28px;
+  font-size: 1.75rem;
 }
 
 .shell.immersive .content:has(.setup) {
