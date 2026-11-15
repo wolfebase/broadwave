@@ -40,6 +40,18 @@ const (
 	// sweepRefresh alone allows. A new program moves a tune earlier and
 	// never adds one past it.
 	sweepDailyTunes = int(24 * time.Hour / sweepRefresh)
+	// sweepHourlyTunes is the most a target is tuned in any hour. A day's
+	// tunes spent in its first hours left the channels on it with no still
+	// for the rest.
+	sweepHourlyTunes = 2
+	// sweepEarlyGap is the shortest wait after a tune before a new program
+	// tunes again. With two tunes an hour, no still gets older than an hour
+	// less this, inside SweepStaleAfter.
+	sweepEarlyGap = 20 * time.Minute
+	// sweepGiveUp is the tunes a channel that never had a still gets before
+	// it no longer makes its target due (a sound-only service), until the
+	// lineup changes.
+	sweepGiveUp = 3
 )
 
 // StillSettle is the start of a program a still from is counted as the
@@ -99,8 +111,14 @@ func (h *Hub) RunStillSweep(ctx context.Context) {
 	// A pass ends when no target is due; its length is logged.
 	var passStart time.Time
 	passTunes := 0
+	lineup := ""
 	for ctx.Err() == nil {
 		targets := h.sweepTargets(ctx)
+		// A channel given up on gets another try when the lineup changes.
+		if now := sweepLineup(targets); now != lineup {
+			h.forgetSweepMisses()
+			lineup = now
+		}
 		swept, blocked := false, false
 		// A device that is busy is passed over; another may be free.
 		shut := map[string]bool{}
@@ -243,10 +261,13 @@ func sweepRank(ch store.Channel, a store.Airing, on bool) int {
 }
 
 // sweepDue reports a target that no tune is on now, that did not find dark
-// within the hour, that was not tuned in the last sweepProgramGap, that has
-// tunes left today (sweepDailyTunes), and with a
-// channel whose still is older than sweepRefresh, or a lead channel whose
-// still is from before its program and sweepProgramGap old.
+// within the hour, that has tunes left this hour and today, and that was not
+// tuned in the last sweepProgramGap. It is due for a channel whose still is
+// missing or older than sweepRefresh, or, sweepEarlyGap after the last tune,
+// for a lead channel whose still is from before its program and
+// sweepProgramGap old. A channel the last tune brought back no still for
+// waits for the refresh, and one that never had a still stops counting after
+// sweepGiveUp tunes.
 func (h *Hub) sweepDue(t sweepTarget, now time.Time) bool {
 	h.mu.Lock()
 	if at, ok := h.sweepDark[t.key]; ok && time.Since(at) < sweepDarkFor {
@@ -263,38 +284,101 @@ func (h *Hub) sweepDue(t sweepTarget, now time.Time) bool {
 			return false
 		}
 	}
-	tunes := 0
+	tunes, hour := 0, 0
 	var last time.Time
 	for _, at := range h.sweepTunes[t.key] {
 		if now.Sub(at) < 24*time.Hour {
 			tunes++
 		}
+		if now.Sub(at) < time.Hour {
+			hour++
+		}
 		if at.After(last) {
 			last = at
+		}
+	}
+	misses := make(map[int64]int, len(t.channels))
+	for _, id := range t.channels {
+		if n := h.sweepMisses[id]; n > 0 {
+			misses[id] = n
 		}
 	}
 	h.mu.Unlock()
 	// A tune that brought back no new still (a slate kept the last one, the
 	// grab missed) waits sweepProgramGap like any other, not one pause.
-	if tunes >= sweepDailyTunes || now.Sub(last) < sweepProgramGap {
+	if tunes >= sweepDailyTunes || hour >= sweepHourlyTunes || now.Sub(last) < sweepProgramGap {
 		return false
 	}
 	for _, id := range t.channels {
 		info, err := os.Stat(FramePath(h.Dir, id, 0))
-		if err != nil || now.Sub(info.ModTime()) > sweepRefresh {
+		stale := err != nil || now.Sub(info.ModTime()) > sweepRefresh
+		switch n := misses[id]; {
+		case !stale:
+		case n == 0:
+			return true
+		case err != nil && n >= sweepGiveUp:
+			// Never a picture: a sound-only service, or one the grab cannot read.
+		case now.Sub(last) >= sweepRefresh:
 			return true
 		}
 	}
 	settled := t.program.Add(StillSettle)
-	if t.program.IsZero() || now.Before(settled) {
+	if t.program.IsZero() || now.Before(settled) || now.Sub(last) < sweepEarlyGap {
 		return false
 	}
 	for _, id := range t.lead {
+		if misses[id] > 0 {
+			continue
+		}
 		if at, ok := frameTime(h.Dir, id); ok && at.Before(settled) && now.Sub(at) >= sweepProgramGap {
 			return true
 		}
 	}
 	return false
+}
+
+// noteSweepResult counts, for each channel of a tune that began then, a tune
+// that brought back no still, and forgets the count of one that got one.
+func (h *Hub) noteSweepResult(t sweepTarget, began time.Time) {
+	got := make(map[int64]bool, len(t.channels))
+	for _, id := range t.channels {
+		if at, ok := frameTime(h.Dir, id); ok && !at.Before(began) {
+			got[id] = true
+		}
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.sweepMisses == nil {
+		h.sweepMisses = map[int64]int{}
+	}
+	for _, id := range t.channels {
+		if got[id] {
+			delete(h.sweepMisses, id)
+		} else {
+			h.sweepMisses[id]++
+		}
+	}
+}
+
+// sweepLineup names every target and its channels.
+func sweepLineup(targets []sweepTarget) string {
+	var b strings.Builder
+	for _, t := range targets {
+		b.WriteString(t.key)
+		for _, id := range t.channels {
+			b.WriteByte(',')
+			b.WriteString(strconv.FormatInt(id, 10))
+		}
+		b.WriteByte(';')
+	}
+	return b.String()
+}
+
+// forgetSweepMisses starts every channel's count again, for a new lineup.
+func (h *Hub) forgetSweepMisses() {
+	h.mu.Lock()
+	h.sweepMisses = nil
+	h.mu.Unlock()
 }
 
 // noteSweepTune counts a tune of target key against its day.
@@ -398,6 +482,10 @@ func (h *Hub) sweepOne(ctx context.Context, t sweepTarget) {
 	state.feed = f
 	h.mu.Unlock()
 	h.waitStills(ctx, t.channels, began)
+	// A watch that stopped the tune says nothing about the channels' pictures.
+	if ctx.Err() == nil {
+		h.noteSweepResult(t, began)
+	}
 	// Every program on the tune got a still, not only the target's, and
 	// the tables say each one's captions and sound.
 	ids := t.channels
