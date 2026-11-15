@@ -10,6 +10,7 @@ import { DataProvider, useData } from "./data";
 import { useLayout } from "./layout";
 import { Nav, routeTitle } from "./Nav";
 import { NotFound } from "./NotFound";
+import { PageBoundary } from "./PageBoundary";
 import { PlayerProvider, usePlayer } from "./player";
 import { floatBelowNotices, focusPastNotice, focusRing, installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
@@ -241,21 +242,25 @@ function Shell() {
             {updateHowOpen ? <UpdateHow update={notice} /> : null}
           </div>
         ) : null}
-        {!booting && admin && !immersive && !fullPlayer && path !== "/setup" && !firstRun ? <Suspense fallback={null}><ZoneBanner server={server} /></Suspense> : null}
+        {!booting && admin && !immersive && !fullPlayer && path !== "/setup" && !firstRun ? <PageBoundary path={path} online={online} quiet><Suspense fallback={null}><ZoneBanner server={server} /></Suspense></PageBoundary> : null}
         {!booting && notices[0] && !immersive && !fullPlayer ? (
           <HomeNotice key={`${notices.length}:${notices[0]}`} message={notices[0]} onDismiss={dismissNotice} />
         ) : null}
         {!booting ? (
-          <Suspense fallback={null}>
-            <GameAlerts held={immersive || fullPlayer || Boolean(notices[0])} />
-            <ScreenMoves />
-          </Suspense>
+          <PageBoundary path={path} online={online} quiet>
+            <Suspense fallback={null}>
+              <GameAlerts held={immersive || fullPlayer || Boolean(notices[0])} />
+              <ScreenMoves />
+            </Suspense>
+          </PageBoundary>
         ) : null}
         {!booting ? (
-          <Suspense fallback={null}>
-            {path === "/play" ? <PlayClaim /> : null}
-            {page}
-          </Suspense>
+          <PageBoundary path={path} online={online}>
+            <Suspense fallback={null}>
+              {path === "/play" ? <PlayClaim /> : null}
+              {page}
+            </Suspense>
+          </PageBoundary>
         ) : null}
       </main>
     </div>

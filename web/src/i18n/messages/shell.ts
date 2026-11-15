@@ -47,4 +47,8 @@ export const shellMessages = {
   "shell.noTuner": "No tuner answered.",
   "shell.deviceNotRemoved": "That device was not removed.",
   "shell.browserOn": "{browser} on {os}",
+  "shell.pageFailed": "This page didn't load",
+  "shell.pageFailedAway": "Can't reach the server. The page loads by itself when it's back.",
+  "shell.pageFailedBug": "Something went wrong on this page. Reloading usually fixes it.",
+  "shell.reload": "Reload",
 } as const satisfies Record<string, Message>;

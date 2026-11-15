@@ -479,9 +479,39 @@ html[data-theater="1"] .topbar {
   justify-content: center;
 }
 
-.layout-phone .brand,
-.layout-phone .topbar-right .offline {
+.layout-phone .brand {
   display: none;
+}
+
+/* The bar has no room beside the tabs, so on a phone the word sits just above it.
+   Hidden, a phone showed a stale guide with nothing to say the server was gone. */
+.layout-phone .topbar-right .offline {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 16px);
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface2);
+  border: 1px solid var(--color-line);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.layout-phone .offline-full {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.layout-phone .offline-short {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .layout-phone .topbar {
@@ -726,6 +756,28 @@ html[data-theater="1"] .topbar {
 
 .not-found-links .btn {
   text-decoration: none;
+}
+
+/* A page that failed to load: the bar stays, so the rest of the app still works. */
+.page-failed {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--space-3);
+  min-height: 50vh;
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+}
+
+.page-failed h1 {
+  font-size: var(--type-title2-size);
+  letter-spacing: var(--type-title2-tracking);
+}
+
+.page-failed p {
+  color: var(--color-text-secondary);
 }
 .layout-phone .topbar-right:empty { display: none; }
 
