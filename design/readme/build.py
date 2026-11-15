@@ -16,9 +16,13 @@ Design system
   Body text is #AEB7C5 or brighter on the card (AA at body size).
 - Color: design/tokens.json. Signal blue #3D7BFF, violet #8B5CF6, cyan #22D3EE, tally #FF3B30,
   pale strand #C9D6FF. Category colors for guide cells.
-- Motion: CSS animations only (GitHub keeps them; SMIL ignores reduced motion). Slow
-  (6 s and up), transform and opacity only, and every one stops under
-  prefers-reduced-motion, where the still frame is the complete picture.
+- Motion: one language. Loops of 6 to 20 s, ease EASE for moves and linear for flows,
+  staggers in beats of 0.5 s. Every loop starts on its complete state, so a renderer that
+  shows only the first frame (or no animation at all) still shows the whole idea.
+  Under prefers-reduced-motion the gentle ambient motion keeps running (flows, soft
+  pulses, slow fades, ticking digits); large or fast travel is dropped or slowed there
+  (Doc.reduce). Nothing flashes more than once a second. CSS animations, plus SMIL for
+  the terminal's typing (a clip that grows); GitHub strips scripts.
 - Pictures: real screenshots of the apps' demo (Blender open movies, made-up stations),
   embedded as JPEG at about 2x their shown size. Never painted over.
 """
@@ -50,6 +54,7 @@ TEXT, TEXT2, TEXT3 = "#F5F7FA", "#AEB7C5", "#8D99AC"
 BLUE, VIOLET, CYAN, TALLY, PALE = "#3D7BFF", "#8B5CF6", "#22D3EE", "#FF3B30", "#C9D6FF"
 GREEN, AMBER = "#2FBF71", "#FFB020"
 R = 24
+EASE = "cubic-bezier(.45,0,.25,1)"
 # The pattern in scripts/check-names.sh, split the same way so this file passes it.
 RETIRED = re.compile("wave" "guide|ota[ -]?viewer|ota" "kit|ota" "ui", re.I)
 
@@ -149,7 +154,7 @@ FACES = {
 class Doc:
     def __init__(self, w, h, label):
         self.w, self.h, self.label = w, h, label
-        self.defs, self.body, self.css = [], [], []
+        self.defs, self.body, self.css, self.rm = [], [], [], []
         self.glyphs = {}
         self.ids = set()
         self.n = 0
@@ -169,8 +174,12 @@ class Doc:
     def style(self, s):
         self.css.append(s)
 
+    def reduce(self, s):
+        """CSS that applies only under prefers-reduced-motion."""
+        self.rm.append(s)
+
     # Text: per-glyph <use> of shared outlines. Returns the width.
-    def text(self, x, y, s, size, face="body", fill=TEXT, anchor="start", track=0.0, opacity=None, cls=None):
+    def text(self, x, y, s, size, face="body", fill=TEXT, anchor="start", track=0.0, opacity=None, cls=None, ret=False):
         f = Face.get(face)
         run, adv = f.shape(s)
         scale = size / f.upem
@@ -195,7 +204,10 @@ class Doc:
             attrs += f' opacity="{opacity}"'
         if cls:
             attrs += f' class="{cls}"'
-        self.add(f"<g{attrs}>{''.join(parts)}</g>")
+        markup = f"<g{attrs}>{''.join(parts)}</g>"
+        if ret:
+            return markup
+        self.add(markup)
         return width
 
     def measure(self, s, size, face="body", track=0.0):
@@ -238,7 +250,9 @@ class Doc:
 
     def render(self):
         glyphs = "".join(f'<path id="{k}" d="{d}"/>' for k, d in self.glyphs.items() if d)
-        css = "".join(self.css) + "@media (prefers-reduced-motion:reduce){*{animation:none!important}}"
+        css = "".join(self.css)
+        if self.rm:
+            css += "@media (prefers-reduced-motion:reduce){" + "".join(self.rm) + "}"
         return (
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {self.w} {self.h}" width="{self.w}" height="{self.h}" '
             f'role="img" aria-label="{self.label}"><style>{css}</style><defs>{glyphs}{"".join(self.defs)}</defs>'
@@ -269,14 +283,15 @@ def common_defs(d):
     )
 
 
-def glow(d, cx, cy, rx, ry, color, strength):
+def glow(d, cx, cy, rx, ry, color, strength, cls=None):
     """A soft light: many stops, so it falls off without visible rings."""
     gid = d.uid("gl")
     stops = "".join(
         f'<stop offset="{fmt(t)}" stop-color="{color}" stop-opacity="{fmt(strength * (1 - t) ** 2.2)}"/>' for t in (0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1)
     )
     d.define(gid, f'<radialGradient id="{gid}">{stops}</radialGradient>')
-    d.add(f'<ellipse cx="{fmt(cx)}" cy="{fmt(cy)}" rx="{fmt(rx)}" ry="{fmt(ry)}" fill="url(#{gid})"/>')
+    c = f' class="{cls}"' if cls else ""
+    d.add(f'<ellipse{c} cx="{fmt(cx)}" cy="{fmt(cy)}" rx="{fmt(rx)}" ry="{fmt(ry)}" fill="url(#{gid})"/>')
 
 
 def card_open(d, x, y, w, h, lights=()):
@@ -328,32 +343,54 @@ def smooth(pts):
     return "".join(d)
 
 
-def brand_wave(d, x0, x1, base, amp, period, dur=16, ribbon=True, scale=1.0, opacity=1.0, angle=0.0):
-    """The Broadwave wave: a pale strand, a signal-blue strand, and a fine ribbon between,
-    as on the Apple TV's Top Shelf. Drifts one period to the left, seamlessly."""
+def path_length(pts):
+    return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:]))
+
+
+def brand_wave(d, x0, x1, base, amp, period, dur=10, ribbon=True, scale=1.0, opacity=1.0, angle=0.0, comet=True):
+    """The Broadwave wave: a pale strand, a signal-blue strand, and a fine ribbon, as on the
+    Apple TV's Top Shelf. The strands travel in opposite directions, so the crossings flow
+    along the wave, and a soft light rides the blue strand. All seamless: each layer moves
+    exactly one period per loop."""
     pad = 160 if angle else 0
     span = (x0 - period - pad, x1 + period + pad)
-    d.style(f"@keyframes wd{period}{{to{{transform:translateX({period}px)}}}}")
-    d.style(f".wd{period}{{animation:wd{period} {dur}s linear infinite}}")
-    d.style(f".wr{period}{{animation:wd{period} {dur * 1.6}s linear infinite}}")
+    k = period
+    d.style(
+        f"@keyframes wf{k}{{to{{transform:translateX({period}px)}}}}@keyframes wr{k}{{to{{transform:translateX(-{period}px)}}}}"
+        f".wa{k}{{animation:wf{k} {dur}s linear infinite}}.wb{k}{{animation:wr{k} {dur * 1.4:.2f}s linear infinite}}"
+        f".wc{k}{{animation:wf{k} {dur * 2.2:.2f}s linear infinite}}"
+    )
     turn = f' transform="rotate({fmt(angle)} {fmt((x0 + x1) / 2)} {fmt(base)})"' if angle else ""
     g = [f'<g opacity="{opacity}"{turn}>']
     if ribbon:
         lines = []
-        for k in range(10):
-            ph = 0.5 + k * 0.07
-            a = amp * (0.62 + 0.04 * k)
-            lines.append(f'<path d="{smooth(wave_points(*span, base + 6 * scale + k * 1.6 * scale, a, period, ph, 12))}"/>')
-        g.append(f'<g class="wr{period}" fill="none" stroke="{BLUE}" stroke-width="{fmt(0.8 * scale)}" opacity=".32">{"".join(lines)}</g>')
-    pale = smooth(wave_points(*span, base, amp, period, 0.0, 10))
-    blue = smooth(wave_points(*span, base + 10 * scale, amp * 0.86, period, 1.05, 10))
-    g.append(f'<g class="wd{period}" fill="none" stroke-linecap="round">')
-    g.append(f'<path d="{pale}" stroke="{PALE}" stroke-width="{fmt(22 * scale)}" opacity=".07"/>')
-    g.append(f'<path d="{pale}" stroke="{PALE}" stroke-width="{fmt(5.5 * scale)}" opacity=".9"/>')
-    g.append(f'<path d="{blue}" stroke="{BLUE}" stroke-width="{fmt(26 * scale)}" opacity=".12"/>')
-    g.append(f'<path d="{blue}" stroke="{BLUE}" stroke-width="{fmt(11 * scale)}" opacity=".28"/>')
-    g.append(f'<path d="{blue}" stroke="#5B92FF" stroke-width="{fmt(4 * scale)}"/>')
-    g.append(f'<path d="{blue}" stroke="#CFE0FF" stroke-width="{fmt(1.2 * scale)}" opacity=".7"/>')
+        for i in range(10):
+            ph = 0.5 + i * 0.07
+            a = amp * (0.62 + 0.04 * i)
+            lines.append(f'<path d="{smooth(wave_points(*span, base + 6 * scale + i * 1.6 * scale, a, period, ph, 12))}"/>')
+        g.append(f'<g class="wc{k}" fill="none" stroke="{BLUE}" stroke-width="{fmt(0.8 * scale)}" opacity=".32">{"".join(lines)}</g>')
+    pale_pts = wave_points(*span, base, amp, period, 0.0, 10)
+    blue_pts = wave_points(*span, base + 10 * scale, amp * 0.86, period, 1.05, 10)
+    # Each strand is one path, drawn several times through <use>.
+    pid, bid = d.uid("wp"), d.uid("wb")
+    d.define(pid, f'<path id="{pid}" d="{smooth(pale_pts)}"/>')
+    d.define(bid, f'<path id="{bid}" d="{smooth(blue_pts)}"/>')
+
+    def use(ref, color, width, op=1, extra=""):
+        o = f' opacity="{op}"' if op != 1 else ""
+        return f'<use href="#{ref}" stroke="{color}" stroke-width="{fmt(width * scale)}"{o}{extra}/>'
+
+    g.append(f'<g class="wa{k}" fill="none" stroke-linecap="round">{use(pid, PALE, 22, ".07")}{use(pid, PALE, 5.5, ".9")}</g>')
+    g.append(f'<g class="wb{k}" fill="none" stroke-linecap="round">')
+    g.append(use(bid, BLUE, 26, ".12") + use(bid, BLUE, 11, ".28") + use(bid, "#5B92FF", 4) + use(bid, "#CFE0FF", 1.2, ".7"))
+    if comet:
+        # Two lights on the strand; the dash pattern repeats every half length.
+        rep = path_length(blue_pts) / 2
+        dash = 110 * scale
+        t = rep / 230.0
+        d.style(f"@keyframes cm{k}{{to{{stroke-dashoffset:-{rep:.1f}}}}}.cm{k}{{animation:cm{k} {t:.2f}s linear infinite}}")
+        da = f' stroke-dasharray="{dash:.1f} {rep - dash:.1f}" class="cm{k}"'
+        g.append(use(bid, "#9FC2FF", 14, ".28", da) + use(bid, "#FFFFFF", 2.6, ".95", da))
     g.append("</g></g>")
     d.add("".join(g))
 
@@ -374,7 +411,7 @@ def tally_pill(d, x, y, text="ON AIR", size=15):
 # ---------------------------------------------------------------- devices (vector bezels)
 
 
-def tv(d, x, y, w, img, sweep=False, stand=True):
+def tv(d, x, y, w, img, sweep=False, stand=True, delay=0.0, alt=None):
     """A thin-bezel TV. The screen is w wide and 16:9; returns the outer box."""
     h = w * 9 / 16
     b = max(5.0, w * 0.011)
@@ -395,44 +432,51 @@ def tv(d, x, y, w, img, sweep=False, stand=True):
         f'<rect x="{fmt(ox)}" y="{fmt(oy)}" width="{fmt(ow)}" height="{fmt(oh)}" rx="{fmt(b * 0.9)}" fill="#0A0C10"/>'
         f'<rect x="{fmt(ox + 0.5)}" y="{fmt(oy + 0.5)}" width="{fmt(ow - 1)}" height="{fmt(oh - 1)}" rx="{fmt(b * 0.9)}" fill="none" stroke="url(#{gid})"/>'
     )
-    screen(d, x, y, w, h, img, 1.5, sweep)
+    screen(d, x, y, w, h, img, 1.5, sweep, delay, alt)
     return (ox, oy, ow, oh + (w * 0.05 if stand else 0))
 
 
-def screen(d, x, y, w, h, img, r, sweep=False):
+def screen(d, x, y, w, h, img, r, sweep=False, delay=0.0, alt=None):
+    """A picture behind glass. sweep: a slow light passes now and then. alt: a second
+    picture that fades in and out (16 s), starting hidden."""
     cid = d.uid("sc")
     d.define(cid, f'<clipPath id="{cid}"><rect x="{fmt(x)}" y="{fmt(y)}" width="{fmt(w)}" height="{fmt(h)}" rx="{fmt(r)}"/></clipPath>')
-    gl = "glass"
     d.define(
-        gl,
+        "glass",
         '<linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".09"/>'
         '<stop offset=".35" stop-color="#FFFFFF" stop-opacity=".02"/><stop offset=".36" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>',
     )
     inner = [f'<g clip-path="url(#{cid})"><rect x="{fmt(x)}" y="{fmt(y)}" width="{fmt(w)}" height="{fmt(h)}" fill="#000"/>']
-    iw = float(img[1])
-    ih = float(img[2])
-    inner.append(f'<use href="#{img[0]}" transform="matrix({w / iw:.5f} 0 0 {h / ih:.5f} {fmt(x)} {fmt(y)})"/>')
+    for pic, cls in ((img, None), (alt, "xf")):
+        if not pic:
+            continue
+        c = f' class="{cls}" opacity="0"' if cls else ""
+        inner.append(f'<use{c} href="#{pic[0]}" transform="matrix({w / pic[1]:.5f} 0 0 {h / pic[2]:.5f} {fmt(x)} {fmt(y)})"/>')
+    if alt:
+        d.style(f"@keyframes xf{{0%,44%{{opacity:0}}50%,94%{{opacity:1}}100%{{opacity:0}}}}.xf{{animation:xf 16s {EASE} infinite}}")
     inner.append(f'<rect x="{fmt(x)}" y="{fmt(y)}" width="{fmt(w)}" height="{fmt(h)}" fill="url(#glass)"/>')
     if sweep:
         d.define(
             "sweep",
             '<linearGradient id="sweep" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>'
-            '<stop offset=".5" stop-color="#FFFFFF" stop-opacity=".10"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>',
+            '<stop offset=".5" stop-color="#FFFFFF" stop-opacity=".11"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>',
         )
         dist = w * 1.9
+        name = f"sw{int(w)}"
         d.style(
-            f"@keyframes sw{int(w)}{{0%,62%{{transform:translateX(0)}}100%{{transform:translateX({fmt(dist)}px)}}}}"
-            f".sw{int(w)}{{animation:sw{int(w)} 11s cubic-bezier(.45,0,.25,1) infinite}}"
+            f"@keyframes {name}{{0%,25%{{transform:translateX(0)}}100%{{transform:translateX({fmt(dist)}px)}}}}"
+            f".{name}{{animation:{name} 10s cubic-bezier(.4,0,.6,1) infinite}}"
         )
         bw = w * 0.32
+        st = f' style="animation-delay:{delay:.2f}s"' if delay else ""
         inner.append(
-            f'<g class="sw{int(w)}"><rect x="{fmt(x - bw * 1.6)}" y="{fmt(y - h * 0.2)}" width="{fmt(bw)}" height="{fmt(h * 1.4)}" fill="url(#sweep)" transform="skewX(-18)" transform-origin="{fmt(x)} {fmt(y + h / 2)}"/></g>'
+            f'<g class="{name}"{st}><rect x="{fmt(x - bw * 1.6)}" y="{fmt(y - h * 0.2)}" width="{fmt(bw)}" height="{fmt(h * 1.4)}" fill="url(#sweep)" transform="skewX(-18)" transform-origin="{fmt(x)} {fmt(y + h / 2)}"/></g>'
         )
     inner.append("</g>")
     d.add("".join(inner))
 
 
-def ipad(d, x, y, w, img):
+def ipad(d, x, y, w, img, sweep=False, delay=0.0):
     """iPad in landscape; w is the screen width (4:3). Returns the outer box."""
     h = w * 2064 / 2752
     b = w * 0.032
@@ -447,11 +491,11 @@ def ipad(d, x, y, w, img):
         f'<rect x="{fmt(ox)}" y="{fmt(oy)}" width="{fmt(ow)}" height="{fmt(oh)}" rx="{fmt(b * 1.75)}" fill="#050608"/>'
         f'<circle cx="{fmt(x + w / 2)}" cy="{fmt(oy + b / 2)}" r="{fmt(b * 0.16)}" fill="#1C2230"/>'
     )
-    screen(d, x, y, w, h, img, b * 0.75)
+    screen(d, x, y, w, h, img, b * 0.75, sweep, delay)
     return (ox, oy, ow, oh)
 
 
-def iphone(d, x, y, w, img):
+def iphone(d, x, y, w, img, sweep=False, delay=0.0):
     """iPhone in portrait; w is the screen width. Returns the outer box."""
     h = w * 2868 / 1320
     b = w * 0.04
@@ -469,7 +513,7 @@ def iphone(d, x, y, w, img):
         f'<rect x="{fmt(ox - 1.5)}" y="{fmt(oy - 1.5)}" width="{fmt(ow + 3)}" height="{fmt(oh + 3)}" rx="{fmt(rr + b + 1.5)}" fill="url(#{gid})"/>'
         f'<rect x="{fmt(ox)}" y="{fmt(oy)}" width="{fmt(ow)}" height="{fmt(oh)}" rx="{fmt(rr + b)}" fill="#050608"/>'
     )
-    screen(d, x, y, w, h, img, rr)
+    screen(d, x, y, w, h, img, rr, sweep, delay)
     iw, ih = w * 0.29, w * 0.085
     d.add(f'<rect x="{fmt(x + w / 2 - iw / 2)}" y="{fmt(y + w * 0.03)}" width="{fmt(iw)}" height="{fmt(ih)}" rx="{fmt(ih / 2)}" fill="#000"/>')
     return (ox, oy, ow, oh)
@@ -508,9 +552,9 @@ def hero(social=False):
         f'<linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{BLUE}" stop-opacity=".10"/><stop offset="1" stop-color="{BLUE}" stop-opacity="0"/></linearGradient>',
     )
     # The TV carries the right half, centred on the card; its stand sets the floor.
-    sw = float(os.environ.get("HERO_SW", 644))
+    sw = 644
     sh = sw * 9 / 16
-    sx = float(os.environ.get("HERO_SX", 600))
+    sx = 600
     sy = 312 - sh / 2
     fy = round(sy + sh + max(5.0, sw * 0.011) + sw * 0.04 + max(4, sw * 0.009))
     d.add(f'<rect x="0" y="{fy}" width="{W}" height="{H - fy}" fill="url(#floor)"/>')
@@ -522,12 +566,13 @@ def hero(social=False):
     d.add(f'<rect x="0" y="{fy}" width="{W}" height="1" fill="url(#hz)"/>')
 
     # The wave rises left to right: under the words, then behind the screen's lower third.
-    brand_wave(d, 0, W, float(os.environ.get("HERO_WB", 474)), 44, 640, dur=18, scale=1.3, angle=float(os.environ.get("HERO_WA", -10)))
+    brand_wave(d, 0, W, 474, 44, 640, dur=11, scale=1.3, angle=-10)
 
     img = shot(d, "tv-foryou", 1120, 630, 82)
-    glow(d, sx + sw / 2, sy + sw * 9 / 32, sw * 0.75, sw * 0.5, "#6E9BFF", 0.22)
+    d.style(f"@keyframes br{{0%,100%{{opacity:1}}50%{{opacity:.6}}}}.br{{animation:br 8s {EASE} infinite}}")
+    glow(d, sx + sw / 2, sy + sw * 9 / 32, sw * 0.75, sw * 0.5, "#6E9BFF", 0.24, "br")
     d.add('<g id="hero-tv">')
-    tv(d, sx, sy, sw, img, sweep=not social)
+    tv(d, sx, sy, sw, img, sweep=not social, alt=None if social else shot(d, "tv-guide", 1120, 630, 78))
     d.add("</g>")
     d.define(
         "rfade",
@@ -560,6 +605,39 @@ def hero(social=False):
     else:
         d.add(f'<rect width="{W}" height="{H}" filter="url(#grain)" opacity=".02"/>')
     return d
+
+
+def keyframes(name, frames):
+    """frames: [(percent, css)] -> one @keyframes rule."""
+    return f"@keyframes {name}{{" + "".join(f"{fmt(pc)}%{{{css}}}" for pc, css in frames) + "}"
+
+
+def windows(name, start, end, n, period, hold_last=True):
+    """n crossfading states across [start, end] percent; the last one also shows from end
+    through 100% and from 0% to start, so the loop opens on it. Returns the class names."""
+    names = []
+    step = (end - start) / (n - 1)
+    for i in range(n):
+        a = start + i * step
+        b = a + step
+        if i == n - 1:
+            fr = [(0, "opacity:1"), (start, "opacity:1"), (start + 0.8, "opacity:0"), (a - 0.4, "opacity:0"), (a, "opacity:1"), (100, "opacity:1")]
+        else:
+            fr = [(0, "opacity:0"), (max(0.01, a - 0.01), "opacity:0"), (a, "opacity:1"), (b - 0.4, "opacity:1"), (b, "opacity:0"), (100, "opacity:0")]
+            if i == 0:
+                fr = [(0, "opacity:0"), (start - 0.01, "opacity:0"), (start + 0.8, "opacity:1"), (b - 0.4, "opacity:1"), (b, "opacity:0"), (100, "opacity:0")]
+        cls = f"{name}{i}"
+        names.append((cls, keyframes(cls, fr) + f".{cls}{{animation:{cls} {period}s linear infinite}}"))
+    return names
+
+
+def digit_strip(d, key, size, digits, gap):
+    """A column of digits in defs, gap apart, for a ticking counter."""
+    if key in d.ids:
+        return key
+    rows = "".join(d.text(0, i * gap, ch, size, "monob", TEXT, ret=True) for i, ch in enumerate(digits))
+    d.define(key, f'<g id="{key}">{rows}</g>')
+    return key
 
 
 # ---------------------------------------------------------------- stills and small screens
@@ -630,8 +708,10 @@ def devices():
     d = Doc(W, H, "Broadwave on Apple TV, iPad, and iPhone")
     box = card_open(
         d, 0, 0, W, H,
-        lights=[(640, 300, 640, 360, BLUE, 0.34), (140, 60, 420, 260, VIOLET, 0.22), (1180, 600, 420, 220, CYAN, 0.10)],
+        lights=[(140, 60, 420, 260, VIOLET, 0.22), (1180, 600, 420, 220, CYAN, 0.10)],
     )
+    d.style(f"@keyframes br{{0%,100%{{opacity:1}}50%{{opacity:.55}}}}.br{{animation:br 8s {EASE} infinite}}")
+    glow(d, 640, 300, 640, 360, BLUE, 0.36, "br")
     fy = 604
     d.add(f'<rect x="0" y="{fy}" width="{W}" height="{H - fy}" fill="url(#floor)"/>')
     d.define(
@@ -644,7 +724,7 @@ def devices():
         '<stop offset=".5" stop-color="#9DB8FF" stop-opacity=".35"/><stop offset="1" stop-color="#9DB8FF" stop-opacity="0"/></linearGradient>',
     )
     d.add(f'<rect x="0" y="{fy}" width="{W}" height="1" fill="url(#hz)"/>')
-    brand_wave(d, 0, W, 250, 60, 640, dur=22, opacity=0.55)
+    brand_wave(d, 0, W, 250, 60, 640, dur=12, opacity=0.6)
 
     tvw = 780
     tvx = (W - tvw) / 2 - 10
@@ -657,9 +737,9 @@ def devices():
     for cx, rw in ((tvx + tvw / 2, tvw * 0.22), (870 + padw / 2, padw * 0.55), (186 + phw / 2, phw * 0.7)):
         glow(d, cx, fy, rw, 10, "#000000", 0.9)
     d.add('<g id="family">')
-    tv(d, tvx, tvy, tvw, shot(d, "tv-quad", 1440, 810, 80))
-    ipad(d, 870, fy - padh - padw * 0.032, padw, shot(d, "pad-foryou", 880, 660, 80))
-    iphone(d, 186, fy - phh - phw * 0.04, phw, shot(d, "phone-foryou", 360, 782, 82))
+    tv(d, tvx, tvy, tvw, shot(d, "tv-quad", 1240, 698, 74), sweep=True)
+    ipad(d, 870, fy - padh - padw * 0.032, padw, shot(d, "pad-foryou", 720, 540, 74), sweep=True, delay=0.6)
+    iphone(d, 186, fy - phh - phw * 0.04, phw, shot(d, "phone-foryou", 300, 652, 78), sweep=True, delay=-0.6)
     d.add("</g>")
     d.define(
         "dfade",
@@ -675,8 +755,10 @@ def devices():
 
 
 def tv_tile(d, x0, name, title, line, H):
-    box = card_open(d, x0, 0, 628, H, lights=[(314, 190, 420, 260, BLUE, 0.28)])
-    tv(d, x0 + 40, 40, 548, shot(d, name, 1100, 619, 80), stand=False)
+    box = card_open(d, x0, 0, 628, H)
+    d.style(f"@keyframes br{{0%,100%{{opacity:1}}50%{{opacity:.5}}}}.br{{animation:br 8s {EASE} infinite}}")
+    glow(d, x0 + 314, 190, 420, 260, BLUE, 0.32, "br")
+    tv(d, x0 + 40, 40, 548, shot(d, name, 1100, 619, 80), stand=False, sweep=True, delay=x0 / 652 * 5)
     tile_caption(d, box, title, line)
     card_close(d, box)
 
@@ -694,14 +776,15 @@ def tv_row_2():
     d = Doc(1280, H, "Apple TV: Watch together on the player's Screens tab. iPad with four channels, iPhone with the guide")
     tv_tile(d, 0, "tv-screens", "Watch together", "Pause or rewind on one screen, and every screen follows.", H)
     x0 = 652
-    box = card_open(d, x0, 0, 628, H, lights=[(260, 190, 360, 240, VIOLET, 0.22), (480, 200, 260, 240, BLUE, 0.24)])
+    box = card_open(d, x0, 0, 628, H, lights=[(260, 190, 360, 240, VIOLET, 0.22)])
+    glow(d, x0 + 480, 200, 260, 240, BLUE, 0.28, "br")
     padw = 384
     padh = padw * 2064 / 2752
     py = 44 + padw * 0.032
-    ipad(d, x0 + 52, py, padw, shot(d, "pad-quad", 800, 600, 80))
+    ipad(d, x0 + 52, py, padw, shot(d, "pad-quad", 800, 600, 80), sweep=True, delay=2.5)
     phw = 122
     phh = phw * 2868 / 1320
-    iphone(d, x0 + 470, py + padh - phh + padw * 0.032 - phw * 0.04, phw, shot(d, "phone-guide", 280, 608, 84))
+    iphone(d, x0 + 470, py + padh - phh + padw * 0.032 - phw * 0.04, phw, shot(d, "phone-guide", 280, 608, 84), sweep=True, delay=3.5)
     tile_caption(d, box, "iPhone and iPad", "Four channels at once on iPad, the guide on iPhone.")
     card_close(d, box)
     return d
@@ -716,11 +799,32 @@ def tile_sync(d, x0):
     y0 = 52
     specs = [("tv", 36, 196, 110, "Living room"), ("laptop", 256, 140, 88, "Office"), ("tablet", 420, 104, 78, "Kitchen"), ("phone", 546, 46, 100, "Bedroom")]
     bottom = y0 + 160
-    d.style("@keyframes beat{0%,100%{opacity:0}6%{opacity:1}30%{opacity:0}}.beat{animation:beat 2.4s ease-out infinite}")
     for kind, x, w, h, label in specs:
         mini(d, kind, x0 + x, bottom - h, w, h, img, label)
+    # The same clock on every screen, ticking in step: 42:1x, a second at a time.
+    size, gap = 11, 16
+    cw = d.measure("0", size, "monob")
+    ones = digit_strip(d, "dg10", size, "0123456789", gap)
+    tens = digit_strip(d, "dg6", size, "012345", gap)
+    d.style(
+        f"@keyframes tk1{{to{{transform:translateY(-{10 * gap}px)}}}}.tk1{{animation:tk1 10s steps(10,end) infinite}}"
+        f"@keyframes tk6{{to{{transform:translateY(-{6 * gap}px)}}}}.tk6{{animation:tk6 60s steps(6,end) infinite}}"
+        "@keyframes beat{0%{opacity:.9}35%,100%{opacity:0}}.beat{animation:beat 2s ease-out infinite}"
+    )
     rings = []
     for kind, x, w, h, label in specs:
+        cx = x0 + x + w / 2
+        tw = cw * 5 + 10
+        cy = bottom - 6
+        d.add(f'<rect x="{fmt(cx - tw / 2)}" y="{fmt(cy - 15)}" width="{fmt(tw)}" height="17" rx="5" fill="#000" fill-opacity=".62"/>')
+        tx = cx - cw * 2.5
+        d.text(tx, cy - 2, "42:", size, "monob", TEXT)
+        win = d.uid("tw")
+        d.define(win, f'<clipPath id="{win}"><rect x="{fmt(tx + cw * 3)}" y="{fmt(cy - 14)}" width="{fmt(cw * 2 + 1)}" height="15"/></clipPath>')
+        d.add(
+            f'<g clip-path="url(#{win})"><g transform="translate({fmt(tx + cw * 3)} {fmt(cy - 2)})"><use class="tk6" href="#{tens}"/></g>'
+            f'<g transform="translate({fmt(tx + cw * 4)} {fmt(cy - 2)})"><use class="tk1" href="#{ones}"/></g></g>'
+        )
         r = {"tv": 5, "laptop": 6, "tablet": 9, "phone": 11}[kind] + 2.4
         rings.append(f'<rect x="{fmt(x0 + x - 4)}" y="{fmt(bottom - h - 4)}" width="{fmt(w + 8)}" height="{fmt(h + 8)}" rx="{fmt(r)}"/>')
     d.add(f'<g class="beat" fill="none" stroke="{CYAN}" stroke-width="2" opacity="0">{"".join(rings)}</g>')
@@ -743,9 +847,11 @@ def pause_glyph(d, cx, cy, s, op=1):
 
 
 def tile_together(d, x0):
+    """8 s: paused everywhere; the phone plays and every screen follows a beat later; the
+    phone pauses, a ripple goes out, and every screen pauses a beat later."""
     box = card_open(d, x0, 0, 628, 400, lights=[(160, 150, 300, 220, VIOLET, 0.26), (440, 150, 300, 220, BLUE, 0.26)])
     img = frame(d, "bbb", 480, 270)
-    # The phone that pressed pause.
+    T = 8
     px, py, pw, ph = x0 + 70, 40, 104, 218
     d.add(f'<rect x="{px - 5}" y="{py - 5}" width="{pw + 10}" height="{ph + 10}" rx="20" fill="#05070B" stroke="#FFFFFF" stroke-opacity=".2"/>')
     d.add(f'<rect x="{px + 36}" y="{py + 7}" width="32" height="9" rx="4.5" fill="#000" stroke="#FFFFFF" stroke-opacity=".08"/>')
@@ -753,22 +859,32 @@ def tile_together(d, x0):
     d.text(px + 10, py + 104, "4.1", 11, "bold", TEXT)
     d.text(px + 10, py + 120, "Big Buck Bunny", 11, "semi", TEXT2)
     d.add(f'<rect x="{px + 10}" y="{py + 150}" width="{pw - 20}" height="3" rx="1.5" fill="#FFFFFF" opacity=".25"/><rect x="{px + 10}" y="{py + 150}" width="{(pw - 20) * 0.7}" height="3" rx="1.5" fill="#FFFFFF"/>')
-    d.add(f'<circle cx="{px + pw / 2}" cy="{py + 186}" r="17" fill="#FFFFFF"/>')
-    d.add(f'<rect x="{px + pw / 2 - 6}" y="{py + 179}" width="4" height="14" rx="1" fill="#0A0F1A"/><rect x="{px + pw / 2 + 2}" y="{py + 179}" width="4" height="14" rx="1" fill="#0A0F1A"/>')
-    # Ripples from the pause button.
     cx, cy = px + pw / 2, py + 186
     d.style(
-        "@keyframes rip{0%{transform:scale(.3);opacity:0}8%{opacity:.8}45%{transform:scale(1);opacity:0}100%{transform:scale(1);opacity:0}}"
-        f".rip{{transform-box:view-box;transform-origin:{fmt(cx)}px {fmt(cy)}px;animation:rip 6s ease-out infinite}}"
-        ".rip2{animation-delay:.35s}"
-        "@keyframes held{0%,38%{opacity:0}46%,92%{opacity:1}100%{opacity:0}}.held{animation:held 6s ease-in-out infinite}"
+        keyframes("press", [(0, "transform:scale(1)"), (28, "transform:scale(1)"), (30, "transform:scale(.84)"), (33, "transform:scale(1)"),
+                            (68, "transform:scale(1)"), (70, "transform:scale(.84)"), (73, "transform:scale(1)"), (100, "transform:scale(1)")])
+        + f".press{{transform-box:fill-box;transform-origin:center;animation:press {T}s {EASE} infinite}}"
+        # Paused: the phone shows Play, the screens are dim with a pause mark.
+        + keyframes("isplay", [(0, "opacity:1"), (29.5, "opacity:1"), (30.5, "opacity:0"), (69.5, "opacity:0"), (70.5, "opacity:1"), (100, "opacity:1")])
+        + keyframes("ispause", [(0, "opacity:0"), (29.5, "opacity:0"), (30.5, "opacity:1"), (69.5, "opacity:1"), (70.5, "opacity:0"), (100, "opacity:0")])
+        + f".isplay{{animation:isplay {T}s linear infinite}}.ispause{{animation:ispause {T}s linear infinite}}"
+        + keyframes("held", [(0, "opacity:1"), (35, "opacity:1"), (38, "opacity:0"), (75, "opacity:0"), (78, "opacity:1"), (100, "opacity:1")])
+        + f".held{{animation:held {T}s {EASE} infinite}}"
+        + keyframes("rip", [(0, "transform:scale(.3);opacity:0"), (69, "transform:scale(.3);opacity:0"), (71, "opacity:.8"), (86, "transform:scale(1);opacity:0"), (100, "transform:scale(1);opacity:0")])
+        + keyframes("rip0", [(0, "transform:scale(.3);opacity:0"), (29, "transform:scale(.3);opacity:0"), (31, "opacity:.6"), (46, "transform:scale(1);opacity:0"), (100, "transform:scale(1);opacity:0")])
+        + f".rip,.rip0{{transform-box:view-box;transform-origin:{fmt(cx)}px {fmt(cy)}px}}.rip{{animation:rip {T}s ease-out infinite}}.rip0{{animation:rip0 {T}s ease-out infinite}}"
     )
-    for c in ("rip", "rip rip2"):
-        d.add(f'<circle class="{c}" cx="{fmt(cx)}" cy="{fmt(cy)}" r="300" fill="none" stroke="{CYAN}" stroke-width="2" opacity="0"/>')
-    # The screens that follow.
+    d.reduce(".rip,.rip0{animation:none}")
+    for c in ("rip", "rip0"):
+        d.add(f'<circle class="{c}" cx="{fmt(cx)}" cy="{fmt(cy)}" r="280" fill="none" stroke="{CYAN}" stroke-width="2" opacity="0"/>')
+    play = f'<path class="isplay" d="M{fmt(cx - 4)} {fmt(cy - 7)}l11 7l-11 7z" fill="#0A0F1A"/>'
+    pause = (
+        f'<g class="ispause" opacity="0"><rect x="{fmt(cx - 6)}" y="{fmt(cy - 7)}" width="4" height="14" rx="1" fill="#0A0F1A"/>'
+        f'<rect x="{fmt(cx + 2)}" y="{fmt(cy - 7)}" width="4" height="14" rx="1" fill="#0A0F1A"/></g>'
+    )
+    d.add(f'<g class="press"><circle cx="{fmt(cx)}" cy="{fmt(cy)}" r="17" fill="#FFFFFF"/>{play}{pause}</g>')
     screens = [("tv", x0 + 262, 40, 230, 129), ("tablet", x0 + 262, 196, 124, 93), ("laptop", x0 + 418, 202, 136, 85)]
-    glyphs = []
-    dims = []
+    dims, glyphs = [], []
     for kind, x, y, w, h in screens:
         mini(d, kind, x, y, w, h, img)
         dims.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="3" fill="#000" fill-opacity=".45"/>')
@@ -789,24 +905,21 @@ CATS = {"news": "#3D9BFF", "sports": "#2FBF71", "movies": "#B36BFF", "kids": "#F
 
 
 def tile_guide(d, x0):
+    """12 s: the focus moves across three programmes; the now line creeps along."""
     box = card_open(d, x0, 0, 628, 400, lights=[(420, 120, 380, 220, BLUE, 0.24), (80, 260, 260, 200, GREEN, 0.10)])
     gx, gy, cw, rh, gap = x0 + 36, 64, 92, 40, 5
     left = gx + cw + gap
     slot = (x0 + 592 - left) / 2.6
-    d.add(f'<g fill="{TEXT3}">')
-    d.add("</g>")
     for i, t in enumerate(("8:00", "8:30", "9:00")):
         d.text(left + i * slot + 6, gy - 14, t, 13, "semi", TEXT3)
     clip = d.uid("gc")
     d.define(clip, f'<clipPath id="{clip}"><rect x="{left}" y="{gy - 2}" width="{x0 + 628 - left}" height="{5 * (rh + gap)}"/></clipPath>')
-    focus = (2, 0)
     for r, (num, fr, cells) in enumerate(GUIDE):
         y = gy + r * (rh + gap)
         d.add(f'<rect x="{gx}" y="{y}" width="{cw}" height="{rh}" rx="7" fill="#FFFFFF" fill-opacity=".06"/>')
         if fr:
             picture(d, gx + 7, y + 9, 38, 22, frame(d, fr, 160, 90, 78), 3)
         else:
-            # A game on: a little field.
             d.add(
                 f'<rect x="{gx + 7}" y="{y + 9}" width="38" height="22" rx="3" fill="#1E7A47"/>'
                 f'<path d="M{gx + 26} {y + 9}v22M{gx + 14} {y + 9}v22M{gx + 38} {y + 9}v22" stroke="#FFFFFF" stroke-opacity=".45"/>'
@@ -814,33 +927,51 @@ def tile_guide(d, x0):
             )
         d.text(gx + 52, y + 26, num, 15, "bold", TEXT)
         d.add(f'<g clip-path="url(#{clip})">')
-        for c, (title, a, b, cat) in enumerate(cells):
+        for title, a, b, cat in cells:
             cx = left + a * slot
             w = (b - a) * slot - 4
-            if (r, c) == focus:
-                continue
             d.add(f'<rect x="{fmt(cx)}" y="{y}" width="{fmt(w)}" height="{rh}" rx="7" fill="#FFFFFF" fill-opacity=".07"/>')
             d.add(f'<rect x="{fmt(cx)}" y="{y + 9}" width="3" height="{rh - 18}" rx="1.5" fill="{CATS[cat]}"/>')
             d.text(max(cx, left) + 12, y + 25, title, 14, "semi", "#DCE3EE")
         d.add("</g>")
-    # Now line.
+    # Now line: creeps 36 units over 15 s, then fades and starts again where it began.
     nx = left + 0.7 * slot
-    d.style("@keyframes nowl{to{transform:translateX(14px)}}.nowl{animation:nowl 20s linear infinite alternate}")
+    d.style(
+        keyframes("nowl", [(0, "transform:translateX(0);opacity:1"), (94, "transform:translateX(36px);opacity:1"), (96.5, "transform:translateX(36px);opacity:0"),
+                           (96.6, "transform:translateX(0);opacity:0"), (100, "transform:translateX(0);opacity:1")])
+        + ".nowl{animation:nowl 16s linear infinite}"
+    )
     d.add(f'<g class="nowl"><rect x="{fmt(nx - 1)}" y="{gy - 4}" width="2" height="{5 * (rh + gap) + 2}" fill="{TALLY}"/>')
     d.add(f'<rect x="{fmt(nx - 30)}" y="{gy - 30}" width="60" height="20" rx="10" fill="{TALLY}"/>')
-    d.add("</g>")
-    d.add(f'<g class="nowl">')
     d.text(nx, gy - 16, "8:21", 12, "bold", "#FFFFFF", anchor="middle")
     d.add("</g>")
-    # The focused cell, lifted.
-    r, c = focus
-    title, a, b, cat = GUIDE[r][2][c]
-    y = gy + r * (rh + gap)
-    fx, fw = left, (b - max(a, 0)) * slot - 4
-    glow(d, fx + fw / 2, y + rh / 2 + 8, fw * 0.7, 34, "#000000", 0.6)
-    d.add(f'<rect x="{fmt(fx - 4)}" y="{y - 4}" width="{fmt(fw + 8)}" height="{rh + 8}" rx="9" fill="#F5F7FA"/>')
-    d.text(fx + 10, y + 19, "Harbor Gulls at Valley Larks", 14, "bold", "#0A0F1A")
-    d.text(fx + 10, y + 34, "Football · Q4", 11.5, "semi", "#3A4556")
+    # Three focus states that hand over to each other.
+    focus = [
+        (2, 0, "Harbor Gulls at Valley Larks", "Football · Q4"),
+        (3, 2, "Evening News", "News · Live"),
+        (1, 1, "Quiz Night", "Season 4 · New"),
+    ]
+    T = 12
+    states = [
+        [(0, "opacity:1"), (30, "opacity:1"), (33, "opacity:0"), (97, "opacity:0"), (100, "opacity:1")],
+        [(0, "opacity:0"), (30, "opacity:0"), (33, "opacity:1"), (63, "opacity:1"), (66, "opacity:0"), (100, "opacity:0")],
+        [(0, "opacity:0"), (63, "opacity:0"), (66, "opacity:1"), (97, "opacity:1"), (100, "opacity:0")],
+    ]
+    for i, ((r, c, title, sub_), fr) in enumerate(zip(focus, states)):
+        _, a, b, cat = GUIDE[r][2][c]
+        y = gy + r * (rh + gap)
+        fx = left + max(a, 0) * slot
+        fw = (b - max(a, 0)) * slot - 4
+        cls = f"fo{i}"
+        d.style(keyframes(cls, fr) + f".{cls}{{animation:{cls} {T}s {EASE} infinite}}")
+        hidden = "" if i == 0 else ' opacity="0"'
+        d.add(f'<g class="{cls}"{hidden}>')
+        glow(d, fx + fw / 2, y + rh / 2 + 8, fw * 0.7, 34, "#000000", 0.6)
+        d.add(f'<rect x="{fmt(fx - 4)}" y="{y - 4}" width="{fmt(fw + 8)}" height="{rh + 8}" rx="9" fill="#F5F7FA"/>')
+        d.add(f'<rect x="{fmt(fx + 2)}" y="{y + 7}" width="3" height="{rh - 14}" rx="1.5" fill="{CATS[cat]}"/>')
+        d.text(fx + 12, y + 19, title, 14, "bold", "#0A0F1A")
+        d.text(fx + 12, y + 34, sub_, 11.5, "semi", "#3A4556")
+        d.add("</g>")
     tile_caption(d, box, "The guide is the centerpiece", "Artwork, a live preview, and search across it all.")
     card_close(d, box)
 
@@ -864,16 +995,28 @@ def tile_multiview(d, x0):
         f"50%,72%{{transform:translate({hop}px,{vh}px)}}75%,97%{{transform:translate(0,{vh}px)}}100%{{transform:translate(0,0)}}}}"
         ".pick{animation:pick 12s cubic-bezier(.6,0,.2,1) infinite}"
     )
-    d.add(f'<g class="pick"><rect x="{fmt(left - 3)}" y="{top - 3}" width="{tw + 6}" height="{th + 6}" rx="10" fill="none" stroke="#FFFFFF" stroke-width="3"/>')
+    # The ring and its badge, drawn once; the hop moves it, the reduced-motion version fades it.
     bx = left + tw - 84
-    d.add(f'<rect x="{fmt(bx)}" y="{top + 8}" width="76" height="24" rx="12" fill="#FFFFFF"/>')
     sx, sy = bx + 12, top + 20
-    d.add(
+    d.define(
+        "mvpick",
+        f'<g id="mvpick"><rect x="{fmt(left - 3)}" y="{top - 3}" width="{tw + 6}" height="{th + 6}" rx="10" fill="none" stroke="#FFFFFF" stroke-width="3"/>'
+        f'<rect x="{fmt(bx)}" y="{top + 8}" width="76" height="24" rx="12" fill="#FFFFFF"/>'
         f'<path d="M{fmt(sx)} {sy - 3}h3l4-4v14l-4-4h-3z" fill="#0A0F1A"/>'
         f'<path d="M{fmt(sx + 10)} {sy - 4}q3 4 0 8" fill="none" stroke="#0A0F1A" stroke-width="1.6" stroke-linecap="round"/>'
+        + d.text(bx + 30, top + 25, "60 fps", 12, "bold", "#0A0F1A", ret=True) + "</g>",
     )
-    d.text(bx + 30, top + 25, "60 fps", 12, "bold", "#0A0F1A")
-    d.add("</g>")
+    d.reduce(".pick{animation:none;opacity:0}")
+    for i in range(4):
+        dx, dy = (i % 2) * hop, (i // 2) * vh
+        a = i * 25
+        fr = [(0, "opacity:0"), (max(0.01, a), "opacity:0"), (a + 2, "opacity:1"), (a + 23, "opacity:1"), (a + 25, "opacity:0"), (100, "opacity:0")]
+        if i == 0:
+            fr = [(0, "opacity:1"), (23, "opacity:1"), (25, "opacity:0"), (98, "opacity:0"), (100, "opacity:1")]
+        d.style(keyframes(f"pf{i}", fr))
+        d.reduce(f".pf{i}{{animation:pf{i} 12s {EASE} infinite}}")
+        d.add(f'<g class="pf{i}" opacity="0"><use href="#mvpick" transform="translate({fmt(dx)} {fmt(dy)})"/></g>')
+    d.add('<use class="pick" href="#mvpick"/>')
     tile_caption(d, box, "Four channels at once", "Sound and 60 fps follow whichever tile you pick.")
     card_close(d, box)
 
@@ -907,49 +1050,63 @@ def tile_sports(d, x0):
     ry = ty + 70
     over = hx(10.55) - ex
     d.add(f'<rect x="{fmt(hx(7))}" y="{ry}" width="{fmt(ex - hx(7))}" height="30" rx="8" fill="{TALLY}" fill-opacity=".85"/>')
+    T = 10
     d.style(
-        "@keyframes grow{0%,10%{transform:scaleX(0)}55%,100%{transform:scaleX(1)}}"
-        f".grow{{transform-box:fill-box;transform-origin:left center;animation:grow 7s cubic-bezier(.3,0,.2,1) infinite}}"
-        "@keyframes late{0%,50%{opacity:0}60%,100%{opacity:1}}.late{animation:late 7s ease infinite}"
+        keyframes("grow", [(0, "transform:scaleX(1);opacity:1"), (30, "transform:scaleX(1);opacity:1"), (34, "transform:scaleX(1);opacity:0"),
+                           (35, "transform:scaleX(0);opacity:0"), (36, "transform:scaleX(0);opacity:1"), (78, "transform:scaleX(1);opacity:1"),
+                           (100, "transform:scaleX(1);opacity:1")])
+        + f".grow{{transform-box:fill-box;transform-origin:left center;animation:grow {T}s cubic-bezier(.33,0,.25,1) infinite}}"
     )
     d.add(f'<rect class="grow" x="{fmt(ex - 8)}" y="{ry}" width="{fmt(over + 8)}" height="30" rx="8" fill="{TALLY}"/>')
     d.add(f'<rect x="{fmt(ex - 1)}" y="{ry}" width="2" height="30" fill="#FFFFFF" opacity=".6"/>')
     d.add(f'<circle class="tp" cx="{fmt(hx(7) + 16)}" cy="{ry + 15}" r="5" fill="#FFFFFF"/>')
     d.style("@keyframes tp{0%,100%{opacity:1}50%{opacity:.35}}.tp{animation:tp 2.4s ease-in-out infinite}")
     d.text(hx(7) + 30, ry + 20, "Recording", 14, "bold", "#FFFFFF")
-    d.add('<g class="late">')
-    d.text(ex + over + 10, ry + 20, "+33 min", 15, "bold", "#FF8A80")
-    d.add("</g>")
+    # The minutes over, counting up as the bar grows (a new number about every 0.6 s).
+    counts = ["+5", "+10", "+15", "+20", "+25", "+30", "+33"]
+    for i, (cls, css) in enumerate(windows("mn", 36, 78, len(counts), T)):
+        d.style(css)
+        hidden = "" if i == len(counts) - 1 else ' opacity="0"'
+        d.add(f'<g class="{cls}"{hidden}>')
+        d.text(ex + over + 10, ry + 20, counts[i] + " min", 15, "bold", "#FF8A80")
+        d.add("</g>")
     tile_caption(d, box, "A DVR that gets sports", "A game that runs long keeps recording until it's final.")
     card_close(d, box)
 
 
 def tile_motion(d, x0):
+    """7 s: each lane's ball crosses on its arc. 60 fps glides; 30 fps holds every other
+    position, so it steps. Slow motion, so the difference shows."""
     box = card_open(d, x0, 0, 628, 400, lights=[(160, 120, 300, 200, GREEN, 0.14), (460, 220, 320, 200, BLUE, 0.22)])
-    lanes = [(60, "60 fps", TEXT, GREEN, 30), (30, "30 fps", TEXT3, "#8D99AC", 15)]
-    d.style("@keyframes strobe{0%{opacity:1}35%,100%{opacity:.18}}")
-    for li, (fps, label, color, dot, n) in enumerate(lanes):
+    lanes = [(60, "60 fps", TEXT, GREEN, 30, "Broadwave"), (30, "30 fps", TEXT3, "#AEB7C5", 15, "half the frames")]
+    T, t0, t1 = 7, 12, 80
+    for li, (fps, label, color, dot, n, note) in enumerate(lanes):
         lx, ly, lw, lh = x0 + 36, 34 + li * 132, 556, 118
         d.add(f'<rect x="{lx}" y="{ly}" width="{lw}" height="{lh}" rx="16" fill="#FFFFFF" fill-opacity=".05" stroke="#FFFFFF" stroke-opacity=".08"/>')
         d.text(lx + 18, ly + 28, label, 15, "bold", color)
-        if li == 0:
-            d.text(lx + 18 + d.measure(label, 15, "bold") + 10, ly + 28, "Broadwave", 15, "semi", TEXT3)
-        else:
-            d.text(lx + 18 + d.measure(label, 15, "bold") + 10, ly + 28, "half the frames", 15, "semi", TEXT3)
-        # A ball on an arc; one dot per frame shown.
+        d.text(lx + 18 + d.measure(label, 15, "bold") + 10, ly + 28, note, 15, "semi", TEXT3)
         x1, x2 = lx + 120, lx + lw - 36
-        cells = []
+        pos = []
         for k in range(n + 1):
             t = k / n
-            x = x1 + (x2 - x1) * t
-            y = ly + lh - 26 - math.sin(t * math.pi) * 52
-            last = k == n
-            r = 7 if last else 4.2
-            delay = t * 1.4
-            cells.append(
-                f'<circle cx="{fmt(x)}" cy="{fmt(y)}" r="{r}" fill="{dot}" style="animation:strobe 2.8s linear {delay:.3f}s infinite" opacity="{1 if last else 0.55}"/>'
-            )
-        d.add("".join(cells))
+            pos.append((x1 + (x2 - x1) * t, ly + lh - 26 - math.sin(t * math.pi) * 52))
+        d.add("".join(f'<circle cx="{fmt(x)}" cy="{fmt(y)}" r="3.6" fill="{dot}" opacity=".32"/>' for x, y in pos[:-1]))
+        # The ball. Keyframes in absolute positions; the loop opens with it at the end.
+        end = pos[-1]
+        fr = [(0, f"transform:translate({fmt(end[0])}px,{fmt(end[1])}px);opacity:1"), (t0 - 6, f"transform:translate({fmt(end[0])}px,{fmt(end[1])}px);opacity:1"),
+              (t0 - 3, f"transform:translate({fmt(end[0])}px,{fmt(end[1])}px);opacity:0"), (t0 - 2.9, f"transform:translate({fmt(pos[0][0])}px,{fmt(pos[0][1])}px);opacity:0"),
+              (t0, f"transform:translate({fmt(pos[0][0])}px,{fmt(pos[0][1])}px);opacity:1")]
+        for k, (x, y) in enumerate(pos[1:], 1):
+            pc = t0 + (t1 - t0) * k / n
+            if fps == 30:
+                px_, py_ = pos[k - 1]
+                fr.append((pc - 0.01, f"transform:translate({fmt(px_)}px,{fmt(py_)}px);opacity:1"))
+            fr.append((pc, f"transform:translate({fmt(x)}px,{fmt(y)}px);opacity:1"))
+        fr.append((100, f"transform:translate({fmt(end[0])}px,{fmt(end[1])}px);opacity:1"))
+        cls = f"ball{fps}"
+        d.style(keyframes(cls, fr) + f".{cls}{{animation:{cls} {T}s linear infinite}}")
+        d.reduce(f".{cls}{{animation-duration:{T * 1.6:.1f}s}}")
+        d.add(f'<circle class="{cls}" cx="0" cy="0" r="7.5" fill="{dot}" transform="translate({fmt(end[0])} {fmt(end[1])})"/>')
     tile_caption(d, box, "True 60 fps", "Sports at the broadcast's full frame rate. Film back at 24p.")
     card_close(d, box)
 
@@ -1001,7 +1158,8 @@ def one_tuner():
         "bwrim",
         f'<linearGradient id="bwrim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{CYAN}"/><stop offset=".5" stop-color="{BLUE}"/><stop offset="1" stop-color="{VIOLET}"/></linearGradient>',
     )
-    glow(d, bx + bw / 2, cy, 220, 120, BLUE, 0.35)
+    d.style(f"@keyframes br{{0%,100%{{opacity:1}}50%{{opacity:.45}}}}.br{{animation:br 6s {EASE} infinite}}")
+    glow(d, bx + bw / 2, cy, 220, 120, BLUE, 0.4, "br")
     d.add(f'<rect x="{bx}" y="{cy - bh / 2}" width="{bw}" height="{bh}" rx="20" fill="#0C1426" stroke="url(#bwrim)" stroke-width="2"/>')
     # Small wave mark.
     pts = wave_points(0, 44, 0, 7, 44, 0.2, 4)
@@ -1012,9 +1170,7 @@ def one_tuner():
     d.text(bx + 80, cy + 24, "on your server", 15, "body", TEXT2)
     d.text(bx + bw / 2, cy + 104, "Docker, a NAS, or a mini PC", 15, "body", TEXT3, anchor="middle")
     # Links.
-    d.style(
-        "@keyframes flow{to{stroke-dashoffset:-24}}.flow{animation:flow 1.2s linear infinite}"
-    )
+    d.style("@keyframes flow{to{stroke-dashoffset:-24}}.flow{animation:flow 2.4s linear infinite}")
     d.add(
         f'<path class="flow" d="M178 {cy}H{tx - 10}M{tx + tw + 10} {cy}H{bx - 10}" stroke="#9DB8FF" stroke-width="2" stroke-dasharray="3 9" stroke-linecap="round" fill="none"/>'
     )
@@ -1030,6 +1186,25 @@ def one_tuner():
         d.text(lx, my - 2, name, 19, "bold", TEXT)
         d.text(lx, my + 21, room, 15, "body", TEXT3)
     d.add(f'<path class="flow" d="{"".join(paths)}" stroke="#9DB8FF" stroke-width="2" stroke-dasharray="3 9" stroke-linecap="round" fill="none"/>')
+    links = [(f"M178 {cy}H{tx - 10}", tx - 10 - 178, 0.0), (f"M{tx + tw + 10} {cy}H{bx - 10}", bx - 10 - tx - tw - 10, 0.5)]
+    for path in paths:
+        nums = [float(v) for v in re.findall(r"-?[\d.]+", path)]
+        p0, c1, c2, p1 = (nums[0], nums[1]), (nums[2], nums[3]), (nums[4], nums[5]), (nums[6], nums[7])
+        pts = [tuple((1 - t) ** 3 * p0[j] + 3 * (1 - t) ** 2 * t * c1[j] + 3 * (1 - t) * t * t * c2[j] + t ** 3 * p1[j] for j in (0, 1)) for t in [i / 40 for i in range(41)]]
+        links.append((path, path_length(pts), 1.0))
+    T = 3.0
+    for i, (path, length, delay) in enumerate(links):
+        # One packet per loop: a dash, then a gap longer than the link.
+        cls = f"pk{i}"
+        span = length + 40
+        d.style(keyframes(cls, [(0, f"stroke-dashoffset:{fmt(20)}"), (45, f"stroke-dashoffset:{fmt(-length - 20)}"), (100, f"stroke-dashoffset:{fmt(-length - 20)}")])
+                + f".{cls}{{animation:{cls} {T}s {EASE} {delay}s infinite}}")
+        d.reduce(f".{cls}{{animation-duration:{T * 2}s;animation-delay:{delay * 2}s}}")
+        da = f'stroke-dasharray="22 {fmt(span + 200)}" stroke-dashoffset="{fmt(-length - 20)}"'
+        d.add(
+            f'<path class="{cls}" d="{path}" fill="none" stroke="{CYAN}" stroke-width="14" stroke-linecap="round" opacity=".3" {da}/>'
+            f'<path class="{cls}" d="{path}" fill="none" stroke="#E6FBFF" stroke-width="5" stroke-linecap="round" {da}/>'
+        )
     d.text(76, H - 40, "Everyone on a channel shares one tune, and every room plays the same frame.", 19, "body", TEXT2)
     card_close(d, box)
     return d
@@ -1059,9 +1234,12 @@ OUTPUT = [
 
 
 def terminal():
+    """16 s: opens on the finished install; fades; the command types itself; the output
+    comes in order; it holds."""
     W = 1280
     lh, top, size = 26, 104, 16.5
     H = top + lh * (len(OUTPUT) + 1) + 34
+    T = 16.0
     d = Doc(W, H, "One command installs Broadwave; then it finds your tuner, scans channels, and fills the guide")
     box = card_open(d, 0, 0, W, H, lights=[(260, 0, 420, 260, BLUE, 0.20), (1100, H, 420, 260, VIOLET, 0.16)])
     d.add(f'<rect x="0" y="0" width="{W}" height="52" fill="#FFFFFF" fill-opacity=".04"/><rect x="0" y="52" width="{W}" height="1" fill="#FFFFFF" fill-opacity=".08"/>')
@@ -1073,27 +1251,51 @@ def terminal():
     clip = d.uid("tc")
     d.define(clip, f'<clipPath id="{clip}"><rect x="0" y="53" width="{W - 34}" height="{H}"/></clipPath>')
     d.add(f'<g clip-path="url(#{clip})">')
-    # The command, typed.
     y = top - 14
-    d.text(x, y, "$", size, "monob", CYAN)
-    d.text(x + cw * 2, y, CMD, size, "mono", TEXT, cls="cmdin")
-    cmd_w = cw * (len(CMD) + 2)
-    total = 16.0
-    type_end = 1.2
+    fade_out, type_from, type_to = 18.0, 22.0, 38.0
     d.style(
-        f"@keyframes cmdin{{0%,3%{{opacity:0}}5%,95%{{opacity:1}}100%{{opacity:0}}}}.cmdin{{animation:cmdin {total}s linear infinite}}"
-        "@keyframes blink{50%{opacity:0}}.blink{animation:blink 1s steps(1) infinite}"
+        keyframes("cmdin", [(0, "opacity:1"), (fade_out, "opacity:1"), (fade_out + 2, "opacity:0"), (type_from - 0.5, "opacity:0"), (type_from, "opacity:1"), (100, "opacity:1")])
+        + f".cmdin{{animation:cmdin {T}s linear infinite}}"
+        + "@keyframes blink{50%{opacity:0}}.blink{animation:blink 1s steps(1) infinite}"
     )
-    d.add(f'<rect class="blink" x="{fmt(x + cmd_w + cw)}" y="{y - size + 2}" width="{fmt(cw)}" height="{size + 3}" fill="{CYAN}" opacity=".8"/>')
+    d.text(x, y, "$", size, "monob", CYAN)
+    # Typing: a clip over the command grows two letters at a time (SMIL, discrete).
+    n = len(CMD)
+    steps = list(range(0, n + 1, 2)) + ([n] if n % 2 else [])
+    keys, widths, cursor = ["0"], [f"{cw * n + 4:.1f}"], [f"{x + cw * (n + 3):.1f}"]
+    def at(pc, chars):
+        keys.append(f"{pc / 100:.4f}")
+        widths.append(f"{cw * chars + (4 if chars == n else 0):.1f}")
+        cursor.append(f"{x + cw * (chars + 2 + (1 if chars == n else 0)):.1f}")
+    at(type_from - 0.6, 0)
+    for i, c in enumerate(steps):
+        at(type_from + (type_to - type_from) * i / (len(steps) - 1), c)
+    tclip = d.uid("ty")
+    d.define(
+        tclip,
+        f'<clipPath id="{tclip}"><rect x="{fmt(x + cw * 2)}" y="{y - size}" width="{fmt(cw * n + 4)}" height="{size + 8}">'
+        f'<animate attributeName="width" dur="{T}s" repeatCount="indefinite" calcMode="discrete" keyTimes="{";".join(keys)}" values="{";".join(widths)}"/></rect></clipPath>',
+    )
+    d.add(f'<g clip-path="url(#{tclip})">')
+    d.text(x + cw * 2, y, CMD, size, "mono", TEXT, cls="cmdin")
+    d.add("</g>")
+    d.add(
+        f'<rect class="blink" x="{fmt(x + cw * (n + 3))}" y="{y - size + 2}" width="{fmt(cw)}" height="{size + 3}" fill="{CYAN}" opacity=".8">'
+        f'<animate attributeName="x" dur="{T}s" repeatCount="indefinite" calcMode="discrete" keyTimes="{";".join(keys)}" values="{";".join(cursor)}"/></rect>'
+    )
     colors = {"out": "#DCE3EE", "cmd": TEXT3, "dock": "#7D899C", "ok": "#32D74B", "open": TEXT}
+    shown = 0
     for i, (kind, line) in enumerate(OUTPUT):
         y = top - 14 + lh * (i + 1)
         if kind == "blank":
             continue
-        t0 = type_end + 0.35 + i * 0.32 + (1.4 if i >= 4 else 0) + (0.8 if i >= 7 else 0)
-        a = t0 / total * 100
+        a = type_to + 2.5 + shown * 2.0 + (4 if i >= 4 else 0) + (3 if i >= 7 else 0)
+        shown += 1
         cls = f"ln{i}"
-        d.style(f"@keyframes {cls}{{0%,{a:.1f}%{{opacity:0}}{a + 0.6:.1f}%,95%{{opacity:1}}100%{{opacity:0}}}}.{cls}{{animation:{cls} {total}s linear infinite}}")
+        d.style(
+            keyframes(cls, [(0, "opacity:1"), (fade_out, "opacity:1"), (fade_out + 2, "opacity:0"), (a, "opacity:0"), (a + 0.8, "opacity:1"), (100, "opacity:1")])
+            + f".{cls}{{animation:{cls} {T}s linear infinite}}"
+        )
         d.add(f'<g class="{cls}">')
         if kind == "open":
             d.text(x, y, "Open ", size, "mono", TEXT)
@@ -1104,12 +1306,46 @@ def terminal():
             d.text(x, y, line, size, "monob" if kind == "ok" else "mono", colors[kind])
         d.add("</g>")
     d.add("</g>")
-    # Fade long lines out at the right edge.
     d.define(
         "tfade",
         f'<linearGradient id="tfade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="{BG1}" stop-opacity="0"/><stop offset="1" stop-color="{BG1}"/></linearGradient>',
     )
     d.add(f'<rect x="{W - 150}" y="53" width="150" height="{H - 53}" fill="url(#tfade)"/>')
+    card_close(d, box, 0.04)
+    return d
+
+
+TICKER = [
+    "Live TV", "Whole-Home Sync", "Watch together", "One tuner, every screen", "Follow a team",
+    "Records until it's final", "Multiview", "True 60 fps", "5.1 surround", "ATSC 3.0",
+    "Plex, Jellyfin, Emby, Channels", "No account", "Open source",
+]
+
+
+def ticker():
+    """A slim strip of what it does, scrolling left. 22 s a lap; slower under reduced motion."""
+    W, H = 1280, 64
+    d = Doc(W, H, "Live TV, Whole-Home Sync, Watch together, one tuner for every screen, team recordings, multiview, true 60 fps, 5.1, ATSC 3.0, and more")
+    box = card_open(d, 0, 0, W, H, lights=[(200, 32, 400, 90, BLUE, 0.22), (1080, 32, 400, 90, VIOLET, 0.18)])
+    size, gap = 17, 30
+    items, x = [], 0.0
+    for word in TICKER:
+        items.append(f'<circle cx="{fmt(x + 4)}" cy="{H / 2}" r="3.5" fill="{BLUE}"/>')
+        items.append(d.text(x + 18, H / 2 + size * 0.36, word, size, "semi", "#DCE3EE", ret=True))
+        x += 18 + d.measure(word, size, "semi") + gap
+    lap = x
+    run = "".join(items)
+    d.define("tk", f'<g id="tk">{run}</g>')
+    dur = lap / 95
+    d.style(f"@keyframes tkr{{to{{transform:translateX(-{lap:.1f}px)}}}}.tkr{{animation:tkr {dur:.1f}s linear infinite}}")
+    d.reduce(f".tkr{{animation-duration:{dur * 1.8:.1f}s}}")
+    d.define(
+        "tkf",
+        '<linearGradient id="tkf" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFF" stop-opacity="0"/><stop offset=".08" stop-color="#FFF"/>'
+        f'<stop offset=".92" stop-color="#FFF"/><stop offset="1" stop-color="#FFF" stop-opacity="0"/></linearGradient><mask id="tkm" maskContentUnits="userSpaceOnUse"><rect width="{W}" height="{H}" fill="url(#tkf)"/></mask>',
+    )
+    copies = int(W // lap) + 2
+    d.add(f'<g mask="url(#tkm)"><g class="tkr" transform-origin="0 0">' + "".join(f'<use href="#tk" x="{fmt(24 + i * lap)}"/>' for i in range(copies)) + "</g></g>")
     card_close(d, box, 0.04)
     return d
 
@@ -1122,7 +1358,10 @@ def footer():
     W, H = 1280, 120
     d = Doc(W, H, "")
     P = 640
-    d.style(f"@keyframes fd{{to{{transform:translateX({P}px)}}}}.fd{{animation:fd 24s linear infinite}}")
+    d.style(
+        f"@keyframes fd{{to{{transform:translateX({P}px)}}}}@keyframes fr{{to{{transform:translateX(-{P}px)}}}}"
+        ".fd{animation:fd 12s linear infinite}.fr{animation:fr 17s linear infinite}"
+    )
     d.define(
         "ff",
         '<linearGradient id="ff" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFF" stop-opacity="0"/><stop offset=".2" stop-color="#FFF"/>'
@@ -1132,9 +1371,8 @@ def footer():
     a = smooth(wave_points(-P, W + P, 58, 22, P, 0.0, 16))
     b = smooth(wave_points(-P, W + P, 64, 19, P, 1.05, 16))
     d.add(
-        f'<g mask="url(#fm)"><g class="fd" fill="none" stroke-linecap="round">'
-        f'<path d="{a}" stroke="{VIOLET}" stroke-width="3" opacity=".75"/>'
-        f'<path d="{b}" stroke="{BLUE}" stroke-width="10" opacity=".14"/><path d="{b}" stroke="{BLUE}" stroke-width="3.5"/></g></g>'
+        f'<g mask="url(#fm)" fill="none" stroke-linecap="round"><g class="fd"><path d="{a}" stroke="{VIOLET}" stroke-width="3" opacity=".75"/></g>'
+        f'<g class="fr"><path d="{b}" stroke="{BLUE}" stroke-width="10" opacity=".14"/><path d="{b}" stroke="{BLUE}" stroke-width="3.5"/></g></g>'
     )
     return d
 
@@ -1170,6 +1408,7 @@ def main():
     one_tuner().save("one-tuner.svg")
     terminal().save("terminal.svg")
     footer().save("footer.svg")
+    ticker().save("ticker.svg")
     if "--png" in sys.argv:
         social_png(os.path.join(OUT, "social-preview.png"))
 

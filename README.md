@@ -58,6 +58,7 @@ Plug an antenna into a network tuner, run Broadwave on one always-on box, and ev
 <p align="center"><img src=".github/readme/tiles-1.svg" alt="Every room, the same frame: four screens in four rooms on one moment. Watch together: pause on a phone, and the TV, tablet, and laptop pause too" width="100%"></p>
 <p align="center"><img src=".github/readme/tiles-2.svg" alt="The guide is the centerpiece: a dense grid with a now line and a focused game. Four channels at once: sound and 60 fps follow the tile you pick" width="100%"></p>
 <p align="center"><img src=".github/readme/tiles-3.svg" alt="A DVR that gets sports: the recording runs past the scheduled end of a game in overtime. True 60 fps: twice the frames of 30 fps for a moving ball" width="100%"></p>
+<p align="center"><img src=".github/readme/ticker.svg" alt="Live TV, Whole-Home Sync, Watch together, one tuner for every screen, team recordings, multiview, true 60 fps, 5.1 surround, ATSC 3.0, Plex, Jellyfin, Emby, and Channels, no account, open source" width="100%"></p>
 
 <details>
 <summary><b>Everything it does</b></summary>
