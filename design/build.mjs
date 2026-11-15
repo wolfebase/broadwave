@@ -33,9 +33,13 @@ function css() {
   lines.push(`  --motion-slow: ${t.motion.slow}ms;`);
   lines.push(`  --ease-spring: cubic-bezier(0.2, 0.9, 0.25, 1.05);`);
   lines.push(`  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);`);
+  // The 10-foot sizes are for a 1920 px wide page. Many TV browsers report 960 or
+  // 1280 px, where the full sizes crowd the screen, so they scale with the width
+  // and never go below the desktop size.
   lines.push("}", "", 'html[data-layout="tv"] {');
   for (const [k, v] of Object.entries(t.type)) {
-    lines.push(`  --type-${k}-size: ${Math.round(v.size * t.tvScale)}px;`);
+    const tv = Math.round(v.size * t.tvScale);
+    lines.push(`  --type-${k}-size: clamp(${v.size}px, ${Math.ceil((tv / 1920) * 100_000) / 1000}vw, ${tv}px);`);
   }
   lines.push("}", "");
   return lines.join("\n");

@@ -269,6 +269,8 @@ html[data-layout="tv"] :focus-visible {
   font-weight: 600;
   font-size: var(--type-footnote-size);
   white-space: nowrap;
+  /* In a scrolling row a chip keeps its width. The TV's 56 px minimum let it shrink under its label. */
+  flex-shrink: 0;
   transition: all var(--motion-fast) var(--ease-out);
 }
 

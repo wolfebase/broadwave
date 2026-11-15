@@ -71,6 +71,10 @@
   min-width: 0;
 }
 
+.guide-chips > * {
+  flex: none;
+}
+
 .guide-chips::-webkit-scrollbar {
   display: none;
 }
