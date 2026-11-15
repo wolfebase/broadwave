@@ -387,10 +387,11 @@ function LibraryRow({
   const cut = cutLine(rec);
   return (
     <li className={live ? "media-card live" : "media-card"}>
-      <span className="poster-wrap">
+      <span className="poster-wrap" data-num={rec.guideNumber}>
         <img
           className="poster"
           alt=""
+          onLoad={(event) => event.currentTarget.parentElement?.setAttribute("data-shown", "1")}
           src={rec.missing ? `/media/art/channel/${rec.channelId}?w=320` : `/media/poster/${rec.id}`}
           data-fallback={rec.missing ? "1" : undefined}
           onError={(event) => {
