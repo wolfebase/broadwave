@@ -784,6 +784,8 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	var encKnown, prevKnown bool
 	var lastPTS, lastDur int64
 	var haveLast bool
+	// lastStep is the step between the last two pictures' starts.
+	var lastStep int64
 	// handover is set at an encode boundary. The next fragment starts a new
 	// timeline even when its step looks like one more group of pictures.
 	var handover bool
@@ -873,7 +875,12 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				expected = lastPTS + lastDur
 			}
 			d := ptsDiff(pts, expected)
-			if d < -int64(partTicks) || d > int64(gapTicks) || handover {
+			// A source whose pictures come a second or more apart (a slate,
+			// a sound-only service's picture) repeats its own spacing; a
+			// loss does not. Such a step is the source's pace, not a gap.
+			step := ptsDiff(pts, lastPTS)
+			paced := lastStep > 0 && step > 0 && max(step-lastStep, lastStep-step) <= lastStep/8
+			if d < -int64(partTicks) || d > int64(jumpTicks) || (d > int64(gapTicks) && !paced) || handover {
 				jumped = true
 				if len(open) > 0 {
 					if err := closeSeg(expected); err != nil {
@@ -898,6 +905,10 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 					slog.Warn(fmt.Sprintf("pack %s: timestamp jump %.3fs", dir, float64(d)/90000))
 				}
 			}
+		}
+		lastStep = 0
+		if step := ptsDiff(pts, lastPTS); haveLast && !handover && step > 0 && step <= int64(jumpTicks) {
+			lastStep = step
 		}
 		handover = false
 		if fresh {

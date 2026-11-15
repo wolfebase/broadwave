@@ -339,3 +339,57 @@ func TestTheDiscontinuitySequenceIsNoBreak(t *testing.T) {
 		t.Fatalf("the second segment is %v after the first, its picture 1.5 s", d)
 	}
 }
+
+// A slate or a sound-only service's picture can come once a second or less,
+// each a keyframe whose own duration is one frame. Its spacing is the
+// source's, not pictures lost: no break per picture. One break where a
+// normal picture turns into the slate is allowed.
+func TestASparseSourceIsNotABreakPerPicture(t *testing.T) {
+	for _, every := range []int64{90090, 180180, 450450} {
+		t.Run(strconv.FormatInt(every, 10), func(t *testing.T) {
+			raw := videoInit()
+			pts := int64(900000)
+			// Two seconds of a normal picture, then the slate.
+			for i := range 60 {
+				flags := uint32(0x10000)
+				if i%30 == 0 {
+					flags = 0
+				}
+				raw = append(raw, fragmentAt(pts, 3003, flags, 0)...)
+				pts += 3003
+			}
+			for range 40 {
+				raw = append(raw, fragmentAt(pts, 3003, 0, 0)...)
+				pts += every
+			}
+			dir := t.TempDir()
+			gate := newPlaylistGate()
+			gate.split = true
+			if err := Pack(dir, bytes.NewReader(raw), gate); err != nil {
+				t.Fatal(err)
+			}
+			text := readIndex(t, dir)
+			if n := strings.Count(text, "#EXT-X-DISCONTINUITY\n"); n > 1 {
+				t.Fatalf("%d breaks for a slate every %.3f s:\n%.1500s", n, float64(every)/90000, text)
+			}
+			assertParts(t, text)
+		})
+	}
+	// A picture lost on a sparse source is still a break.
+	raw := videoInit()
+	pts := int64(900000)
+	for i := range 20 {
+		raw = append(raw, fragmentAt(pts, 3003, 0, 0)...)
+		pts += 180180
+		if i == 10 {
+			pts += 4 * 180180
+		}
+	}
+	dir := t.TempDir()
+	if err := Pack(dir, bytes.NewReader(raw), nil); err != nil {
+		t.Fatal(err)
+	}
+	if text := readIndex(t, dir); !strings.Contains(text, "#EXT-X-DISCONTINUITY\n") {
+		t.Fatalf("four lost pictures of a slate every 2 s are no break:\n%.1500s", text)
+	}
+}
