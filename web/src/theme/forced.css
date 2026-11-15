@@ -5,3 +5,31 @@
     outline-offset: 2px !important;
   }
 }
+
+/* They drop backgrounds too: the chosen tab or choice, progress, and the on-air line need a system colour. */
+@media (forced-colors: active) {
+  :root :is(.tab.on, .chip.on, .seg.on, .nav-more-link.on, .glass-icon.on, [aria-pressed="true"], [role="radio"][aria-checked="true"], [role="tab"][aria-selected="true"]),
+  :root :is(.progress-fill, .now-line, .now-flag) {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+    box-shadow: none;
+  }
+
+  :root .progress {
+    forced-color-adjust: none;
+    background: Canvas;
+    outline: 1px solid CanvasText;
+  }
+
+  /* A program is a box; without its fill the titles float. */
+  :root .guide-cell {
+    border: 1px solid CanvasText;
+  }
+
+  /* Live and recording marks keep their red. */
+  :root :is(.brand-tally, .rec-dot, .live-dot-light) {
+    forced-color-adjust: none;
+  }
+}

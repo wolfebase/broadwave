@@ -1,6 +1,6 @@
 // The layouts hold up with data and screens the default lineup never shows:
-// long names and titles, a 320 px phone, a TV browser that reports 960 px,
-// Windows High Contrast, and an app installed on a phone.
+// long names and titles, a 320 px phone, a phone on its side, a TV browser that
+// reports 960 px, and Windows High Contrast.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -89,6 +89,20 @@ test("a TV browser that reports 960 px keeps the tabs and chips apart", async ({
   await page.goto("/?layout=auto");
 });
 
+test("a phone on its side keeps the guide's controls on one row", async ({ page }) => {
+  await setupDone(page);
+  await page.setViewportSize({ width: 568, height: 320 });
+  await page.goto("/guide");
+  await settle(page);
+  await expect(page.locator("html")).toHaveAttribute("data-layout", "phone");
+  const controls = await page.locator(".guide-controls").boundingBox();
+  const search = await page.locator(".guide-search").boundingBox();
+  const now = await page.getByRole("button", { name: "Now", exact: true }).boundingBox();
+  expect(controls && search && now).toBeTruthy();
+  expect(Math.abs(search!.y - now!.y)).toBeLessThan(8);
+  expect(controls!.height).toBeLessThan(64);
+});
+
 test("settings on a 320 px phone put a menu under its name", async ({ page }) => {
   await setupDone(page);
   await page.setViewportSize({ width: 320, height: 568 });
@@ -123,10 +137,14 @@ test("multiview's top bar stays on a 320 px screen", async ({ page }) => {
 test.describe("forced colors", () => {
   test.use({ forcedColors: "active" });
 
-  test("focus shows in Windows High Contrast", async ({ page }) => {
+  test("focus and the chosen tab show in Windows High Contrast", async ({ page }) => {
     await setupDone(page);
     await page.goto("/guide");
     await settle(page);
+    const current = page.locator(".tabs .tab.on");
+    await expect(current).toHaveCount(1);
+    const fill = await current.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(fill).not.toBe("rgba(0, 0, 0, 0)");
     const other = page.locator(".tabs .tab:not(.on)").first();
     await other.focus();
     await page.keyboard.press("Shift+Tab");

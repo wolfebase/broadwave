@@ -209,7 +209,7 @@ main.content:focus {
 
 /* A tablet-width bar has no room for the sentence beside the tabs. Screen readers still get it. */
 @media (max-width: 1100px) {
-  .layout-desktop .offline-full {
+  :is(.layout-desktop, .layout-phone) .offline-full {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -218,7 +218,7 @@ main.content:focus {
     white-space: nowrap;
   }
 
-  .layout-desktop .offline-short {
+  :is(.layout-desktop, .layout-phone) .offline-short {
     display: inline;
   }
 }
@@ -485,9 +485,23 @@ html[data-theater="1"] .topbar {
   justify-content: center;
 }
 
-.layout-phone .brand,
-.layout-phone .topbar-right .offline {
+.layout-phone .brand {
   display: none;
+}
+
+/* The bar has no room beside the tabs, so on a phone the word sits just above it.
+   Hidden, a phone showed a stale guide with nothing to say the server was gone. */
+.layout-phone .topbar-right .offline {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 16px);
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface2);
+  border: 1px solid var(--color-line);
+  pointer-events: none;
 }
 
 .layout-phone .topbar {
@@ -559,6 +573,34 @@ html[data-theater="1"] .topbar {
 
   .layout-phone .tab {
     min-height: 46px;
+  }
+}
+
+/* A phone on its side: icons only and a shorter bar, so the page keeps its height. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .layout-phone .tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .layout-phone .tab {
+    min-height: 40px;
+  }
+
+  .layout-phone .topbar {
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+  }
+
+  :root .shell.layout-phone:not(.immersive) {
+    padding-bottom: calc(max(10px, env(safe-area-inset-bottom)) + 52px);
   }
 }
 
@@ -650,6 +692,18 @@ html[data-theater="1"] .topbar {
 
 .layout-tv .tab-icon {
   font-size: 1.75rem;
+}
+
+/* A TV browser under 1280 px: the brand keeps its light, the tabs keep the room. */
+@media (max-width: 1279px) {
+  .layout-tv .brand-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 .shell.immersive .content:has(.setup) {
