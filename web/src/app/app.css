@@ -798,27 +798,6 @@ html[data-theater="1"] .topbar {
   text-decoration: none;
 }
 
-/* A page that failed to load: the bar stays, so the rest of the app still works. */
-.page-failed {
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: var(--space-3);
-  min-height: 50vh;
-  max-width: 36rem;
-  margin: 0 auto;
-  padding: var(--space-10) var(--space-6);
-  text-align: center;
-}
-
-.page-failed h1 {
-  font-size: var(--type-title2-size);
-  letter-spacing: var(--type-title2-tracking);
-}
-
-.page-failed p {
-  color: var(--color-text-secondary);
-}
 .layout-phone .topbar-right:empty { display: none; }
 
 /* The mini player floats over the bottom corner. The page keeps room under it

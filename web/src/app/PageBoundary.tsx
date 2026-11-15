@@ -43,8 +43,7 @@ export class PageBoundary extends Component<Props, State> {
     if (this.props.quiet) return null;
     const away = isChunkError(this.state.error);
     return (
-      <div className="page-failed" role="alert">
-        <span className="brand-tally" aria-hidden="true" />
+      <div className="not-found" role="alert">
         <h1>{shell("shell.pageFailed")}</h1>
         <p>{away ? shell("shell.pageFailedAway") : shell("shell.pageFailedBug")}</p>
         <button type="button" className="btn primary" onClick={() => window.location.reload()}>

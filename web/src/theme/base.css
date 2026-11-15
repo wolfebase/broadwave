@@ -711,28 +711,6 @@ html[data-layout="tv"] .source-row input {
   overflow: hidden;
 }
 
-/* Until a picture loads, or when there is none, the tile shows the channel number
-   in outline, so an empty box reads as a placeholder rather than a broken image. */
-.poster-wrap {
-  position: relative;
-}
-
-.poster-wrap:not([data-shown])::before {
-  content: attr(data-num);
-  position: absolute;
-  font-size: 2rem;
-  font-weight: 900;
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-  color: transparent;
-  -webkit-text-stroke: 1.5px var(--color-line-strong);
-  pointer-events: none;
-}
-
-.layout-phone .poster-wrap:not([data-shown])::before {
-  font-size: clamp(2.5rem, 14vw, 4.5rem);
-}
-
 .poster {
   position: relative;
   width: auto;
