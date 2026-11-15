@@ -47,6 +47,7 @@ OLD_DRI=0
 OLD_NVIDIA_RUNTIME=0
 OLD_GPUS=0
 OLD_ENV=()
+OLD_OTHER=()     # mounts of the old container this one does not make again
 TZ_VALUE=""
 PUID_VALUE=""
 PGID_VALUE=""
@@ -244,7 +245,9 @@ choose_ids() {
     [[ -n $PUID_VALUE && -n $PGID_VALUE ]] || die "Set --puid and --pgid together."
     return
   fi
-  if [[ $MODE == desktop ]]; then
+  # An update keeps the old container's user. One that ran as root made its
+  # show folders as root, and a new user could not record into them.
+  if [[ $MODE == desktop || $EXISTS -eq 1 ]]; then
     return
   fi
   local uid gid
@@ -373,6 +376,7 @@ read_existing() {
     case $line in
       /config=*) OLD_CONFIG=${line#*=} ;;
       /config/work/recordings=*) OLD_REC=${line#*=} ;;
+      ?*) OLD_OTHER+=("$line") ;;
     esac
   done < <(docker container inspect -f '{{range .Mounts}}{{.Destination}}={{if eq .Type "volume"}}{{.Name}}{{else}}{{.Source}}{{end}}{{println}}{{end}}' "$NAME")
   while IFS= read -r line; do
@@ -675,10 +679,15 @@ finish() {
   elif [[ ${UP_TO_DATE:-0} -eq 1 ]]; then
     say "Broadwave is up to date."
   elif [[ $EXISTS -eq 1 ]]; then
-    say "Broadwave is updated. Your settings, guide, and recordings are as they were."
+    say "Broadwave is updated. It uses the same config and recordings folders, time zone, and user."
   else
     say "Broadwave is running."
   fi
+  local kv
+  for kv in ${OLD_OTHER[@]+"${OLD_OTHER[@]}"}; do
+    [[ $EXISTS -eq 1 && ${UP_TO_DATE:-0} -eq 0 ]] || break
+    warn "The old container also had ${kv#*=} at ${kv%%=*}. This one doesn't; add -v ${kv#*=}:${kv%%=*} to it yourself if a source used it."
+  done
   say "Open http://$host:$PORT"
   note "Config:     $CONFIG_DIR"
   note "Recordings: $REC_DIR"

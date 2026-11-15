@@ -63,7 +63,7 @@ case $1 in
       *compose.project.working_dir*) echo "${FAKE_COMPOSE_DIR:-}" ;;
       *compose.project*) echo "${FAKE_COMPOSE:-}" ;;
       *Mounts*) printf '%b' "${FAKE_MOUNTS-/config=$FAKE_SRV/bw\n/config/work/recordings=$FAKE_SRV/rec\n}" ;;
-      *Config.Env*) printf '%b' "PATH=/usr/bin\nNVIDIA_DRIVER_CAPABILITIES=compute,video,utility\nTZ=America/Denver\nPUID=1001\nPGID=1002\nBROADWAVE_HOSTS=tv.example.com\n" ;;
+      *Config.Env*) printf '%b' "${FAKE_ENV-PATH=/usr/bin\nNVIDIA_DRIVER_CAPABILITIES=compute,video,utility\nTZ=America/Denver\nPUID=1001\nPGID=1002\nBROADWAVE_HOSTS=tv.example.com\n}" ;;
       *Devices*) printf '%b' "${FAKE_DEVICES-/dev/dri\n}" ;;
       *Runtime*) echo runc ;;
       *DeviceRequests*) echo 0 ;;
@@ -191,6 +191,15 @@ mutations() { grep -E '^(pull|run|stop|rename|rm|start) ' "$tmp/log" || true; }
   id() { if [[ $1 == -u ]]; then echo 0; else echo 0; fi; }
   choose_ids
   expect_eq "sudo user owns the folders" "$PUID_VALUE:$PGID_VALUE" "1003:1004"
+  # An update keeps the old container's user: one that ran as root goes on as
+  # root, or the show folders it made refuse the next recording.
+  EXISTS=1 OLD_ENV=(TZ=America/Denver) PUID_VALUE="" PGID_VALUE=""
+  choose_ids
+  expect_eq "update under sudo keeps root" "$PUID_VALUE:$PGID_VALUE" ":"
+  PUID_OPT=7 PGID_OPT=8
+  choose_ids
+  expect_eq "update with --puid" "$PUID_VALUE:$PGID_VALUE" "7:8"
+  PUID_OPT="" PGID_OPT="" EXISTS=0 OLD_ENV=()
   unset -f id
 
   BROADWAVE_INSTALL_NO_TTY=1 TZ_OPT=""
@@ -247,6 +256,16 @@ expect_contains "update: keeps other settings" "$m" "-e BROADWAVE_HOSTS=tv.examp
 expect_missing "update: drops image env" "$m" "NVIDIA_DRIVER_CAPABILITIES"
 expect_contains "update: removes the old one" "$m" "rm broadwave-previous"
 expect_contains "update: says so" "$out" "Broadwave is updated."
+expect_missing "update: claims only what it kept" "$out" "as they were"
+
+out=$(install FAKE_EXISTS=1 FAKE_ENV="TZ=America/Denver\n")
+expect_missing "update of a root container stays root" "$(mutations)" "PUID"
+ARGS=(--puid 1005 --pgid 1006)
+out=$(install FAKE_EXISTS=1 FAKE_ENV="TZ=America/Denver\n")
+expect_contains "update: --puid is a change" "$(mutations)" "-e PUID=1005 -e PGID=1006"
+ARGS=()
+out=$(install FAKE_EXISTS=1 FAKE_MOUNTS="/config=$tmp/srv/bw\n/config/work/recordings=$tmp/srv/rec\n/media=/mnt/media\n")
+expect_contains "update: names a mount it drops" "$out" "/mnt/media"
 expect_contains "update: missing /dev/dri noted" "$out" "/dev/dri, and it is gone now"
 
 out=$(install FAKE_EXISTS=1 FAKE_NEW_IMAGE=sha256:old)
