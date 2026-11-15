@@ -291,6 +291,19 @@ func TestPregamePosterTimes(t *testing.T) {
 	if got := PregameTimes(3600, -200, nil); len(got) != 0 {
 		t.Fatalf("a file that starts after kickoff: %v", got)
 	}
+	// Started 100 s after the listing: the first 20 s are still inside it.
+	got := PregameTimes(3600, -100, nil)
+	if len(got) == 0 {
+		t.Fatal("a file that starts 100 s late has no times")
+	}
+	for _, at := range got {
+		if at < 1 || at > 20 {
+			t.Fatalf("a time past the cut-off: %v", got)
+		}
+	}
+	if got := PregameTimes(3600, -119, nil); !reflect.DeepEqual(got, []float64{1}) {
+		t.Fatalf("one second inside the cut-off: %v", got)
+	}
 }
 
 func TestAPregamePosterKeepsToTheStart(t *testing.T) {

@@ -97,8 +97,13 @@ const pregameAfter = 120.0
 // pregameAfter past it, and out of breaks. None when the file starts later.
 func PregameTimes(length, lead float64, breaks []store.Marker) []float64 {
 	var times []float64
-	for _, off := range []float64{30, -60, 90, -150, 5} {
+	for i, off := range []float64{30, -60, 90, -150, 5} {
 		at := math.Round(lead + off)
+		if at < 1 && lead < 0 {
+			// A file that starts after the listing: its first seconds,
+			// spread out, up to the cut-off.
+			at = math.Min(1+float64(i)*10, math.Floor(lead+pregameAfter))
+		}
 		for _, b := range breaks {
 			if at >= b.Start && at < b.End {
 				at = math.Round(b.End) + 2
