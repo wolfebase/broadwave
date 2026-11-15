@@ -10,7 +10,7 @@
   <Support>https://github.com/wolfebase/broadwave/issues</Support>
   <Project>https://github.com/wolfebase/broadwave</Project>
   <ReadMe>https://github.com/wolfebase/broadwave/blob/main/docs/guide/install.md</ReadMe>
-  <Overview>Live TV and DVR for an antenna. Broadwave finds the HDHomeRun on your network, fills the guide, and records the untouched broadcast. One tune of a channel feeds every screen and every recording, and every screen in the house plays the same frame. Watch in a browser on port 8477, or in the Broadwave apps for iPhone, iPad, and Apple TV. Plex, Jellyfin, Emby, and Channels can use it as a tuner.
+  <Overview>Live TV and DVR for your antenna, on every screen in the house, in sync. Broadwave finds the HDHomeRun on your network, fills the guide, and records the untouched broadcast. One tune of a channel feeds every viewer and every recording, so three TVs on the game use one tuner, and every room plays the same frame. Follow a team and every game records, and a game that runs long keeps recording until it is final. Watch in any browser on port 8477, or in the Broadwave apps for iPhone, iPad, and Apple TV. Plex, Jellyfin, Emby, and Channels can use it as a tuner. Free and open source: no subscription, no account, no ads.
 
 Set TZ to your time zone, such as America/Chicago. It is required: the schedule and recordings follow it. Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Remove the Intel or AMD graphics entry when this server has none. Docker will not start while /dev/dri is missing, and the picture still plays from the processor.
 
