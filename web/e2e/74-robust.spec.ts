@@ -159,3 +159,26 @@ test.describe("forced colors", () => {
     expect(ring.width).toBeGreaterThanOrEqual(2);
   });
 });
+
+test("installed on a phone, the pages start below the status bar and clear the notch", async ({ page, context }) => {
+  await setupDone(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 59, bottom: 34, left: 0, right: 0 } });
+  await page.goto("/guide");
+  await settle(page);
+  const top = await page.getByRole("button", { name: "Now", exact: true }).boundingBox();
+  expect(top!.y).toBeGreaterThanOrEqual(59);
+  const bar = await page.locator(".topbar").boundingBox();
+  expect(bar!.y + bar!.height).toBeLessThanOrEqual(844 - 34);
+  await page.goto("/multiview");
+  const close = await page.locator(".mv-top .glass-icon").boundingBox();
+  expect(close!.y).toBeGreaterThanOrEqual(59);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 0, bottom: 21, left: 59, right: 59 } });
+  await page.goto("/guide");
+  await settle(page);
+  const grid = await page.locator(".guide-scroll").boundingBox();
+  expect(grid!.x).toBeGreaterThanOrEqual(59);
+  expect(grid!.x + grid!.width).toBeLessThanOrEqual(844 - 59 + 1);
+});

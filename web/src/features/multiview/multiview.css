@@ -32,6 +32,21 @@ html:root[data-layout="tv"] section.mv:focus-visible {
   flex-wrap: wrap;
 }
 
+/* Clear of the notch and the home bar when installed on a phone. */
+.mv-top,
+.mv-bottom {
+  padding-left: max(14px, env(safe-area-inset-left));
+  padding-right: max(14px, env(safe-area-inset-right));
+}
+
+.mv-top {
+  padding-top: max(10px, env(safe-area-inset-top));
+}
+
+.mv-bottom {
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
 .mv-top h1 {
   margin: 0;
   min-width: 0;
