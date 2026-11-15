@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.19.2 — 2026-11-15
+
+### Added
+
+- Unraid: Broadwave is in Community Applications. Search for it in the Apps tab.
+
+### Fixed
+
+- Web: Windows High Contrast shows the chosen tab, chip, and choice, progress bars, the guide's boxes, and the on-air line.
+- Web: a phone says when the server can't be reached, above the tab bar.
+- Web: a phone on its side keeps the guide's controls on one row and a shorter tab bar.
+- Web: type sizes follow the browser's font size on a phone and a desktop too.
+- Web: in a TV browser narrower than 1280 px every tab fits without scrolling.
+
 ## 0.19.1 — 2026-11-15
 
 ### Added

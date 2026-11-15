@@ -1,5 +1,7 @@
 # Submitting Broadwave to Unraid Community Applications
 
+**Status: submitted and auto-approved on 2026-11-15** as "Wolfe Up's Repository" (`wolfebase/unraid-templates`). The Unraid Community Apps GitHub App is installed on that repository only. No forum support thread yet: only Community Developers can start topics in Docker Containers, so Support stays on GitHub issues (see step 3). Step 6 is how to publish a template change.
+
 What has to happen, by a person, to list Broadwave in the Unraid Apps tab. Checked against the submission site on 2026-11-14.
 
 ## How Community Applications works now
@@ -48,6 +50,8 @@ Check that these open in a browser:
 - https://raw.githubusercontent.com/wolfebase/unraid-templates/main/ca_profile.xml
 
 ### 3. Post the support thread
+
+Not done yet. New accounts cannot start a topic in Docker Containers. The forum's own note says to post the support thread in another forum and send a moderator a message asking to move it, or to ask for Community Developer status once the app has a record of support.
 
 1. Sign in to https://forums.unraid.net (make an account if needed).
 2. Open **Docker Containers**: https://forums.unraid.net/forum/47-docker-containers/ and choose **Start new topic**.

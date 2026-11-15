@@ -118,14 +118,16 @@ Compose stops and says so when `TZ` is missing from `.env`. That file uses host 
 
 ## Unraid
 
-Broadwave isn't in Community Applications yet. Add its template by hand, once, from the Unraid terminal:
+Search for **Broadwave** in the **Apps** tab (Community Applications) and choose Install. It fills in the template for you.
+
+To add the template by hand instead, or if the Apps tab does not list it yet, run this once in the Unraid terminal:
 
 ```bash
 wget -O /boot/config/plugins/dockerMan/templates-user/my-Broadwave.xml \
   https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/unraid/broadwave.xml
 ```
 
-Then open **Docker › Add Container**, pick **Broadwave** under Template, and fill it in:
+Then open **Docker › Add Container** and pick **Broadwave** under Template. Either way, fill it in:
 
 - **TZ** is required: your time zone, such as `America/Chicago`.
 - Leave **PUID** at 99 and **PGID** at 100 so recordings are not owned by root. A plain `docker run` on Unraid needs `-e PUID=99 -e PGID=100` as well.

@@ -120,7 +120,7 @@ One image, `ghcr.io/wolfebase/broadwave`, for x86-64 and ARM64, with its own ffm
 | Your computer | How |
 | --- | --- |
 | Linux with Docker: a mini PC, a home server, a Raspberry Pi 4 or 5 (64-bit) | [The one command](#quick-start), or [`docker run`](docs/guide/install.md#docker-on-linux) |
-| Unraid | [The Broadwave template](docs/guide/install.md#unraid) |
+| Unraid | Search for **Broadwave** in the Apps tab. [What each setting means](docs/guide/install.md#unraid) |
 | Synology, QNAP, TrueNAS SCALE | [Compose in the NAS app](docs/guide/install.md#nas-boxes) |
 | Any Docker host, with Compose | [`compose.yaml`](docs/guide/install.md#docker-compose) |
 | A Mac with Docker Desktop | The one command; add `bash -s -- --tuner <address>` if it can't find the tuner |
