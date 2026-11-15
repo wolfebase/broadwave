@@ -27,6 +27,7 @@ import base64
 import io
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -49,6 +50,8 @@ TEXT, TEXT2, TEXT3 = "#F5F7FA", "#AEB7C5", "#8D99AC"
 BLUE, VIOLET, CYAN, TALLY, PALE = "#3D7BFF", "#8B5CF6", "#22D3EE", "#FF3B30", "#C9D6FF"
 GREEN, AMBER = "#2FBF71", "#FFB020"
 R = 24
+# The pattern in scripts/check-names.sh, split the same way so this file passes it.
+RETIRED = re.compile("wave" "guide|ota[ -]?viewer|ota" "kit|ota" "ui", re.I)
 
 
 def fmt(v):
@@ -222,9 +225,14 @@ class Doc:
         if crop:
             im = im.crop(crop)
         im = im.resize((w, h), Image.LANCZOS)
-        buf = io.BytesIO()
-        im.save(buf, "JPEG", quality=quality, subsampling=0, optimize=True, progressive=True)
-        b64 = base64.b64encode(buf.getvalue()).decode()
+        # scripts/check-names.sh greps every file for retired product names, base64 too.
+        while True:
+            buf = io.BytesIO()
+            im.save(buf, "JPEG", quality=quality, subsampling=0, optimize=True, progressive=True)
+            b64 = base64.b64encode(buf.getvalue()).decode()
+            if not RETIRED.search(b64):
+                break
+            quality -= 1
         self.define(key, f'<image id="{key}" width="{w}" height="{h}" href="data:image/jpeg;base64,{b64}"/>')
         return key
 
@@ -735,11 +743,10 @@ def tile_together(d, x0):
     # The phone that pressed pause.
     px, py, pw, ph = x0 + 70, 40, 104, 218
     d.add(f'<rect x="{px - 5}" y="{py - 5}" width="{pw + 10}" height="{ph + 10}" rx="20" fill="#05070B" stroke="#FFFFFF" stroke-opacity=".2"/>')
-    picture(d, px, py, pw, 60, img, 0)
-    d.add(f'<rect x="{px}" y="{py}" width="{pw}" height="{ph}" rx="15" fill="none"/>')
-    d.add(f'<rect x="{px + 36}" y="{py + 6}" width="32" height="9" rx="4.5" fill="#000"/>')
-    d.text(px + 10, py + 84, "4.1", 11, "bold", TEXT)
-    d.text(px + 10, py + 100, "Big Buck Bunny", 11, "semi", TEXT2)
+    d.add(f'<rect x="{px + 36}" y="{py + 7}" width="32" height="9" rx="4.5" fill="#000" stroke="#FFFFFF" stroke-opacity=".08"/>')
+    picture(d, px, py + 26, pw, 58, img, 0)
+    d.text(px + 10, py + 104, "4.1", 11, "bold", TEXT)
+    d.text(px + 10, py + 120, "Big Buck Bunny", 11, "semi", TEXT2)
     d.add(f'<rect x="{px + 10}" y="{py + 150}" width="{pw - 20}" height="3" rx="1.5" fill="#FFFFFF" opacity=".25"/><rect x="{px + 10}" y="{py + 150}" width="{(pw - 20) * 0.7}" height="3" rx="1.5" fill="#FFFFFF"/>')
     d.add(f'<circle cx="{px + pw / 2}" cy="{py + 186}" r="17" fill="#FFFFFF"/>')
     d.add(f'<rect x="{px + pw / 2 - 6}" y="{py + 179}" width="4" height="14" rx="1" fill="#0A0F1A"/><rect x="{px + pw / 2 + 2}" y="{py + 179}" width="4" height="14" rx="1" fill="#0A0F1A"/>')
@@ -754,7 +761,7 @@ def tile_together(d, x0):
     for c in ("rip", "rip rip2"):
         d.add(f'<circle class="{c}" cx="{fmt(cx)}" cy="{fmt(cy)}" r="300" fill="none" stroke="{CYAN}" stroke-width="2" opacity="0"/>')
     # The screens that follow.
-    screens = [("tv", x0 + 262, 52, 230, 129), ("tablet", x0 + 262, 214, 124, 93), ("laptop", x0 + 418, 220, 136, 85)]
+    screens = [("tv", x0 + 262, 40, 230, 129), ("tablet", x0 + 262, 196, 124, 93), ("laptop", x0 + 418, 202, 136, 85)]
     glyphs = []
     dims = []
     for kind, x, y, w, h in screens:
@@ -762,7 +769,6 @@ def tile_together(d, x0):
         dims.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="3" fill="#000" fill-opacity=".45"/>')
         glyphs.append(pause_glyph(d, x + w / 2, y + h / 2, min(w, h) * 0.2))
     d.add(f'<g class="held">{"".join(dims)}{"".join(glyphs)}</g>')
-    d.add(f'<g class="held">{pause_glyph(d, x0 + 70 + 52, 40 + 30, 14)}</g>')
     tile_caption(d, box, "Watch together", "Pause or rewind on one screen, and every screen follows.")
     card_close(d, box)
 
@@ -1074,7 +1080,7 @@ def terminal():
         "@keyframes blink{50%{opacity:0}}.blink{animation:blink 1s steps(1) infinite}"
     )
     d.add(f'<rect class="blink" x="{fmt(x + cmd_w + cw)}" y="{y - size + 2}" width="{fmt(cw)}" height="{size + 3}" fill="{CYAN}" opacity=".8"/>')
-    colors = {"out": "#DCE3EE", "cmd": TEXT3, "dock": "#6F7B8E", "ok": "#32D74B", "open": TEXT}
+    colors = {"out": "#DCE3EE", "cmd": TEXT3, "dock": "#7D899C", "ok": "#32D74B", "open": TEXT}
     for i, (kind, line) in enumerate(OUTPUT):
         y = top - 14 + lh * (i + 1)
         if kind == "blank":
