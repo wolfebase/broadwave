@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.19.1 — 2026-11-15
+
+### Added
+
+- Web: Sound delay (Settings › Playback). A screen whose sound comes through a soundbar or receiver and lands late can play up to 300 ms ahead of the room, so every room hears the same moment. It is kept on the device and never moves the other screens.
 
 ### Fixed
 
@@ -10,15 +14,6 @@
 - Server: a playlist request that lands as an encode restarts no longer gives the new encode's first segment the old one's date.
 - Server: a game recorded from up to two minutes after its listed start still gets a poster from before the score is on screen.
 - Install script: an update keeps the old container's user. A server that ran as root used to come back as your user and then fail to record into the show folders it had made. The script also names any other folder the old container mounted that the new one doesn't.
-
-## 0.19.1 — 2026-11-15
-
-### Added
-
-- Web: Sound delay (Settings › Playback). A screen whose sound comes through a soundbar or receiver and lands late can play up to 300 ms ahead of the room, so every room hears the same moment. It is kept on the device and never moves the other screens.
-
-### Fixed
-
 - Server: an encode that crashes and restarts keeps the same dates on the same broadcast frames. A restarted encode with no other encode of the channel beside it was dated about 4 s off, and lined-up screens paused or landed apart.
 - Server: when 1 to 10 s of the broadcast go missing (a reception loss), the segment ends where its pictures end and the playlist marks a break, with the dates still on the broadcast clock. The segment's length used to cover the hole while its parts did not, and a tuner silence of 5 to 10 s was counted twice.
 - Server: a segment first listed while still open keeps the broadcast clock when it closes.
