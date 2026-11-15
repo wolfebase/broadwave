@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<CommunityApplications>
+  <Profile>Broadwave is live TV and DVR for an antenna, made by Wolfe Up LLC. The server is open source (Apache 2.0) at https://github.com/wolfebase/broadwave. This repository holds its Unraid template. Report problems at https://github.com/wolfebase/broadwave/issues.</Profile>
+  <Icon>https://raw.githubusercontent.com/wolfebase/broadwave/main/web/public/icons/icon-512.png</Icon>
+  <WebPage>https://github.com/wolfebase/broadwave</WebPage>
+  <!-- Add once the Unraid forum support thread exists: <Forum>https://forums.unraid.net/topic/NNNNN-broadwave/</Forum> -->
+</CommunityApplications>

@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Broadwave</Name>
+  <Repository>ghcr.io/wolfebase/broadwave:latest</Repository>
+  <Registry>https://github.com/wolfebase/broadwave/pkgs/container/broadwave</Registry>
+  <Network>host</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/wolfebase/broadwave/issues</Support>
+  <Project>https://github.com/wolfebase/broadwave</Project>
+  <ReadMe>https://github.com/wolfebase/broadwave/blob/main/docs/guide/install.md</ReadMe>
+  <Overview>Live TV and DVR for an antenna. Broadwave finds the HDHomeRun on your network, fills the guide, and records the untouched broadcast. One tune of a channel feeds every screen and every recording, and every screen in the house plays the same frame. Watch in a browser on port 8477, or in the Broadwave apps for iPhone, iPad, and Apple TV. Plex, Jellyfin, Emby, and Channels can use it as a tuner.
+
+Set TZ to your time zone, such as America/Chicago. It is required: the schedule and recordings follow it. Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Remove the Intel or AMD graphics entry when this server has none. Docker will not start while /dev/dri is missing, and the picture still plays from the processor.
+
+There is no account password. Anything that can open port 8477 can use the server until you turn on device sign-in, so do not forward the port. Away from home, open Settings, Devices and away from home, and choose Sign in with Cloudflare, or use Tailscale.</Overview>
+  <Description>Broadwave is a server you run at home. It talks to a network tuner, builds a guide, records the untouched broadcast, and plays it in a browser and in the Broadwave apps for iPhone, iPad, and Apple TV.
+
+One tune of a station is shared by every viewer and by a recording of that station. Subchannels of one station share it too. A second station takes another tuner.
+
+The template uses host networking and port 8477. The server also serves HTTPS with HTTP/2 on port 8443 under its own Let's Encrypt name for the home network; the apps use it when the router allows it. Set Secure name to 0 to turn it off. Config holds the database and the guide. Recordings are a separate folder, mounted at /config/work/recordings, so they survive a new container. The image includes ffmpeg. comskip is included for commercial detection.
+
+Act as an HDHomeRun, under Settings, Share with other apps, lets Plex, Jellyfin, Emby, and Channels add this server at port 8478. That port does not answer tuner discovery, so type the address and the port. Leave it off when you do not use those apps.
+
+There is no account password. Anything that can open port 8477 can use the server until you turn on device sign-in, and the shared playlist stays open even then. Keep the port on your own network.</Description>
+  <Category>MediaApp:Video MediaServer:Video</Category>
+  <WebUI>http://[IP]:[PORT:8477]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/wolfebase/unraid-templates/main/templates/broadwave.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/wolfebase/broadwave/main/web/public/icons/icon-512.png</Icon>
+  <ExtraSearchTerms>hdhomerun antenna ota over-the-air live tv dvr tuner atsc guide xmltv m3u</ExtraSearchTerms>
+  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/readme/home-1440.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/readme/guide-1440.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/readme/player-1440.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/readme/side-1440.jpg</Screenshot>
+  <ExtraParams>--label=com.centurylinklabs.watchtower.enable=true --label="com.centurylinklabs.watchtower.lifecycle.pre-update=broadwave -update-check" --label=com.centurylinklabs.watchtower.lifecycle.pre-update-timeout=1</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <License>https://github.com/wolfebase/broadwave/blob/main/LICENSE</License>
+  <Requires>A network TV tuner, such as an HDHomeRun, on the same network, and an antenna. Host networking lets the server find the tuner and lets the apps find the server. Remove the Intel or AMD graphics entry if this server has no such graphics: Docker will not start while /dev/dri is missing.</Requires>
+  <Config Name="Web UI" Target="8477" Default="8477" Mode="tcp" Description="Web app and API port. Host networking uses this port on the server itself." Type="Port" Display="always" Required="true" Mask="false">8477</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/broadwave" Mode="rw" Description="Database, guide, and live buffer. Put this on a fast pool." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/broadwave</Config>
+  <Config Name="Recordings" Target="/config/work/recordings" Default="/mnt/user/media/recordings" Mode="rw" Description="Where recordings are saved as original broadcast files. This path is the container default. Do not also set a different recordings folder." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/recordings</Config>
+  <Config Name="Intel or AMD graphics" Target="/dev/dri" Default="/dev/dri" Mode="" Description="Hardware transcoding. Remove this entry when the server has no Intel or AMD graphics: Docker will not start while /dev/dri is missing. The picture still plays from the processor." Type="Device" Display="always" Required="false" Mask="false">/dev/dri</Config>
+  <Config Name="Tuner address" Target="HDHR_HOST" Default="" Mode="" Description="Optional. Only needed if the tuner is on another subnet. Leave blank on host networking so the server can find the tuner itself." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Cast application id" Target="BROADWAVE_CAST_APP_ID" Default="" Mode="" Description="Optional. Google Cast application id, 4 to 32 letters and digits. Empty hides Cast. Register a custom receiver with Google first, then restart." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="TZ" Target="TZ" Default="" Mode="" Description="Required. Your time zone, like America/Chicago or America/New_York. Pass times and the recording schedule use it; UTC would record at the wrong hour." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User id for the config folder and recordings. 99 is Unraid's nobody user. The server starts as root, hands those folders over, and then runs as this user." Type="Variable" Display="always" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group id for the config folder and recordings. 100 is Unraid's users group. Set this together with PUID." Type="Variable" Display="always" Required="false" Mask="false">100</Config>
+  <Config Name="UMASK" Target="UMASK" Default="022" Mode="" Description="File mode mask for new recordings, in octal. 022 leaves files readable by others on the server." Type="Variable" Display="advanced" Required="false" Mask="false">022</Config>
+  <Config Name="Public names" Target="BROADWAVE_HOSTS" Default="" Mode="" Description="Optional. Public names this server answers to, comma-separated, such as tv.example.com. A leading dot covers subdomains. Addresses and home names work without this. A MagicDNS name on port 8477 needs the name listed here." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Secure name" Target="BROADWAVE_DIRECT" Default="" Mode="" Description="Optional. Leave blank for an HTTPS name on your home network (port 8443, a Let's Encrypt certificate, nothing to install). Set to 0 to turn it off." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Encoder" Target="BROADWAVE_ENCODER" Default="" Mode="" Description="Optional. Leave blank to choose automatically. gpu keeps the detected graphics encoder. software uses the processor." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Extra audio" Target="BROADWAVE_ALTERNATES" Default="" Mode="" Description="Optional. Leave blank to keep other languages in a full-size encode. Set to 0 to send only the chosen track." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>

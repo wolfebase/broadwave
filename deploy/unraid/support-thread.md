@@ -1,60 +1,73 @@
-# Broadwave support thread (draft, not posted)
+# Broadwave support thread (not posted yet)
 
-This is the text for an Unraid Community Apps support thread. It has not been posted. Do not submit the template until this thread exists and the template's Support address points at it. Until then, Support stays on the GitHub issues page.
+The text for the Unraid forum support thread. Post it as written, in **Docker Containers** (https://forums.unraid.net/forum/47-docker-containers/), then follow `SUBMITTING.md`. Everything between the two lines below is the post.
 
-Suggested title: Broadwave — live TV and DVR for an antenna
+Title: `[Support] Broadwave - live TV and DVR for an antenna`
 
-## Post
+---
 
-Broadwave is live TV and DVR for an antenna. You run the server on Unraid. It talks to an HDHomeRun on your network, fills the guide, records the original broadcast, and plays it in a browser on port 8477 and in the Broadwave apps for iPhone, iPad, and Apple TV.
+**Broadwave** is live TV and DVR for an antenna. It runs on Unraid, talks to the HDHomeRun on your network, fills the guide, records the untouched broadcast, and plays it in a browser on port 8477 and in the Broadwave apps for iPhone, iPad, and Apple TV.
 
-One tune of a channel feeds every screen and every recording. The tuner stays on the home network. Only this server talks to it.
+One tune of a channel feeds every screen and every recording, and every screen in the house plays the same frame. Only this server talks to the tuner.
 
-The template is not in Community Apps yet. You can add it from the repository file `deploy/unraid/broadwave.xml`. An optional second template, `deploy/unraid/broadwave-updater.xml`, checks nightly at 03:30 and updates only the Broadwave container, and it skips a night while a tuner is in use, a recording is running, or a recording starts within two hours.
+- Project and issues: https://github.com/wolfebase/broadwave
+- Install guide: https://github.com/wolfebase/broadwave/blob/main/docs/guide/install.md#unraid
+- Handbook: https://wolfebase.github.io/broadwave/docs/
+- Apple apps (public beta): https://testflight.apple.com/join/893B2HRj
 
-Project and issues: https://github.com/wolfebase/broadwave
+**Install**
 
-Install notes: https://github.com/wolfebase/broadwave/blob/main/docs/guide/install.md
+Search for Broadwave in the Apps tab. To add the template by hand instead, run this in the Unraid terminal, then pick Broadwave under Docker, Add Container, Template:
 
-## What the template expects
+```
+wget -O /boot/config/plugins/dockerMan/templates-user/my-Broadwave.xml https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/unraid/broadwave.xml
+```
 
-- An HDHomeRun on the same network. Host networking is on so the server can hear it, and so phones and Apple TVs can find the server. Do not switch the container to bridge.
-- Config is the database and the guide. Put it on a fast pool. The default is `/mnt/user/appdata/broadwave`.
-- Recordings are a second folder, mounted inside the container at `/config/work/recordings`. They are the original broadcast files. Leave that mount where it is. A different recordings path would miss the folder you mapped.
-- PUID 99 and PGID 100 are Unraid's nobody user and users group. The server starts as root, gives those folders to that user, and then drops root. Set both, or neither.
-- TZ is your time zone, such as `America/New_York` or `America/Denver`. The template leaves it empty and requires it: without it, or with a mistyped name, the server runs on UTC and records at the wrong hour. Diagnostics says so.
-- Extra Parameters includes `--device=/dev/dri` for Intel or AMD graphics. If this server has no such device, delete that flag before you start the container. Docker will not start while the path is missing. The picture still plays from the processor.
+**What the template expects**
 
-Tuner address, public names, the encoder choice, and extra audio are under Show more settings. Leave the tuner address blank unless the tuner is on another subnet.
+- An HDHomeRun or another network tuner on the same network. Host networking is on so the server can hear it, and so phones and Apple TVs can find the server. Keep it on host.
+- **TZ** is required: your time zone, such as `America/New_York` or `America/Denver`. Without it, or with a mistyped name, the server runs on UTC and records at the wrong hour. Diagnostics says so.
+- **Config** is the database and the guide. Put it on a fast pool. The default is `/mnt/user/appdata/broadwave`.
+- **Recordings** is a second folder, mounted inside the container at `/config/work/recordings`. Recordings are the original broadcast files. Leave the container path as it is.
+- **PUID 99 and PGID 100** are Unraid's nobody user and users group. The server starts as root, gives those folders to that user, and then drops root. Set both, or neither.
+- **Intel or AMD graphics** passes `/dev/dri` for hardware transcoding. If this server has no such graphics, remove that entry before you start the container: Docker will not start while the path is missing. The picture still plays from the processor.
 
-## First run
+Tuner address, public names, the encoder choice, the secure name, and extra audio are under Show more settings. Leave the tuner address blank unless the tuner is on another subnet.
 
-Open the WebUI, which is `http://<your-server>:8477`, and follow setup. It looks for the tuner on its own. When none appears, add it by address. Then open the Broadwave app on the same network. It looks for the server on its own. You can also type the address.
+**First run**
 
-## Other apps
+Open the WebUI, `http://<your-server>:8477`, and follow setup. It looks for the tuner on its own; when none appears, add it by address. Then open the Broadwave app on the same network. It lists the servers it finds, or you type the address.
 
-Settings, Share with other apps, can make this server look like an HDHomeRun on port 8478. Plex, Jellyfin, Emby, and Channels add that address with the port. It does not answer tuner discovery, so a tuner you already have is left as it is. Leave this off when you do not use those apps. The port has no device code.
+**Other apps**
 
-## Away from home
+Settings, Share with other apps, can make this server look like an HDHomeRun on port 8478. Plex, Jellyfin, Emby, and Channels add that address with the port. It does not answer tuner discovery, so type the address. Leave it off when you don't use those apps.
 
-Do not forward port 8477 or 8478 on your router. Use Tailscale, installed on the Unraid host rather than inside this container, and type the server's Tailscale address and port 8477. The apps will not find the server over Tailscale by themselves. There is no account password. Device sign-in covers the guide and settings in the browser, and the shared playlist can still start a tune. The Apple apps cannot sign in, so leave device sign-in off if you use them.
+**Away from home**
 
-The handbook page is https://github.com/wolfebase/broadwave/blob/main/docs/guide/remote.md
+Don't forward port 8477 or 8478 on your router. There is no account password: anything that can open port 8477 can use the server until you turn on device sign-in in Settings, Devices.
 
-## Updates
+1. **Sign in with Cloudflare.** In Settings, Devices and away from home, choose Sign in with Cloudflare. You need a free Cloudflare account with a domain on it. Broadwave makes a tunnel and an address such as `tv.example.com`, and only phones, TVs, and browsers you pair or invite can open it. The iPhone, iPad, and Apple TV apps pair with a code.
+2. **Tailscale**, when you have no domain. Install it on the Unraid host, not in this container, and type the server's Tailscale address with port 8477. The apps don't find the server over Tailscale by themselves.
+3. **A reverse proxy you already run** (Nginx Proxy Manager, SWAG, Caddy, Traefik) works like the tunnel: every request through it needs a paired device.
 
-Install the Broadwave container first, then the updater if you want nightly updates. The updater reads labels on the Broadwave container. Keep "Only labeled containers" and "Busy check" turned on so it leaves every other container alone and skips a night when Broadwave is busy. To update by hand, pull the new image and recreate the container with the same folders.
+Details: https://github.com/wolfebase/broadwave/blob/main/docs/guide/remote.md
 
-## Where to look when something fails
+**Updates**
 
-- The container will not start, and the log names `/dev/dri`. Remove `--device=/dev/dri` from Extra Parameters.
-- Setup says no tuner answered. Confirm host networking, and that the tuner is on this network. If it is on another subnet, set Tuner address.
-- Phones do not list the server. Host networking has to be on, and the phone needs Local Network access for Broadwave. Or type the server's address.
+Apply updates from the Docker tab like any other container. The database is copied before a new version changes it. For nightly updates that wait until Broadwave isn't busy, add the optional updater template by hand, as `my-Broadwave-Updater.xml`, from https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/unraid/broadwave-updater.xml. It checks at 03:30, updates only the Broadwave container, and skips a night while a tuner is in use, a recording is running, or a recording starts within two hours. Keep "Only labeled containers" and "Busy check" on.
+
+**When something fails**
+
+- The container won't start, and the log names `/dev/dri`. Remove the Intel or AMD graphics entry.
+- Setup says no tuner answered. Check that the container is on host networking and the tuner is on this network. If it is on another subnet, set Tuner address.
+- Phones don't list the server. Host networking has to be on, and the phone needs Local Network access for Broadwave. Or type the server's address.
 - Diagnostics says recordings are owned by root. Set PUID and PGID.
-- Diagnostics says less than 20 GB is free. Free space before a long recording. A recording that will not start because of the reserve names the free space and the reserve. The reserve is Keep this much free, in Settings. The default is 10 GB.
+- Diagnostics says less than 20 GB is free. Free space before a long recording. A recording that won't start because of the reserve names the free space and the reserve (Keep this much free, in Settings; 10 GB by default).
 
-A support bundle from Settings leaves passwords out. Attach it to a GitHub issue. The same file is `http://<your-server>:8477/api/v1/support`.
+Please attach a support bundle to a GitHub issue: Settings, About, or `http://<your-server>:8477/api/v1/support`. It leaves passwords and keys out.
 
-## What this server does not do
+**What it doesn't do**
 
-It does not supply channels. The picture comes from your antenna. It does not install tuner firmware. It has no Roku app. It is free, with no subscription and no account.
+It doesn't supply channels: the picture comes from your antenna. It doesn't install tuner firmware. It has no Roku app. It is free, with no subscription and no account.
+
+---

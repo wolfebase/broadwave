@@ -20,7 +20,16 @@ var caTags = map[string]bool{
 	"PostArgs": true, "CPUset": true, "DateInstalled": true, "DonateText": true,
 	"DonateLink": true, "Requires": true, "Config": true, "ReadMe": true,
 	"License": true, "MinVer": true, "MaxVer": true, "Beta": true,
+	"ExtraSearchTerms": true, "Screenshot": true,
 }
+
+// The Community Apps feed reads templates from their own repository; deploy/unraid/ca is
+// that repository's layout, and its template differs from deploy/unraid/broadwave.xml only
+// in TemplateURL.
+const (
+	rawRepo     = "https://raw.githubusercontent.com/wolfebase/broadwave/main/"
+	rawTemplate = "https://raw.githubusercontent.com/wolfebase/unraid-templates/main/"
+)
 
 // caRecommended is what the parser asks for on a submission, beyond Name and Repository.
 var caRecommended = []string{"Category", "Icon", "Overview", "Project", "Support", "TemplateURL"}
@@ -44,11 +53,97 @@ func TestCommunityAppsTemplates(t *testing.T) {
 	}
 	broadwave := parseTemplate(t, filepath.Join(root, "deploy/unraid/broadwave.xml"))
 	updater := parseTemplate(t, filepath.Join(root, "deploy/unraid/broadwave-updater.xml"))
-	for _, els := range [][]templateEl{broadwave, updater} {
-		assertCAShape(t, els, icon)
-	}
+	listed := parseTemplate(t, filepath.Join(root, "deploy/unraid/ca/templates/broadwave.xml"))
+	assertCAShape(t, broadwave, icon, rawRepo+"deploy/unraid/broadwave.xml")
+	assertCAShape(t, updater, icon, rawRepo+"deploy/unraid/broadwave-updater.xml")
+	assertCAShape(t, listed, icon, rawTemplate+"templates/broadwave.xml")
 	assertBroadwaveTemplate(t, broadwave)
+	assertBroadwaveTemplate(t, listed)
 	assertUpdaterTemplate(t, updater)
+	assertScreenshots(t, root, broadwave)
+}
+
+func TestCommunityAppsRepository(t *testing.T) {
+	root := filepath.Dir(docsDir(t))
+	ca := filepath.Join(root, "deploy/unraid/ca")
+	ours, err := os.ReadFile(filepath.Join(root, "deploy/unraid/broadwave.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := os.ReadFile(filepath.Join(ca, "templates/broadwave.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Replace(string(ours), rawRepo+"deploy/unraid/broadwave.xml", rawTemplate+"templates/broadwave.xml", 1)
+	if string(listed) != want {
+		t.Error("deploy/unraid/ca/templates/broadwave.xml must be deploy/unraid/broadwave.xml with only TemplateURL changed. Copy it again.")
+	}
+	license, err := os.ReadFile(filepath.Join(ca, "LICENSE"))
+	if err != nil || !strings.Contains(string(license), "Apache License") {
+		t.Errorf("the template repository needs an OSI license at its root: %v", err)
+	}
+	f, err := os.Open(filepath.Join(ca, "ca_profile.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	var profile struct {
+		XMLName xml.Name `xml:"CommunityApplications"`
+		Profile string   `xml:"Profile"`
+		Icon    string   `xml:"Icon"`
+		WebPage string   `xml:"WebPage"`
+	}
+	if err := xml.NewDecoder(f).Decode(&profile); err != nil {
+		t.Fatalf("ca_profile.xml: %v", err)
+	}
+	if strings.TrimSpace(profile.Profile) == "" {
+		t.Error("ca_profile.xml needs a non-empty <Profile>; the submission is blocked without it")
+	}
+	for _, u := range []string{profile.Icon, profile.WebPage} {
+		if !httpsURL.MatchString(strings.TrimSpace(u)) {
+			t.Errorf("ca_profile.xml URL %q", u)
+		}
+	}
+	// The submission flow wants a repository icon at the root.
+	icon, err := os.ReadFile(filepath.Join(ca, "icon.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := xml.Unmarshal(icon, new(struct {
+		XMLName xml.Name `xml:"svg"`
+	})); err != nil {
+		t.Errorf("icon.svg: %v", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(ca, "templates"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("the listed repository carries one template, broadwave.xml; found %d files", len(entries))
+	}
+}
+
+// assertScreenshots checks that each Screenshot is a raw URL for a file in this repository.
+func assertScreenshots(t *testing.T, root string, els []templateEl) {
+	t.Helper()
+	n := 0
+	for _, el := range els {
+		if el.name != "Screenshot" {
+			continue
+		}
+		n++
+		u := strings.TrimSpace(el.text)
+		if !strings.HasPrefix(u, rawRepo) {
+			t.Errorf("screenshot %q is not a raw URL in this repository", u)
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(u, rawRepo)))); err != nil {
+			t.Errorf("screenshot %q: %v", u, err)
+		}
+	}
+	if n == 0 {
+		t.Error("no screenshots for the Community Apps page")
+	}
 }
 
 func parseTemplate(t *testing.T, path string) []templateEl {
@@ -109,7 +204,7 @@ func parseTemplate(t *testing.T, path string) []templateEl {
 	return els
 }
 
-func assertCAShape(t *testing.T, els []templateEl, iconPath string) {
+func assertCAShape(t *testing.T, els []templateEl, iconPath, templateURL string) {
 	t.Helper()
 	fields := map[string]templateEl{}
 	for _, el := range els {
@@ -144,9 +239,8 @@ func assertCAShape(t *testing.T, els []templateEl, iconPath string) {
 			t.Errorf("%s: <%s> %q", name, key, fields[key].text)
 		}
 	}
-	raw := "https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/unraid/"
-	if !strings.HasPrefix(fields["TemplateURL"].text, raw) || !strings.HasSuffix(fields["TemplateURL"].text, ".xml") {
-		t.Errorf("%s: TemplateURL %q", name, fields["TemplateURL"].text)
+	if fields["TemplateURL"].text != templateURL {
+		t.Errorf("%s: TemplateURL %q, want %q (the raw URL of that exact file)", name, fields["TemplateURL"].text, templateURL)
 	}
 	if strings.TrimSpace(fields["Overview"].text) == "" || len(strings.TrimSpace(fields["Overview"].text)) < 200 {
 		t.Errorf("%s: Overview is too short to be the Community Apps description", name)
@@ -175,7 +269,7 @@ func assertConfig(t *testing.T, el templateEl) {
 		}
 	}
 	switch el.attrs["Type"] {
-	case "Path", "Port", "Variable":
+	case "Path", "Port", "Variable", "Device":
 	default:
 		t.Errorf("config %q type %q", el.attrs["Name"], el.attrs["Type"])
 	}
@@ -209,8 +303,10 @@ func assertBroadwaveTemplate(t *testing.T, els []templateEl) {
 	if fields["WebUI"].text != "http://[IP]:[PORT:8477]/" {
 		t.Errorf("WebUI %q", fields["WebUI"].text)
 	}
-	if !strings.Contains(fields["ExtraParams"].text, "--device=/dev/dri") {
-		t.Error("Extra Parameters dropped the graphics device")
+	// The graphics device is its own entry, so a server without one can remove it in the form.
+	// In Extra Parameters too, Docker would get it twice.
+	if strings.Contains(fields["ExtraParams"].text, "/dev/dri") {
+		t.Error("/dev/dri belongs in its Device entry, not Extra Parameters")
 	}
 	for _, label := range []string{
 		"com.centurylinklabs.watchtower.enable=true",
@@ -226,6 +322,9 @@ func assertBroadwaveTemplate(t *testing.T, els []templateEl) {
 		if el.name == "Config" {
 			configs[el.attrs["Target"]] = el
 		}
+	}
+	if dri := configs["/dev/dri"]; dri.attrs["Type"] != "Device" || strings.TrimSpace(dri.text) != "/dev/dri" || dri.attrs["Required"] != "false" {
+		t.Errorf("graphics entry %+v, want an optional Device entry for /dev/dri", dri.attrs)
 	}
 	for _, target := range []string{"8477", "/config", "/config/work/recordings", "HDHR_HOST", "TZ", "PUID", "PGID", "UMASK", "BROADWAVE_HOSTS", "BROADWAVE_ENCODER", "BROADWAVE_ALTERNATES"} {
 		if _, ok := configs[target]; !ok {
