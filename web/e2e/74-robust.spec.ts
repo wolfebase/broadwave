@@ -182,3 +182,21 @@ test("installed on a phone, the pages start below the status bar and clear the n
   expect(grid!.x).toBeGreaterThanOrEqual(59);
   expect(grid!.x + grid!.width).toBeLessThanOrEqual(844 - 59 + 1);
 });
+
+test("setup's card holds everything in it on a phone", async ({ page }) => {
+  await setupDone(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/setup");
+  const card = page.locator(".setup-card").first();
+  await expect(card.getByText("Not seeing your tuner?")).toBeVisible();
+  const spill = await card.evaluate((el) => {
+    const edge = el.getBoundingClientRect().right;
+    return [...el.querySelectorAll("input, button, p")]
+      .filter((child) => {
+        const r = child.getBoundingClientRect();
+        return r.width > 0 && r.right > edge + 1;
+      })
+      .map((child) => child.textContent?.trim().slice(0, 30) || child.tagName);
+  });
+  expect(spill).toEqual([]);
+});

@@ -195,8 +195,11 @@
 }
 
 /* A group of ways in, set off by a hairline. */
+/* One column no wider than the card. A long button set the column's width,
+   and the address field and its help ran past the card's edge on a phone. */
 .setup-block {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   padding-top: var(--space-6);
   border-top: 1px solid var(--color-line);
@@ -578,6 +581,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
+}
+
+.setup-row > .btn {
+  max-width: 100%;
+  white-space: normal;
 }
 
 .setup-row input {
