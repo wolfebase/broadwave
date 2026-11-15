@@ -721,6 +721,7 @@ func (h *Hub) restartLadderLocked(f *feed, primary *rendition, software bool) bo
 			continue
 		}
 		r.stamper.reset()
+		keepClockLocked(r)
 		r.clock = nil
 		r.ringFrom, r.roomStart = time.Time{}, false
 		r.dated = false

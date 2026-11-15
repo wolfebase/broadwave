@@ -363,3 +363,36 @@ func TestABackwardStepStillPinsToTheLastEnd(t *testing.T) {
 		t.Fatalf("the segment after a half-second step back is at %v, want %v", walls[2], want)
 	}
 }
+
+// A carried seed is the encode before a restart. When it would date the
+// first picture far from the wall clock, the station's clock changed while
+// the encode was down, and the picture is dated as a fresh tune's.
+func TestACarriedClockGivesWayToAStationReset(t *testing.T) {
+	now := time.Date(2026, 11, 15, 20, 0, 0, 0, time.UTC)
+	fresh := now.Add(-4 * time.Second)
+	for _, tc := range []struct {
+		name string
+		off  time.Duration
+		want time.Time
+	}{
+		{"same clock", -2 * time.Second, fresh.Add(-2 * time.Second)},
+		{"edge", carryWithin, fresh.Add(carryWithin)},
+		{"reset forward", 40 * time.Second, fresh},
+		{"reset back", -11 * time.Second, fresh},
+	} {
+		tl := NewTimeline()
+		tl.now = func() time.Time { return now }
+		tl.Carry(90000, fresh.Add(tc.off))
+		if got := tl.Wall(90000); !got.Equal(tc.want) {
+			t.Errorf("%s: first picture at %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	// A sibling's seed is the room's own clock and is always kept.
+	tl := NewTimeline()
+	tl.now = func() time.Time { return now }
+	tl.Carry(90000, fresh)
+	tl.Seed(90000, fresh.Add(40*time.Second))
+	if got := tl.Wall(90000); !got.Equal(fresh.Add(40 * time.Second)) {
+		t.Fatalf("a sibling's seed gave way: %v", got)
+	}
+}

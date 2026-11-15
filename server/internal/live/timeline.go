@@ -105,6 +105,9 @@ type Timeline struct {
 	seedPTS  int64
 	seedWall time.Time
 	seeded   bool
+	// carried is a seed from the encode this one replaced (Carry). It gives
+	// way when it would date the first picture far from the wall clock.
+	carried bool
 	// startWall, when set, dates the first anchor instead of the wall clock.
 	startWall time.Time
 	// carry is input silence (Shift) not yet stamped on a segment. A
@@ -143,7 +146,9 @@ func (t *Timeline) Wall(pts int64) time.Time {
 		t.wall = t.startWall
 	}
 	if d := ptsDiff(pts, t.seedPTS); t.seeded && !t.set && d > -90000*3600 && d < 90000*3600 {
-		t.wall = t.seedWall.Add(time.Duration(d) * time.Second / 90000)
+		if w := t.seedWall.Add(time.Duration(d) * time.Second / 90000); !t.carried || (w.Sub(t.wall) <= carryWithin && t.wall.Sub(w) <= carryWithin) {
+			t.wall = w
+		}
 	}
 	t.earliest = t.wall
 	t.set = true
@@ -161,6 +166,28 @@ func (t *Timeline) Seed(pts int64, wall time.Time) {
 	t.seedPTS = pts
 	t.seedWall = wall
 	t.seeded = true
+	t.carried = false
+}
+
+// carryWithin is how far a carried seed may date the first picture from
+// the clock on the wall. Further off, the broadcast clock changed while the
+// encode was down (a station clock reset), and the old mapping is wrong.
+const carryWithin = 10 * time.Second
+
+// Carry seeds the first anchor from the encode this one replaced on the same
+// broadcast clock, so a frame keeps its date across a restart. Unlike a
+// sibling's seed, it is dropped when it lands more than carryWithin from the
+// wall clock.
+func (t *Timeline) Carry(pts int64, wall time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.set {
+		return
+	}
+	t.seedPTS = pts
+	t.seedWall = wall
+	t.seeded = true
+	t.carried = true
 }
 
 // Start makes the first anchor put its picture at wall, for an encode whose

@@ -442,6 +442,10 @@ type rendition struct {
 	// start at zero, so each encode has its own; seedClockLocked lines it up
 	// with the channel's other encodes on the broadcast clock.
 	clock *Timeline
+	// carry is the last encode's clock on the broadcast clock, kept across a
+	// restart in a new directory until the next encode's header says where
+	// its own timestamps sit (seedClockLocked).
+	carry *clockCarry
 	// fallback is a picture moved to the processor after the GPU failed at
 	// its start; aac is sound converted after a copy the muxer could not
 	// describe. restarted is the ladder's one restart.
@@ -1941,6 +1945,7 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition) bool {
 	r.sub = nil
 	r.stdin = nil
 	r.stamper.reset()
+	keepClockLocked(r)
 	r.clock = nil
 	r.ringFrom, r.roomStart = time.Time{}, false
 	r.dated = false
@@ -2327,6 +2332,29 @@ func datedSiblingLocked(f *feed, r *rendition) bool {
 	return false
 }
 
+// clockCarry is a broadcast timestamp and the wall time an encode gave it.
+type clockCarry struct {
+	pts  int64
+	wall time.Time
+}
+
+// keepClockLocked remembers r's mapping on the broadcast clock before a
+// restart clears it. The broadcast clock does not stop for our restart, so
+// the next encode can put the same frame at the same time. An encode whose
+// timestamps cannot be placed on the broadcast clock leaves nothing.
+func keepClockLocked(r *rendition) {
+	r.carry = nil
+	if r.clock == nil {
+		return
+	}
+	off, ok := r.input.broadcastOffset()
+	pts, wall, set := r.clock.Anchor()
+	if !ok || !set {
+		return
+	}
+	r.carry = &clockCarry{pts: (pts + off) % ptsWrap, wall: wall}
+}
+
 // seedClockLocked puts a new encode's first picture at the wall time another
 // encode of the channel already gives that broadcast frame, so every screen
 // in a room sees the same frame at the same time whichever encode it plays.
@@ -2348,6 +2376,12 @@ func seedClockLocked(f *feed, r *rendition) {
 			}
 			// The sibling's anchor on the broadcast clock, then on this encode's.
 			r.clock.Seed(((pts+off-own)%ptsWrap+ptsWrap)%ptsWrap, wall)
+			r.carry = nil
+			return
+		}
+		if c := r.carry; c != nil {
+			r.carry = nil
+			r.clock.Carry(((c.pts-own)%ptsWrap+ptsWrap)%ptsWrap, c.wall)
 			return
 		}
 	}

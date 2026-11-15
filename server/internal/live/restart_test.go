@@ -664,3 +664,84 @@ func TestASoundThatCantBeCopiedIsConvertedFromTheNextStart(t *testing.T) {
 		t.Fatalf("a changed sound is not copied again:\n%s", args)
 	}
 }
+
+// A crash restart in a new directory starts a new encode on the same
+// broadcast clock. With no other encode of the channel to seed it, the same
+// broadcast frame must keep the date the encode before it gave that frame,
+// or every screen in a room lands somewhere else after the restart.
+func TestACrashRestartKeepsTheBroadcastDates(t *testing.T) {
+	h, f, mark := restartHub(t, time.Hour, "hold")
+	startRendition(t, h, f, "1080.aac2.broadcast")
+	waitMark(t, mark, ".count")
+	h.mu.Lock()
+	r := f.renditions["1080.aac2.broadcast"]
+	// The old encode's fragment time zero is broadcast 5000 s.
+	r.input.noteEncodeStart(5000, true)
+	// The old encode put its fragment time 270000 (broadcast 5003 s) at this wall time.
+	at := time.Now().Add(-30 * time.Second)
+	r.clock = NewTimeline()
+	r.clock.Seed(270000, at)
+	r.clock.Wall(270000)
+	pid := r.cmd.Process.Pid
+	h.mu.Unlock()
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := proc.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	waitMark(t, mark, ".args.2")
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if r.clock != nil {
+		t.Fatal("the restart kept the old encode's clock for a new encode's timestamps")
+	}
+	// The new one's is 5030 s.
+	r.input.noteEncodeStart(5030, true)
+	r.clock = NewTimeline()
+	seedClockLocked(f, r)
+	// Broadcast 5033 s is fragment time 3 s on the new encode, 30 s after 5003 s.
+	got := r.clock.Wall(3 * 90000)
+	if want := at.Add(30 * time.Second); !got.Equal(want) {
+		t.Fatalf("the same broadcast frame moved %v across the restart", got.Sub(want))
+	}
+}
+
+// An encode whose timestamps cannot be placed on the broadcast clock (no
+// offset in its header) has no mapping to carry, so the restart dates the
+// new encode as a fresh tune.
+func TestARestartWithoutABroadcastOffsetStartsFresh(t *testing.T) {
+	h, f, mark := restartHub(t, time.Hour, "hold")
+	startRendition(t, h, f, "1080.aac2.broadcast")
+	waitMark(t, mark, ".count")
+	h.mu.Lock()
+	r := f.renditions["1080.aac2.broadcast"]
+	r.input.noteEncodeStart(0, false)
+	r.clock = NewTimeline()
+	r.clock.Seed(270000, time.Now().Add(-30*time.Second))
+	r.clock.Wall(270000)
+	pid := r.cmd.Process.Pid
+	h.mu.Unlock()
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := proc.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	waitMark(t, mark, ".args.2")
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if r.carry != nil {
+		t.Fatalf("kept %+v from an encode with no broadcast offset", r.carry)
+	}
+	r.input.noteEncodeStart(5030, true)
+	r.clock = NewTimeline()
+	fixed := time.Now()
+	r.clock.now = func() time.Time { return fixed }
+	seedClockLocked(f, r)
+	if got := r.clock.Wall(3 * 90000); !got.Equal(fixed.Add(-4 * time.Second)) {
+		t.Fatalf("first picture at %v, want the fresh %v", got, fixed.Add(-4*time.Second))
+	}
+}
