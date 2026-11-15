@@ -288,6 +288,16 @@ html[data-layout="tv"] .settings-menu .settings-menu-row:focus-visible {
   min-width: 0;
 }
 
+/* A control too wide for the row (a menu, a number field) moves under the name.
+   Beside it on a 320 px phone the name broke mid-word, "recordin gs". */
+.set-row:not(.stack, .switch):has(> .set-row-control :is(select, textarea, input:not([type="checkbox"], [type="radio"]))) {
+  flex-wrap: wrap;
+}
+
+.set-row:not(.stack, .switch):has(> .set-row-control :is(select, textarea, input:not([type="checkbox"], [type="radio"]))) > .set-row-text {
+  flex: 1 1 12rem;
+}
+
 .set-row.stack {
   flex-direction: column;
   align-items: stretch;
