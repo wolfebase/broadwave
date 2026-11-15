@@ -563,9 +563,15 @@ html[data-theme="dark"] .gc-logo[data-tone="dark"] {
   background: var(--cat-color);
 }
 
+/* Stacked, the name needs a width to cut at; a long one ran under the title. */
 .onnow-row .ch-badge {
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
+}
+
+.onnow-row .ch-badge-name {
+  max-width: 100%;
 }
 
 .onnow-body {
