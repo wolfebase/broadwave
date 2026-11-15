@@ -6,43 +6,54 @@
   <a href="https://github.com/wolfebase/broadwave/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/wolfebase/broadwave/ci.yml?branch=main&style=for-the-badge&label=build&labelColor=05070D&color=3D7BFF" alt="Build"></a>
   <a href="https://github.com/wolfebase/broadwave/releases/latest"><img src="https://img.shields.io/github/v/release/wolfebase/broadwave?style=for-the-badge&label=release&labelColor=05070D&color=8B5CF6" alt="Latest release"></a>
   <a href="https://github.com/wolfebase/broadwave/pkgs/container/broadwave"><img src="https://img.shields.io/badge/docker-ghcr.io-22D3EE?style=for-the-badge&logo=docker&logoColor=white&labelColor=05070D" alt="Docker image"></a>
+  <a href="https://testflight.apple.com/join/893B2HRj"><img src="https://img.shields.io/badge/TestFlight-iPhone%20%C2%B7%20iPad%20%C2%B7%20Apple%20TV-0A84FF?style=for-the-badge&logo=apple&logoColor=white&labelColor=05070D" alt="Apple apps on TestFlight"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-F472B6?style=for-the-badge&labelColor=05070D" alt="Apache 2.0"></a>
 </p>
 
 <h3 align="center">
-  Your antenna already pulls in dozens of channels for free.<br>
-  Broadwave puts them on every screen in your house — live, recorded, and perfectly in sync.
+  Live TV and DVR for your antenna, on every screen in the house, in sync.<br>
+  Self-hosted, free, and open source. No subscription, no account.
 </h3>
 
 <p align="center">
-  <a href="docs/guide/index.md"><b>Docs</b></a> &nbsp;·&nbsp;
-  <a href="#-install-in-one-command"><b>Install</b></a> &nbsp;·&nbsp;
-  <a href="#-one-tuner-every-screen-the-same-frame"><b>How it works</b></a> &nbsp;·&nbsp;
-  <a href="#-everything-it-does"><b>Features</b></a> &nbsp;·&nbsp;
-  <a href="#-what-it-looks-like"><b>Screens</b></a> &nbsp;·&nbsp;
-  <a href="#-works-with"><b>Works with</b></a> &nbsp;·&nbsp;
-  <a href="#-questions"><b>FAQ</b></a>
+  <a href="#quick-start"><b>Quick start</b></a> &nbsp;·&nbsp;
+  <a href="#why-broadwave"><b>Why Broadwave</b></a> &nbsp;·&nbsp;
+  <a href="#what-it-looks-like"><b>Screens</b></a> &nbsp;·&nbsp;
+  <a href="#install"><b>Install</b></a> &nbsp;·&nbsp;
+  <a href="#apps"><b>Apps</b></a> &nbsp;·&nbsp;
+  <a href="#questions"><b>FAQ</b></a> &nbsp;·&nbsp;
+  <a href="docs/guide/index.md"><b>Handbook</b></a>
 </p>
-
-<p align="center"><img src=".github/readme/ticker.svg" alt="Live TV, whole-home sync, DVR, multiview, true 60 fps, 5.1 surround, 14-day guide, no account, no subscription, open source" width="100%"></p>
-
-<p align="center"><img src=".github/readme/stats.svg" alt="Free forever · 60 fps · 5.1 surround · 4 channels at once · 14 days of guide with a paid listings plan · 90-second setup" width="100%"></p>
 
 <p align="center"><img src=".github/readme/devices.png" alt="Broadwave on a TV, a tablet, and a phone" width="100%"></p>
 
-<br>
+## Quick start
 
-## ✦ One tuner. Every screen. The same frame.
+You need an antenna, a network TV tuner such as any current [HDHomeRun](docs/tuners.md), and an always-on computer that runs Docker: a mini PC, a NAS, or a home server, on x86-64 or ARM64.
 
-Plug an antenna into a network tuner, run Broadwave on any always-on box, and every phone, tablet, TV, and browser in the house becomes a TV. No cable bill. No streaming subscription. No account. Just the broadcasts that are already in the air, looking better than they ever have.
+On that computer, if it runs Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/wolfebase/broadwave/main/scripts/install.sh | bash
+```
+
+Then open **`http://<that computer>:8477`**. Broadwave finds your tuner, scans the channels, and fills the guide.
+
+The script checks Docker, your time zone, your user, graphics, and the port, then starts one container with host networking. Run it again to update: it keeps your folders and settings, and holds off while a tuner is in use or a recording is near. Add `bash -s -- --dry-run` to see each command first, or [read what it does](docs/guide/install.md#one-command). On Unraid, a NAS, Docker Desktop, or without Docker, see [Install](#install).
+
+<p align="center"><img src=".github/readme/terminal.svg" alt="One command, then Broadwave finds your tuner, scans channels, and fills the guide" width="100%"></p>
+
+## Why Broadwave
+
+Plug an antenna into a network tuner, run Broadwave on one always-on box, and every phone, tablet, TV, and browser in the house becomes a TV. The broadcasts are already in the air for free. Broadwave makes them feel like a paid live TV service, without the bill.
+
+- **Whole-Home Sync.** Every screen on the same channel plays the same frame, so the kitchen never cheers before the living room. Measured 15 ms apart on a real broadcast. Watch together, and pause or rewind moves every screen in the group. [How sync works](docs/guide/sync.md)
+- **One tuner, every screen.** Only the server talks to the tuner. Everyone on a channel shares one tune, and so do recordings, so three TVs on the game use one tuner. Plex, Jellyfin, Emby, and Channels can use Broadwave as their tuner too.
+- **A DVR that gets sports.** Follow a team and every game records. A game that runs long keeps recording until it's final. Recordings are the untouched broadcast, in original quality.
+- **The guide is the centerpiece.** A fast guide with artwork and a live preview while you browse, a mini-guide over the player, and search across the guide and your recordings.
+- **Automatic, with overrides.** It finds your tuners and screens on its own, and picks direct play, bitrate, surround sound, and frame rate for each screen. True 60 fps, film back at 24p. Every screen can pick its own quality and sound.
 
 <p align="center"><img src=".github/readme/one-tuner.svg" alt="Antenna to tuner to Broadwave to every screen in the house, all on the same frame" width="100%"></p>
-
-Three people watching the game in three rooms use **one** tuner, not three — and the kitchen never cheers three seconds before the living room.
-
-<br>
-
-## ✦ Everything it does
 
 <table>
   <tr>
@@ -60,7 +71,7 @@ Three people watching the game in three rooms use **one** tuner, not three — a
 </table>
 
 <details>
-<summary><b>The full list</b></summary>
+<summary><b>Everything it does</b></summary>
 <br>
 
 | | |
@@ -68,18 +79,16 @@ Three people watching the game in three rooms use **one** tuner, not three — a
 | **Watch** | Live TV on every screen, in sync · one tune shared by everyone on a channel · true 60 fps, film restored to 24p · hardware transcoding on Intel and AMD graphics · 5.1 surround with a picker for languages and described video · ATSC 3.0 where the tuner receives it · buffers tuned for phones, desktops, and TVs · a stream panel that shows exactly what's happening |
 | **Record** | Shows, series, or every game for your team · the untouched broadcast, in original quality · games keep recording until they're final · a tuner held back for recordings · a heads-up before live TV would take a recording's tuner · a later airing suggested when one can't record · nightly backups with one-tap restore. [How recordings work](docs/recordings.md) |
 | **Guide** | About 2 days of listings free from SiliconDust for an HDHomeRun, 14 days with an HDHomeRun DVR subscription or Schedules Direct · also XMLTV, or the broadcast itself · artwork, seasons, premieres, and finales · search across the guide and your recordings · antenna and signal tools that say *Great, OK, Weak,* or *Lost* |
-| **Multiview** | Side by side, one-big-plus-three, quad, and picture-in-picture · sound and 60 fps follow the tile you pick · a Game Switcher that moves the big tile to the game that matters · saved layouts |
-| **Sports** | Live scores for twelve leagues · follow teams and record every game · a heads-up when your team starts or a game gets close, with Watch · spoiler-safe scores you can hide |
+| **Multiview** | Side by side, one-big-plus-three, quad, and picture-in-picture · sound and 60 fps follow the tile you pick · a Game Switcher that moves the big tile to the game that matters · saved layouts. [How multiview works](docs/multiview.md) |
+| **Sports** | Live scores for thirteen leagues, plus F1, NASCAR, and IndyCar schedules · follow teams and record every game · a heads-up when your team starts or a game gets close, with Watch · scores you can hide |
 | **Setup** | Finds your tuners, servers, and screens on its own · done in about 90 seconds · a setup doctor for networking, graphics, disks, time zone, and permissions · a banner when a new device shows up · [what each error means](docs/troubleshooting.md) |
-| **Private** | No account, no ads, no analytics · everything stays on your server · support bundles with secrets stripped out · open-source server, Apache 2.0 |
+| **Private** | No account, no ads, no analytics · your channels, recordings, and history stay on your server · support bundles with secrets stripped out · open-source server, Apache 2.0. [Privacy](PRIVACY.md) |
 
 </details>
 
-<br>
+## What it looks like
 
-## ✦ What it looks like
-
-The guide, live TV, and recordings. The phone uses the same server. The picture here is a test pattern.
+The web app: Home, the guide, live TV, two channels side by side, and recordings. The phone uses the same server. The picture is a test pattern and the stations are made up.
 
 <table>
   <tr>
@@ -104,137 +113,70 @@ The guide, live TV, and recordings. The phone uses the same server. The picture 
   </tr>
 </table>
 
+## Install
+
+One image, `ghcr.io/wolfebase/broadwave`, for x86-64 and ARM64, with its own ffmpeg. `latest` is the newest release; a version tag such as `0.18.2` stays put.
+
+| Your computer | How |
+| --- | --- |
+| Linux with Docker: a mini PC, a home server, a Raspberry Pi 4 or 5 (64-bit) | [The one command](#quick-start), or [`docker run`](docs/guide/install.md#docker-on-linux) |
+| Unraid | [The Broadwave template](docs/guide/install.md#unraid) |
+| Synology, QNAP, TrueNAS SCALE | [Compose in the NAS app](docs/guide/install.md#nas-boxes) |
+| Any Docker host, with Compose | [`compose.yaml`](docs/guide/install.md#docker-compose) |
+| A Mac with Docker Desktop | The one command; add `bash -s -- --tuner <address>` if it can't find the tuner |
+| Windows with Docker Desktop | [Published ports](docs/guide/install.md#docker-desktop-on-mac-or-windows) |
+| No Docker (Linux, macOS, Windows) | [The server as one file](docs/guide/install.md#without-docker) from each release |
+
+<details>
+<summary><b>The same thing with <code>docker run</code></b></summary>
 <br>
-
-## ✦ Install in one command
-
-<p align="center"><img src=".github/readme/terminal.svg" alt="docker run, then Broadwave finds your tuner, scans channels, and fills the guide" width="100%"></p>
-
-You need an always-on computer that runs Docker — a NAS, a mini PC, or a home server — and a network TV tuner. The image runs on **x86-64 and ARM64**. The tag `latest` is the newest release. It moves when a version is published. A full version tag from the [releases](https://github.com/wolfebase/broadwave/releases) page stays on that build.
 
 ```bash
 docker run -d --name broadwave --network host --restart unless-stopped \
   -e TZ=<your time zone> \
-  -v ~/broadwave:/config \
   -e PUID=$(id -u) -e PGID=$(id -g) \
-  -v ~/broadwave/recordings:/config/work/recordings \
-  ghcr.io/wolfebase/broadwave:latest
-```
-
-Then open **`http://<your-server>:8477`**. On a Linux server, Broadwave finds your tuner, scans your channels, and fills the guide on its own. Three TVs on the same channel use one tuner. Config and recordings stay in the folders you mounted, so an update keeps them.
-
-- **`--network host`** lets a Linux server hear your tuner, and lets phones and TVs find Broadwave. Keep it there.
-- **Graphics.** Add `--device /dev/dri` when that path exists (Intel or AMD). Docker refuses to start if the path is missing. The picture still plays without it.
-- **`PUID`, `PGID`** make the config and recordings yours instead of root's. `$(id -u)` and `$(id -g)` are the user running the command. Docker Desktop doesn't need them.
-- **`TZ`** is your time zone: replace `<your time zone>` with a name like `America/New_York`, `America/Chicago`, `America/Denver`, `America/Phoenix`, `America/Los_Angeles`, `America/Anchorage`, `Pacific/Honolulu`, `America/Toronto`, or `America/Vancouver`. Without it, or with a name that is mistyped, the server runs on UTC and records at the wrong hour; it says so in its log, on Diagnostics, and to an admin in the web app.
-- **Tuner address.** When the tuner does not appear, enter its address on the setup page, or set `HDHR_HOST` to that address. Add `:port` only when it is not 80.
-- **Unraid.** Add the template [`deploy/unraid/broadwave.xml`](https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave.xml). It uses host networking and port 8477. Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Set Config and Recordings to folders on your server, and remove `/dev/dri` when the server has no Intel or AMD graphics. A plain `docker run` on Unraid needs `-e PUID=99 -e PGID=100` as well.
-
-On Docker Desktop for Mac and Windows, the container's host network is a virtual machine. Publish the port and set `HDHR_HOST` to the tuner's address:
-
-```bash
-docker run -d --name broadwave --restart unless-stopped \
-  -e TZ=<your time zone> \
-  -e HDHR_HOST=<tuner address> \
-  -p 8477:8477 \
   -v ~/broadwave:/config \
   -v ~/broadwave/recordings:/config/work/recordings \
   ghcr.io/wolfebase/broadwave:latest
 ```
 
-Then open **`http://localhost:8477`**. The secure name (HTTPS and the lowest-latency live TV on Apple devices) needs port 8443 too: add `-p 8443:8443` and set `BROADWAVE_DIRECT_ADDRS` to your computer's home network address. Without them it stays off, and everything else works over 8477.
+- **`--network host`** lets a Linux server hear your tuner, and lets phones and TVs find Broadwave. Keep it.
+- **`TZ`** is your time zone, such as `America/New_York`, `America/Chicago`, `America/Denver`, or `America/Los_Angeles`. Without it the server runs on UTC and records at the wrong hour; it says so in its log, on Diagnostics, and to an admin in the web app.
+- **`PUID`, `PGID`** make the config and recordings yours instead of root's.
+- **Graphics.** Add `--device /dev/dri` when that path exists (Intel or AMD). Docker refuses to start if it is missing. The picture still plays without it. NVIDIA: [Graphics](docs/guide/install.md#graphics).
+- **Tuner address.** When the tuner does not appear, enter its address on the setup page, or set `HDHR_HOST`.
 
-<details>
-<summary><b>Docker Compose</b></summary>
-<br>
-
-```bash
-curl -fsSLO https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/docker/compose.yaml
-docker compose pull && docker compose up -d
-```
-
-Set `TZ` in a `.env` file next to `compose.yaml` first (such as `TZ=America/Denver`); Compose stops and says so when it is missing. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Graphics are off in it so it starts anywhere; uncomment the `devices` lines when `/dev/dri` exists. `PUID` and `PGID` default to 1000; on Unraid set them to 99 and 100. Synology, QNAP, TrueNAS SCALE, Raspberry Pi, and running without Docker: [Install](docs/guide/install.md#nas-boxes).
+Every setting: [Install › Other settings](docs/guide/install.md#other-settings).
 
 </details>
 
-<details>
-<summary><b>Image options</b></summary>
-<br>
+### Updating
 
-One image, `ghcr.io/wolfebase/broadwave`, for x86-64 and ARM64. It carries its own ffmpeg (jellyfin-ffmpeg 7), so nothing else needs installing.
+Run the one command again, `docker compose pull && docker compose up -d` with Compose, or apply the update from Unraid's Docker tab. The folders stay; only the container is replaced, and the database is copied before a new version changes it. An optional updater can do it every night at 03:30, skipping nights when a tuner is in use or a recording is near: [Automatic updates](docs/guide/install.md#automatic-updates). Without one, the web app says when a new release is out.
 
-| Setting | What it does |
-| --- | --- |
-| `TZ` | Your time zone, such as `America/New_York`. Without it, or with a name that isn't a zone, the server runs on UTC. The guide on a phone or in a browser uses that device's clock. Pass times use `TZ`. |
-| `BROADWAVE_COUNTRY` | `US` or `CA`. Leave it out: the country follows `TZ`. It picks the free channel region and which networks setup stars. |
-| `PUID`, `PGID` | The user and group that own the config folder and recordings. Broadwave starts as root, hands the config folder to them, and then runs as them. Leave them out to run as root. |
-| `UMASK` | Permissions for new files, such as `002` so the group can write. Default `022`. |
-| `HDHR_HOST` | The tuner's address, when discovery can't reach it. |
-| `BROADWAVE_RECORDINGS` | The recordings folder, when it is not `/config/work/recordings`. Outside Docker, `-recordings <folder>` does the same. |
-| `BROADWAVE_ENCODER` | `gpu` or `software` to skip the automatic choice (the GPU when it has a low-power encoder, else the processor when it is fast enough). |
-| `BROADWAVE_HOSTS` | Public names the server answers to, comma-separated, such as `tv.example.com` (a leading dot covers subdomains). Addresses, one-word names, `.local`, `.lan`, and other home names work without it. A browser that sends `Sec-Fetch-Site` is allowed on port 443, or when the name has no port. The check does not look at HTTPS. Any other public name needs this setting, so a web page can't reach the server by pointing its own name at your server's address. |
-| `BROADWAVE_RESET_SIGNIN` | `1` turns device sign-in off when the server starts, for when every admin device is lost (`-reset-signin` outside Docker). The log says so. Remove it once an admin device is paired again. |
-| `BROADWAVE_ALTERNATES` | `0` carries only the chosen sound track in each live encode. By default a full-size encode also carries the channel's other languages and descriptions, so players switch between them without a restart. |
-| `BROADWAVE_CAST_APP_ID` | Google Cast application id. When it is 4 to 32 letters and digits, the web player shows Cast and a television loads this server's `/cast` page. Empty hides Cast. Restart to change it. Register the application with Google; the steps are in `docs/design/cast.md`. |
-| `BROADWAVE_LOG` | `debug` adds the routine lines to the log: each channel a guide scan read, each broadcast guide fill, each scoreboard match. Empty logs at the usual level. |
+## Apps
 
-Graphics, for smoother transcoding:
+- **Any browser** at `http://<your-server>:8477`: live TV, the guide, recordings, multiview, and every setting. Nothing to install. On a phone, add it to the home screen.
+- **iPhone, iPad, and Apple TV** apps are in public beta on [TestFlight](https://testflight.apple.com/join/893B2HRj). They list the servers they find on your home network. You pick one, or you type an address. With no server, Try the demo plays sample films.
+- **Away from home.** In Settings › Devices and away from home, choose Sign in with Cloudflare. Broadwave makes a tunnel and an address on your domain, and only devices you pair or invite can open it. With no domain, use Tailscale. Never forward port 8477. [Away from home](docs/guide/remote.md)
 
-- **Intel or AMD (VAAPI).** `--device /dev/dri`. Broadwave keeps access to the device when it switches to `PUID` and `PGID`.
-- **NVIDIA (NVENC).** Install the NVIDIA Container Toolkit on the host, then add `--gpus all` (or `--runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all`). The image already asks for the video driver capability. On Unraid, add `--runtime=nvidia` to Extra Parameters and set `NVIDIA_VISIBLE_DEVICES` to the card's UUID. NVIDIA has not been tested on real hardware yet.
-- **None.** The picture comes from the processor. Diagnostics says how many screens it can serve.
-
-Docker's health check runs `broadwave -healthcheck` every 30 seconds, so `docker ps` shows `healthy` once the server answers.
-
-</details>
-
-<details>
-<summary><b>Automatic updates (optional)</b></summary>
-<br>
-
-Broadwave can keep itself on the newest release. An updater checks every night at 03:30 and updates only Broadwave. It follows the tag the container already uses, so `latest` moves forward and a full version tag stays put. It skips a night while a tuner is in use, a recording is running, or a recording starts within two hours.
-
-- **Docker Compose:** `docker compose --profile updater up -d`. Set its `TZ` to match Broadwave.
-- **Unraid:** install the Broadwave template (it carries the labels the updater reads), then add the **Broadwave-Updater** template from `deploy/unraid/broadwave-updater.xml`. After an update, the Docker tab can still say an update is ready until it checks again.
-- **Plain `docker run`:** add `--label com.centurylinklabs.watchtower.enable=true --label "com.centurylinklabs.watchtower.lifecycle.pre-update=broadwave -update-check"` to the Broadwave command, and run `nickfedor/watchtower:1` with `WATCHTOWER_LABEL_ENABLE=true`, `WATCHTOWER_LIFECYCLE_HOOKS=true`, and `WATCHTOWER_SCHEDULE="0 30 3 * * *"`.
-
-To update by hand, pull the new image and recreate the container with the same folders. The folders stay; only the container is replaced. With Compose, `docker compose pull && docker compose up -d`. On Unraid, apply the update from the Docker tab.
-
-Without an updater, the web app says when a new release is out.
-
-</details>
-
-<details>
-<summary><b>Watch on</b></summary>
-<br>
-
-- **Any browser** at `http://<your-server>:8477` — live TV, the guide, recordings, and multiview. Nothing to install.
-- **Native apps** for iPhone, iPad, and Apple TV are coming soon to the App Store. Until then, the web app works on every device, phones and tablets included. The apps list the servers they find on your home network. You pick one, or you type an address. The next launch connects to the one you saved. "Try the demo" plays sample films on the device.
-- **Away from home.** First choice: in Settings › Devices and away from home, choose Sign in with Cloudflare (0.15 and later). Broadwave makes a tunnel and its own address on your domain, and only devices you pair or invite can open it. Second choice, with no domain: Tailscale, then open the server's Tailscale address with port 8477. Never forward the port. [Away from home](docs/guide/remote.md) has the details.
-
-</details>
-
-<br>
-
-## ✦ Works with
+## Works with
 
 | | |
 | --- | --- |
-| **Tuners** | HDHomeRun and compatible network tuners — several at once, with automatic failover. [Tuners](docs/tuners.md) |
+| **Tuners** | HDHomeRun and compatible network tuners, several at once, with automatic failover. [Tuners](docs/tuners.md) |
 | **Playlists** | M3U (file or URL, with `tvg-*` tags and its own guide) and Xtream Codes |
 | **Other TV servers** | tvheadend, Channels DVR, Threadfin, xTeVe, ErsatzTV, Dispatcharr, Antennas |
 | **Free streaming channels** | Popular free ad-supported services through a FastChannels container |
 | **Guide data** | Your tuner's guide, Schedules Direct, any XMLTV address, or the broadcast itself |
+| **Media servers** | Plex, Jellyfin, Emby, and Channels can add Broadwave as an HDHomeRun, or read its M3U and XMLTV |
 | **Screens** | Phones, tablets, TVs, and any modern browser |
-| **Servers** | Anything that runs Docker, on x86-64 or ARM64 |
 
-<br>
-
-## ✦ Questions
+## Questions
 
 <details>
 <summary><b>Does it cost anything?</b></summary>
-<br>No. Broadwave is free, and the server is open source — no subscription, no account, no ads. Over-the-air TV is free too; you need an antenna and a network tuner.
+<br>No. Broadwave is free, and the server is open source: no subscription, no account, no ads. Over-the-air TV is free too; you need an antenna and a network tuner. The free guide for an HDHomeRun covers about 2 days; an HDHomeRun DVR subscription or Schedules Direct covers 14.
 </details>
 
 <details>
@@ -249,12 +191,7 @@ Without an updater, the web app says when a new release is out.
 
 <details>
 <summary><b>Where do recordings go?</b></summary>
-<br>In the recordings folder you mounted. By default they are filed by show for Plex and Jellyfin, and Settings can put them all in one folder. Each recording is the broadcast file, with a small file beside it for the title, channel, and times. A break scan can leave a commercial-marks file beside it, and a title file is written only when "Write .nfo files for Plex, Jellyfin, and Kodi" is on. [How recordings work](docs/recordings.md).
-</details>
-
-<details>
-<summary><b>When the picture stops</b></summary>
-<br>The line on the player says what failed and what to try. On the web, Diagnostics shows the tuners, the disk, and the recent log. On the Apple apps it shows Fix these, guide depth, tuner health, and antenna readings. Settings can download a support bundle. [What each message means](docs/troubleshooting.md).
+<br>In the recordings folder you mounted. By default they are filed by show for Plex and Jellyfin, and Settings can put them all in one folder. Each recording is the broadcast file, with a small file beside it for the title, channel, and times. [How recordings work](docs/recordings.md).
 </details>
 
 <details>
@@ -263,32 +200,32 @@ Without an updater, the web app says when a new release is out.
 </details>
 
 <details>
-<summary><b>Will it get along with the media servers I already run?</b></summary>
-<br>Yes. Everyone watching the same channel shares one tune: three TVs on one channel use one tuner. Other media servers can use Broadwave as a tuner too. It keeps a tuner free for its own recordings.
+<summary><b>Is it safe to open to the internet?</b></summary>
+<br>Don't forward the port. There is no account password: anything that can open port 8477 can use the server until you turn on device sign-in in Settings › Devices. Sign in with Cloudflare and a reverse proxy both need a paired device for every request. [Security](docs/guide/security.md).
 </details>
 
 <details>
-<summary><b>What do I watch on?</b></summary>
-<br>Whatever you have. The web app does everything in any modern browser, and the native apps add surround sound, remote control, and whole-home sync on phones, tablets, and TVs.
+<summary><b>Something isn't working</b></summary>
+<br>The player says what failed and what to try. On the web, Diagnostics shows the tuners, the disk, and the recent log. On the Apple apps it shows Fix these, guide depth, tuner health, and antenna readings. Settings can download a support bundle with secrets stripped out. [What each message means](docs/troubleshooting.md) · [Common problems](docs/guide/problems.md) · [Open an issue](https://github.com/wolfebase/broadwave/issues).
 </details>
 
-<br>
+## Contributing
 
-## ✦ Build from source
+Bug reports and pull requests for the server and web app are welcome. Open an [issue](https://github.com/wolfebase/broadwave/issues) first for anything large. The native apps live in a separate repository and are not open source.
 
 You need Go 1.26+, Node 22+, and ffmpeg.
 
 ```bash
 make run      # build the web app and run the server on :8477 with ./data
 make dev      # API with CORS for Vite; then: cd web && npm run dev
-make test
+make check    # what CI runs: tests, lint, API drift, and a relay test with a fake tuner
 ```
 
-Server flags: `-addr :8477`, `-config data`, `-hdhr <tuner address>` (or `HDHR_HOST`). [`docs/architecture.md`](docs/architecture.md) explains how it works, [`docs/security.md`](docs/security.md) covers the boundaries, and [`docs/decisions/`](docs/decisions) records why.
+Tests never open a real tuner. [`docs/architecture.md`](docs/architecture.md) explains how it works, [`docs/security.md`](docs/security.md) covers the boundaries, and [`docs/decisions/`](docs/decisions) records why. The HTTP API is [`api/openapi.yaml`](api/openapi.yaml).
 
 ## License
 
-The server and web app are [Apache 2.0](LICENSE). The iPhone, iPad, and Apple TV apps are coming to the App Store and are not open source; the web app works on every device now. ffmpeg and comskip run as separate programs under their own licenses; see [`NOTICE`](NOTICE). [Privacy](PRIVACY.md) · [Support](SUPPORT.md). Demo imagery is from the Blender Foundation's open movies (CC BY).
+The server and web app are [Apache 2.0](LICENSE). The iPhone, iPad, and Apple TV apps are not open source. ffmpeg and comskip run as separate programs under their own licenses; see [`NOTICE`](NOTICE). [Privacy](PRIVACY.md) · [Support](SUPPORT.md). Demo imagery is from the Blender Foundation's open movies (CC BY).
 
 <p align="center">
   <img src=".github/readme/footer.svg" alt="" width="100%"><br>

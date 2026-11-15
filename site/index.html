@@ -43,11 +43,11 @@
           <dt>Record</dt>
           <dd>Shows, series, or every game for your team. The untouched broadcast, in original quality. Games keep recording until they're final. A tuner held back for recordings. A heads-up before live TV would take a recording's tuner. A later airing suggested when one can't record. Nightly backups with one-tap restore.</dd>
           <dt>Guide</dt>
-          <dd>Up to 14 days of listings. Guide data from your tuner's provider, Schedules Direct, XMLTV, or the broadcast itself. Artwork, seasons, premieres, and finales. Search across the guide and your recordings. Antenna and signal tools that say Great, OK, Weak, or Lost.</dd>
+          <dd>About 2 days of listings free for an HDHomeRun, 14 with a listings plan. Guide data from your tuner's provider, Schedules Direct, XMLTV, or the broadcast itself. Artwork, seasons, premieres, and finales. Search across the guide and your recordings. Antenna and signal tools that say Great, OK, Weak, or Lost.</dd>
           <dt>Multiview</dt>
           <dd>Side by side, one-big-plus-three, quad, and picture-in-picture. Sound and 60 fps follow the tile you pick. A Game Switcher that moves the big tile to the game that matters. Saved layouts.</dd>
           <dt>Sports</dt>
-          <dd>Live scores for twelve leagues. Follow teams and record every game. Spoiler-safe scores you can hide.</dd>
+          <dd>Live scores for thirteen leagues, plus F1, NASCAR, and IndyCar schedules. Follow teams and record every game. Scores you can hide.</dd>
           <dt>Setup</dt>
           <dd>Finds your tuners, servers, and screens on its own. Done in about 90 seconds. A setup doctor for networking, graphics, disks, time zone, and permissions. A banner when a new device shows up.</dd>
           <dt>Private</dt>
@@ -80,9 +80,14 @@
         <h2>Install in one command</h2>
         <p>You need an always-on computer that runs Docker — a NAS, a mini PC, or a home server — and a network TV tuner. The image runs on x86-64 and ARM64. The tag <code>latest</code> is the newest release. It moves when a version is published. A full version tag from the <a href="https://github.com/wolfebase/broadwave/releases">releases</a> page stays on that build.</p>
 
-        <h3>Docker</h3>
+        <h3>Linux</h3>
+        <pre><code>curl -fsSL https://raw.githubusercontent.com/<wbr>wolfebase/broadwave/main/scripts/install.sh | bash</code></pre>
+        <p>It checks Docker, your time zone, your user, graphics, and the port, then starts Broadwave with host networking. Run it again to update; it keeps your folders and settings, and holds off while a tuner is in use or a recording is near. <a href="docs/install.html#one-command">What it does</a>.</p>
+
+        <h3>Docker by hand</h3>
         <pre><code>docker run -d --name broadwave --network host --restart unless-stopped \
   -e TZ=&lt;your time zone&gt; \
+  -e PUID=$(id -u) -e PGID=$(id -g) \
   -v ~/broadwave:/config \
   -v ~/broadwave/<wbr>recordings:/config/work/<wbr>recordings \
   ghcr.io/wolfebase/broadwave:latest</code></pre>
@@ -108,8 +113,9 @@
         <details>
           <summary>Docker Compose</summary>
           <pre><code>curl -fsSLO https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/docker/compose.yaml
+echo "TZ=America/Chicago" &gt; .env   # your time zone
 docker compose pull &amp;&amp; docker compose up -d</code></pre>
-          <p>Set <code>TZ</code> in <code>compose.yaml</code> first. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the <code>devices</code> lines when <code>/dev/dri</code> is missing — Docker will not start while they point at a path that is not there. On Unraid, leave <code>PUID</code> at 99 and <code>PGID</code> at 100.</p>
+          <p>Compose stops and says so when <code>TZ</code> is missing from <code>.env</code>. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Graphics are off in it so it starts anywhere; uncomment the <code>devices</code> lines when <code>/dev/dri</code> exists. <code>PUID</code> and <code>PGID</code> default to 1000.</p>
         </details>
 
         <details>
@@ -138,7 +144,7 @@ docker compose pull &amp;&amp; docker compose up -d</code></pre>
 
         <details>
           <summary>Automatic updates (optional)</summary>
-          <p>Broadwave can keep itself on the newest release. An updater checks every night at 03:30 and updates only Broadwave. It follows the tag the container already uses, so <code>latest</code> moves forward and a full version tag stays put. It skips a night while someone is watching, a recording is running, or a recording starts within two hours.</p>
+          <p>Broadwave can keep itself on the newest release. An updater checks every night at 03:30 and updates only Broadwave. It follows the tag the container already uses, so <code>latest</code> moves forward and a full version tag stays put. It skips a night while a tuner is in use, a recording is running, or a recording starts within two hours. With the one command, add <code>--updater</code>.</p>
           <ul>
             <li><strong>Docker Compose:</strong> <code>docker compose --profile updater up -d</code>. Set its <code>TZ</code> to match Broadwave.</li>
             <li><strong>Unraid:</strong> install the Broadwave template (it carries the labels the updater reads), then add the <strong>Broadwave-Updater</strong> template from <a href="https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave-updater.xml">deploy/unraid/broadwave-updater.xml</a>. After an update, the Docker tab can still say an update is ready until it checks again.</li>
@@ -149,7 +155,7 @@ docker compose pull &amp;&amp; docker compose up -d</code></pre>
         </details>
 
         <h3>Unraid</h3>
-        <p>Add the template <a href="https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave.xml">deploy/unraid/broadwave.xml</a>. It uses host networking and port 8477. Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Set Config and Recordings to folders on your server, and remove <code>/dev/dri</code> when the server has no Intel or AMD graphics. A plain <code>docker run</code> on Unraid needs <code>-e PUID=99 -e PGID=100</code> as well.</p>
+        <p>Add the template <a href="https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave.xml">deploy/unraid/broadwave.xml</a> (<a href="docs/install.html#unraid">how</a>). It uses host networking and port 8477. Set TZ, leave PUID at 99 and PGID at 100 so recordings are not owned by root, set Config and Recordings to folders on your server, and remove the Intel or AMD graphics entry when the server has none.</p>
 
         <h3>Build from source</h3>
         <p>You need Go 1.26+, Node 22+, and ffmpeg.</p>
@@ -161,7 +167,7 @@ make test</code></pre>
         <h3>Watch on</h3>
         <ul>
           <li><strong>Any browser</strong> at <code>http://&lt;your-server&gt;:8477</code> — live TV, the guide, recordings, and multiview. Nothing to install.</li>
-          <li><strong>Native apps</strong> for phones, tablets, and TVs find your server on the same Wi-Fi by themselves — no typing. With no server around, they play a built-in demo so you can try everything first.</li>
+          <li><strong>iPhone, iPad, and Apple TV</strong> apps are in public beta on <a href="https://testflight.apple.com/join/893B2HRj">TestFlight</a>. They list the servers they find on your home network, or you type an address. With no server, Try the demo plays sample films.</li>
         </ul>
         <!-- App Store link, uncomment when 1.x is live.
         <p><a href="https://apps.apple.com/app/id6815795649">Get Broadwave on the App Store</a></p>

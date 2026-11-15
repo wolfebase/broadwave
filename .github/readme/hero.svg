@@ -20,7 +20,7 @@
  <text x="74" y="262" font-size="124" font-weight="900" letter-spacing="-5" fill="url(#shimmer)">Broadwave</text>
  <text x="80" y="318" font-size="32" font-weight="700" fill="#F5F7FA">Free TV from the sky.</text>
  <text x="80" y="358" font-size="32" font-weight="700" fill="url(#word)">Live on every screen you own.</text>
- <text x="80" y="398" font-size="18" fill="#AEB7C5">Live TV · DVR · Multiview · a 14-day guide — from your antenna, with no subscription.</text>
+ <text x="80" y="398" font-size="18" fill="#AEB7C5">Live TV · DVR · Multiview · Whole-Home Sync — from your antenna, with no subscription.</text>
 </g>
 <g transform="translate(860 118)"><animateTransform attributeName="transform" type="translate" values="860 118;860 106;860 118" dur="6s" repeatCount="indefinite"/>
  <rect x="0" y="0" width="340" height="170" rx="18" fill="url(#glass)" stroke="url(#rim)" stroke-width="1.2"/>

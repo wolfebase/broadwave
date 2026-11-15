@@ -4,23 +4,20 @@ Broadwave is live TV and DVR for your antenna. One person in the house runs the 
 
 ## Get started
 
-1. Run the server on Linux:
+1. Run the server. On a Linux computer with Docker:
 
    ```bash
-   docker run -d --name broadwave --network host --restart unless-stopped \
-     -e PUID=$(id -u) -e PGID=$(id -g) \
-     -v ~/broadwave:/config \
-     ghcr.io/wolfebase/broadwave:latest
+   curl -fsSL https://raw.githubusercontent.com/wolfebase/broadwave/main/scripts/install.sh | bash
    ```
 
-   Unraid: add the Broadwave template and leave PUID at 99 and PGID at 100. Docker Desktop on a Mac or Windows PC: publish port 8477 and set `HDHR_HOST` to the tuner's address. The README has every command. [Set up a server](https://wolfebase.github.io/broadwave/docs/server.html) walks through it.
+   Run the same command again to update. Unraid: add the Broadwave template and leave PUID at 99 and PGID at 100. Docker Desktop on a Mac or Windows PC: publish port 8477 and set `HDHR_HOST` to the tuner's address. [Install](https://wolfebase.github.io/broadwave/docs/install.html) has every way, and [Set up a server](https://wolfebase.github.io/broadwave/docs/server.html) walks through it.
 2. Open `http://<server>:8477` and follow setup. It finds an HDHomeRun on your network by itself. When none appears, enter the tuner's address.
 3. Watch.
 
 ## Getting the apps
 
 - **Web app, now, on every device.** Open `http://<server>:8477` in any browser: phone, tablet, computer, or a TV's browser. Live TV, the guide, recordings, and multiview all work. On a phone, add it to the home screen.
-- **iPhone, iPad, and Apple TV apps: coming soon to the App Store.** On the same network they find the server on their own, or you type its address. Until then, use the web app.
+- **iPhone, iPad, and Apple TV apps: public beta on [TestFlight](https://testflight.apple.com/join/893B2HRj).** On the same network they find the server on their own, or you type its address.
 
 ## Away from home
 

@@ -11,16 +11,13 @@ Want to look around first? Choose **Try the demo** in the app. It plays sample f
 
 ## 1. Start the server
 
-On a Linux computer or a NAS:
+On a Linux computer with Docker:
 
 ```bash
-docker run -d --name broadwave --network host --restart unless-stopped \
-  -e PUID=$(id -u) -e PGID=$(id -g) \
-  -v ~/broadwave:/config \
-  ghcr.io/wolfebase/broadwave:latest
+curl -fsSL https://raw.githubusercontent.com/wolfebase/broadwave/main/scripts/install.sh | bash
 ```
 
-On Unraid, add the Broadwave template. On Docker Desktop for Mac or Windows, [Install](install.md) has the command that publishes the port.
+It checks Docker, your time zone, and the port, then starts the server. On Unraid, add the [Broadwave template](install.md#unraid). On a NAS app or Docker Desktop, [Install](install.md) has the steps.
 
 ## 2. Open setup
 
