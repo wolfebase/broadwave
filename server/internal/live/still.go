@@ -157,8 +157,16 @@ func StillArgs(src string, at float64, width int, dest string) []string {
 		"-ss", strconv.FormatFloat(back, 'f', 3, 64),
 		"-map", "0:v:0", "-an", "-sn", "-dn",
 		"-frames:v", "1",
-		"-vf", fmt.Sprintf("yadif=deint=interlaced,scale=%d:-2:out_range=full", width),
+		"-vf", fmt.Sprintf("yadif=deint=interlaced,%s", displayScale(width, ":out_range=full")),
 		"-pix_fmt", "yuvj420p", "-q:v", "3",
 		"-f", "image2", dest,
 	}
+}
+
+// displayScale is a scale filter to width at the picture's display shape,
+// with square pixels. An SD broadcast stores 704 or 720 by 480 and says how
+// wide its pixels are, so a scale by the stored size (-2) made a 16:9
+// picture 1920x1280 and a 4:3 one 1920x1310. opts are more scale options.
+func displayScale(width int, opts string) string {
+	return fmt.Sprintf("scale=%d:trunc(ow/dar/2)*2%s,setsar=1", width, opts)
 }

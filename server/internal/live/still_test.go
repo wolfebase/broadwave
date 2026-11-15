@@ -75,3 +75,23 @@ func TestARecordingStillIsMadeOnceAtItsTime(t *testing.T) {
 		t.Fatalf("left behind %v", entries)
 	}
 }
+
+func TestARecordingStillOfAnSDShowHasItsDisplayShape(t *testing.T) {
+	ffmpeg := ffmpegOrSkip(t)
+	dir := t.TempDir()
+	src := filepath.Join(dir, "sd.ts")
+	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc2=size=704x480:rate=30000/1001", "-t", "3",
+		"-vf", "setsar=10/11", "-c:v", "mpeg2video", "-g", "15", "-f", "mpegts", src)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("sample: %v %s", err, out)
+	}
+	h := &Hub{Dir: dir, FFmpeg: ffmpeg}
+	path, err := h.RecordingStill(context.Background(), 4, src, 1.5, 1280)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := jpegSize(t, path); got != "1280,960,1:1" {
+		t.Fatalf("a 4:3 picture 1280 wide: %s", got)
+	}
+}

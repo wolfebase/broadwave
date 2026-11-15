@@ -123,7 +123,7 @@ func FrameArgs(jobs []FrameJob, dir string) []string {
 		// ffmpeg refuses the file and the still never lands.
 		for _, width := range FrameWidths {
 			part := filepath.Join(dir, frameName(job.ChannelID, width)+".part")
-			args = append(args, "-map", mapSpec, "-vf", fmt.Sprintf("scale=%d:-2", width), "-frames:v", "1", "-f", "image2", part)
+			args = append(args, "-map", mapSpec, "-vf", displayScale(width, ""), "-frames:v", "1", "-f", "image2", part)
 		}
 	}
 	return args

@@ -47,7 +47,7 @@ func TestFrameArgsSampleTheOpenMux(t *testing.T) {
 	if !strings.Contains(text, "0:p:3:v:0") || !strings.Contains(text, "0:p:4:v:0") {
 		t.Fatal("each program on the mux needs a frame")
 	}
-	if !strings.Contains(text, "scale=480:-2") || !strings.Contains(text, "scale=1280:-2") || !strings.Contains(text, "scale=1920:-2") {
+	if !strings.Contains(text, "scale=480:") || !strings.Contains(text, "scale=1280:") || !strings.Contains(text, "scale=1920:") {
 		t.Fatal("every size is written")
 	}
 	if strings.Count(text, "-f image2") != 6 {
@@ -117,6 +117,45 @@ func TestAFullMuxGrabLandsEveryProgram(t *testing.T) {
 		t.Fatal("no grab runs past the cap")
 	}
 	grabAtRealTime(t, ffmpeg, sample, 10*time.Second, jobs, dir)
+}
+
+// An SD broadcast stores 720 or 704 by 480 and says how wide its pixels
+// are. A still scaled by the stored size alone came out 1920x1280 for a
+// 16:9 picture.
+func TestAnSDStillHasItsDisplayShape(t *testing.T) {
+	ffmpeg := ffmpegOrSkip(t)
+	for _, c := range []struct {
+		size, sar string
+		heights   map[int]string
+	}{
+		{"720x480", "32/27", map[int]string{480: "270", 1280: "720", 1920: "1080"}},
+		{"704x480", "10/11", map[int]string{480: "360", 1280: "960", 1920: "1440"}},
+	} {
+		dir := t.TempDir()
+		sample := filepath.Join(dir, "sd.ts")
+		gen := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+			"-f", "lavfi", "-i", "testsrc2=size="+c.size+":rate=30000/1001",
+			"-t", "4", "-vf", "setsar="+c.sar, "-c:v", "mpeg2video", "-b:v", "3M", "-g", "15", "-f", "mpegts", sample)
+		if out, err := gen.CombinedOutput(); err != nil {
+			t.Fatalf("sample: %v %s", err, out)
+		}
+		grabAtRealTime(t, ffmpeg, sample, 4*time.Second, []FrameJob{{ChannelID: 802}}, dir)
+		for width, height := range c.heights {
+			if got := jpegSize(t, filepath.Join(dir, frameName(802, width))); got != fmt.Sprintf("%d,%s,1:1", width, height) {
+				t.Errorf("%s at %s, %d wide: %s", c.size, c.sar, width, got)
+			}
+		}
+	}
+}
+
+// jpegSize is a picture's width, height, and pixel shape.
+func jpegSize(t *testing.T, path string) string {
+	t.Helper()
+	out, err := exec.Command("ffprobe", "-v", "error", "-show_entries", "stream=width,height,sample_aspect_ratio", "-of", "csv=p=0", path).Output()
+	if err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func ffmpegOrSkip(t *testing.T) string {
