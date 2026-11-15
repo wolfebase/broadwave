@@ -595,3 +595,17 @@ func TestRecordingPlaysTheStoredTrackOnlyWhenTheFileHasIt(t *testing.T) {
 		t.Fatalf("a PID the file lacks is mapped: %d", g.AudioPID)
 	}
 }
+
+// A twin on a frequency already tuned (the station's 4.2 is warm) joins that
+// tune and takes no tuner, so it needs no free one.
+func TestATwinOnATunedFrequencyTakesNoTuner(t *testing.T) {
+	h, m := testHub(t)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.twinRidesLocked(store.SourceChannel{FrequencyHz: m.freq}) {
+		t.Fatal("a twin on a tuned frequency needs a tuner")
+	}
+	if h.twinRidesLocked(store.SourceChannel{FrequencyHz: m.freq + 6000000}) || h.twinRidesLocked(store.SourceChannel{}) {
+		t.Fatal("a twin on another frequency rides a tune")
+	}
+}

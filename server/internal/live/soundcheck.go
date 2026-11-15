@@ -66,6 +66,9 @@ type soundJob struct {
 	id    int64
 	guide string
 	twin  store.Channel
+	// stored is set when this tune has not read its PMT and the last
+	// tune's tracks stand in.
+	stored bool
 }
 
 var errSoundStopped = errors.New("the twin's tuner was needed")
@@ -132,9 +135,10 @@ func (h *Hub) RunSoundChecks(ctx context.Context) {
 // (noteSound), so a check that does not run says why.
 func (h *Hub) soundJobDue(ctx context.Context, now time.Time) (soundJob, bool) {
 	type candidate struct {
-		id    int64
-		guide string
-		last  *time.Time
+		id     int64
+		guide  string
+		last   *time.Time
+		stored bool
 	}
 	var list []candidate
 	type skip struct {
@@ -167,7 +171,7 @@ func (h *Hub) soundJobDue(ctx context.Context, now time.Time) (soundJob, bool) {
 			skips = append(skips, skip{id, guide, "waiting: the last check had no answer; next try at " + try.until.Format("15:04")})
 			continue
 		}
-		list = append(list, candidate{id, guide, f.channel.SoundCheckedAt})
+		list = append(list, candidate{id, guide, f.channel.SoundCheckedAt, len(f.tracks) == 0})
 	}
 	h.mu.Unlock()
 	for _, sk := range skips {
@@ -206,7 +210,7 @@ func (h *Hub) soundJobDue(ctx context.Context, now time.Time) (soundJob, bool) {
 			program = onNow[twin.ID]
 		}
 		if soundDue(c.last, program, now) {
-			return soundJob{id: c.id, guide: c.guide, twin: twin}, true
+			return soundJob{id: c.id, guide: c.guide, twin: twin, stored: c.stored}, true
 		}
 		h.noteSound(c.id, c.guide, "checked: "+c.last.Local().Format("15:04")+"; next at the next program or "+c.last.Add(soundRecheck).Local().Format("15:04"))
 	}
@@ -298,7 +302,11 @@ func (f *feed) watched() bool {
 // runSoundCheck runs one check and keeps its answer, or waits longer before
 // the next try when it did not decide.
 func (h *Hub) runSoundCheck(ctx context.Context, job soundJob) {
-	h.noteSound(job.id, job.guide, "checking against "+job.twin.DisplayNumber)
+	from := "this tune's program map"
+	if job.stored {
+		from = "the tracks the last tune stored; this tune's program map is not read"
+	}
+	h.noteSound(job.id, job.guide, "checking against "+job.twin.DisplayNumber+", tracks from "+from)
 	began := time.Now()
 	v, err := h.checkSound(ctx, job)
 	took := time.Since(began).Round(time.Second)
@@ -356,7 +364,7 @@ func (h *Hub) checkSound(ctx context.Context, job soundJob) (soundVerdict, error
 		m = muxOf(h, f)
 		main, lang, ok = soundPair(f.soundTracks(), f.channel.SoundSwapped)
 	}
-	twinUp := h.channels[job.twin.ID] != nil
+	twinUp := h.channels[job.twin.ID] != nil || h.twinRidesLocked(src)
 	h.mu.Unlock()
 	if m == nil || !ok {
 		return soundVerdict{}, errors.New("the channel is no longer tuned")
@@ -471,9 +479,12 @@ func (h *Hub) holdTwin(ctx context.Context, src store.SourceChannel) (context.Co
 			h.mu.Unlock()
 		}, nil
 	}
+	rides := h.twinRidesLocked(src)
 	h.mu.Unlock()
-	if open, g := h.tunerGateOpen(ctx, src, tunerGate.backgroundOpen); !open {
-		return nil, nil, nil, soundGateError{fmt.Sprintf("no tuner for %s: %s", src.GuideNumber, g.why())}
+	if !rides {
+		if open, g := h.tunerGateOpen(ctx, src, tunerGate.backgroundOpen); !open {
+			return nil, nil, nil, soundGateError{fmt.Sprintf("no tuner for %s: %s", src.GuideNumber, g.why())}
+		}
 	}
 	tctx, cancel := context.WithCancel(ctx)
 	state := &sweepState{cancel: cancel}
@@ -515,6 +526,13 @@ func (h *Hub) holdTwin(ctx context.Context, src store.SourceChannel) (context.Co
 			h.dropIfUnusedLocked(f)
 		}
 	}, nil
+}
+
+// twinRidesLocked reports a twin whose frequency this server already has
+// tuned (another subchannel of the station is watched or warm): its tune
+// joins that one and takes no tuner, so the gates do not apply.
+func (h *Hub) twinRidesLocked(src store.SourceChannel) bool {
+	return src.FrequencyHz > 0 && h.muxes[src.FrequencyHz] != nil
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) error {
