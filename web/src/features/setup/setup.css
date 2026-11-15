@@ -317,6 +317,11 @@
   justify-self: start;
 }
 
+/* No wider than the form: a file picker's own width pushed past a phone's edge. */
+.setup-form .field {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .setup-file input[type="file"] {
   min-height: 0;
   padding: 8px 0;

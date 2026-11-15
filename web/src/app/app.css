@@ -4,20 +4,17 @@
   flex-direction: column;
 }
 
-/* A phone on its side puts the notch at a side. */
+/* Installed on an iPhone or iPad the page draws under the status bar and, on its
+   side, the notch (viewport-fit=cover). In a browser tab the insets are 0. */
 .shell:not(.immersive) {
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
 }
 
-/* Installed on an iPhone or iPad, the page draws under the status bar
-   (viewport-fit=cover, black-translucent), so the bar and the pages start
-   below it. In a browser tab the insets are 0. */
 .topbar {
   position: sticky;
-  top: calc(10px + env(safe-area-inset-top, 0px));
+  top: calc(10px + env(safe-area-inset-top));
   z-index: 40;
-  margin: calc(10px + env(safe-area-inset-top, 0px)) auto 0;
+  margin: 10px auto 0;
   width: min(var(--content-max), calc(100% - 24px));
   display: flex;
   align-items: center;
@@ -78,7 +75,7 @@
   display: none;
 }
 
-/* A tab keeps its width; when they don't fit, the bar scrolls (above) instead of drawing them over each other. */
+/* A tab keeps its width; when they don't fit, the bar scrolls instead of drawing them over each other. */
 .tabs > li {
   display: flex;
   flex: none;
@@ -488,39 +485,9 @@ html[data-theater="1"] .topbar {
   justify-content: center;
 }
 
-.layout-phone .brand {
-  display: none;
-}
-
-/* The bar has no room beside the tabs, so on a phone the word sits just above it.
-   Hidden, a phone showed a stale guide with nothing to say the server was gone. */
+.layout-phone .brand,
 .layout-phone .topbar-right .offline {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: calc(100% - 16px);
-  padding: 6px 12px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface2);
-  border: 1px solid var(--color-line);
-  font-weight: 600;
-  pointer-events: none;
-}
-
-.layout-phone .offline-full {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.layout-phone .offline-short {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: none;
 }
 
 .layout-phone .topbar {
@@ -595,34 +562,6 @@ html[data-theater="1"] .topbar {
   }
 }
 
-/* A phone on its side: icons only and a shorter bar, so the page keeps its height. */
-@media (orientation: landscape) and (max-height: 520px) {
-  .layout-phone .tab-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  .layout-phone .tab {
-    min-height: 40px;
-  }
-
-  .layout-phone .topbar {
-    left: max(8px, env(safe-area-inset-left));
-    right: max(8px, env(safe-area-inset-right));
-  }
-
-  :root .shell.layout-phone:not(.immersive) {
-    padding-bottom: calc(max(10px, env(safe-area-inset-bottom)) + 52px);
-  }
-}
-
 /* More: Schedule and Settings, in a small glass sheet over the bar. */
 .nav-more {
   position: absolute;
@@ -676,9 +615,6 @@ html[data-theater="1"] .topbar {
 
 .shell.layout-phone:not(.immersive) {
   height: 100%;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
   padding-bottom: calc(max(10px, env(safe-area-inset-bottom)) + 66px);
 }
 
@@ -707,34 +643,13 @@ html[data-theater="1"] .topbar {
   margin-top: 24px;
 }
 
-/* Sized for a 1920 px page and scaled down with it: a TV browser that reports
-   960 px drew the six tabs on top of each other. */
 .layout-tv .tab {
-  padding: clamp(9px, 0.73vw, 14px) clamp(12px, 1.355vw, 26px);
+  padding: 0.875rem 1.625rem;
   font-size: var(--type-headline-size);
 }
 
 .layout-tv .tab-icon {
-  font-size: clamp(20px, 1.459vw, 28px);
-}
-
-@media (max-width: 1279px) {
-  .layout-tv .topbar {
-    width: calc(100% - 32px);
-    top: 12px;
-    margin-top: 12px;
-    padding-left: 18px;
-    gap: var(--space-2);
-  }
-
-  .layout-tv .brand-word {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
+  font-size: 1.75rem;
 }
 
 .shell.immersive .content:has(.setup) {
@@ -797,7 +712,6 @@ html[data-theater="1"] .topbar {
 .not-found-links .btn {
   text-decoration: none;
 }
-
 .layout-phone .topbar-right:empty { display: none; }
 
 /* The mini player floats over the bottom corner. The page keeps room under it

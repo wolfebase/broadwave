@@ -97,7 +97,6 @@
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-  line-clamp: 3;
   overflow: hidden;
   padding-bottom: 0.1em;
 }
@@ -105,11 +104,6 @@
 .hero-sub {
   font-size: var(--type-title3-size);
   color: var(--color-text-secondary);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
 }
 
 .hero-line {

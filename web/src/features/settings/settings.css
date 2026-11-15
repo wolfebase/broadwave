@@ -1353,3 +1353,15 @@ html[data-layout="tv"] .tuner-icon {
   justify-content: flex-start;
   padding: 0 0 12px var(--set-pad);
 }
+
+/* In forced colors the accent swatches keep their colour: they are the choice itself. */
+@media (forced-colors: active) {
+  .accent-dot {
+    forced-color-adjust: none;
+  }
+
+  .accent-choice:has(input:checked) .accent-dot {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
+}

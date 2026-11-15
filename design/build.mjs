@@ -17,8 +17,6 @@ function hexToRGBA(hex) {
   return { r: n(0), g: n(2), b: n(4), a: h.length === 8 ? n(6) / 255 : 1 };
 }
 
-const rem = (px) => `${+(px / 16).toFixed(4)}rem`;
-
 function css() {
   const lines = [`/* ${header} */`, ":root {"];
   for (const [k, v] of Object.entries(t.color)) lines.push(`  --color-${kebab(k)}: ${v};`);
@@ -26,8 +24,7 @@ function css() {
   for (const [k, v] of Object.entries(t.radius)) lines.push(`  --radius-${k}: ${v}px;`);
   for (const [k, v] of Object.entries(t.space)) lines.push(`  --space-${k}: ${v}px;`);
   for (const [k, v] of Object.entries(t.type)) {
-    // rem, so a larger default font size in the browser makes the text larger.
-    lines.push(`  --type-${k}-size: ${rem(v.size)};`);
+    lines.push(`  --type-${k}-size: ${v.size}px;`);
     lines.push(`  --type-${k}-weight: ${v.weight};`);
     lines.push(`  --type-${k}-tracking: ${v.tracking}em;`);
   }
@@ -36,13 +33,12 @@ function css() {
   lines.push(`  --motion-slow: ${t.motion.slow}ms;`);
   lines.push(`  --ease-spring: cubic-bezier(0.2, 0.9, 0.25, 1.05);`);
   lines.push(`  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);`);
-  // The 10-foot sizes are for a 1920 px wide page. Many TV browsers report 960 or
-  // 1280 px, where the full sizes crowd the screen, so they scale with the width
-  // and never go below the desktop size.
-  lines.push("}", "", 'html[data-layout="tv"] {');
+  // The 10-foot sizes are for a 1920 px page, in rem of a root that follows the
+  // width: many TV browsers report 960 or 1280 px, where the full sizes crowd
+  // the screen. The root never drops below what keeps text at the desktop size.
+  lines.push("}", "", 'html[data-layout="tv"] {', "  font-size: clamp(10px, 0.834vw, 16px);");
   for (const [k, v] of Object.entries(t.type)) {
-    const tv = Math.round(v.size * t.tvScale);
-    lines.push(`  --type-${k}-size: clamp(${rem(v.size)}, ${Math.ceil((tv / 1920) * 100_000) / 1000}vw, ${tv}px);`);
+    lines.push(`  --type-${k}-size: ${Math.round(v.size * t.tvScale) / 16}rem;`);
   }
   lines.push("}", "");
   return lines.join("\n");

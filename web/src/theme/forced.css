@@ -1,52 +1,7 @@
-/* Forced colors (Windows High Contrast, and contrast themes elsewhere). The
-   browser drops backgrounds and shadows, so whatever a fill or a glow alone
-   said goes missing: where focus is, the chosen tab or choice, progress, the
-   on-air line. Those get system colors here. */
+/* Forced colors (Windows High Contrast) drop box-shadows, and the focus ring is one. */
 @media (forced-colors: active) {
-  /* The focus ring is a box-shadow, which forced colors removes. */
   :root :focus-visible {
     outline: 3px solid Highlight !important;
     outline-offset: 2px !important;
-  }
-
-  :root :is(.tab.on, .chip.on, .seg.on, .nav-more-link.on, .glass-icon.on, [aria-pressed="true"], [role="radio"][aria-checked="true"], [role="tab"][aria-selected="true"]) {
-    forced-color-adjust: none;
-    background: Highlight;
-    color: HighlightText;
-    border-color: Highlight;
-  }
-
-  :root .progress {
-    forced-color-adjust: none;
-    background: Canvas;
-    outline: 1px solid CanvasText;
-  }
-
-  :root .progress-fill,
-  :root :is(.now-line, .now-flag) {
-    forced-color-adjust: none;
-    background: Highlight;
-    color: HighlightText;
-    box-shadow: none;
-  }
-
-  /* A program is a box; without its fill the titles float. */
-  :root .guide-cell {
-    border: 1px solid CanvasText;
-  }
-
-  /* The accent swatches are the choice itself. */
-  :root .accent-dot {
-    forced-color-adjust: none;
-  }
-
-  :root .accent-choice:has(input:checked) .accent-dot {
-    outline: 3px solid Highlight;
-    outline-offset: 2px;
-  }
-
-  /* Live and recording marks keep their red. */
-  :root :is(.brand-tally, .rec-dot, .live-dot-light) {
-    forced-color-adjust: none;
   }
 }

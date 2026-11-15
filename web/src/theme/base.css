@@ -269,7 +269,6 @@ html[data-layout="tv"] :focus-visible {
   font-weight: 600;
   font-size: var(--type-footnote-size);
   white-space: nowrap;
-  /* In a scrolling row a chip keeps its width. The TV's 56 px minimum let it shrink under its label. */
   flex-shrink: 0;
   transition: all var(--motion-fast) var(--ease-out);
 }
@@ -712,7 +711,6 @@ html[data-layout="tv"] .source-row input {
 }
 
 .poster {
-  position: relative;
   width: auto;
   height: auto;
   max-width: 100%;
@@ -727,8 +725,6 @@ html[data-layout="tv"] .source-row input {
 
 .field {
   display: grid;
-  /* No wider than the form: a file picker's own width pushed past a phone's edge. */
-  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   font-size: var(--type-footnote-size);
   color: var(--color-text-secondary);
