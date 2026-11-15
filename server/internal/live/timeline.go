@@ -13,6 +13,17 @@ import (
 
 const ptsWrap = int64(1) << 33
 
+// anchorStep is how far ahead of its anchor a timestamp gets before the
+// anchor moves up to it.
+const anchorStep = 90000 * 600
+
+// stampSlack is the overlap a segment may have with the one before it
+// and still keep its own date. A playlist duration is rounded to a
+// millisecond, so the end worked out from it can sit a fraction of a
+// millisecond past the next start. Pinning that moved the clock forward
+// for good, by a different amount on each encode.
+const stampSlack = 2 * time.Millisecond
+
 // SegmentPTS returns the earliest video presentation time in the start of an
 // MPEG-TS segment, in 90 kHz ticks. It falls back to audio when no video PES
 // header is found.
@@ -114,6 +125,15 @@ func (t *Timeline) Wall(pts int64) time.Time {
 	if t.set {
 		d := ptsDiff(pts, t.pts)
 		if d > -90000*3600 && d < 90000*3600 {
+			// The anchor follows the broadcast in whole seconds, which
+			// convert exactly. Left where the tune began, an hour of
+			// television would read as a station clock reset.
+			if d >= anchorStep {
+				whole := d / 90000
+				t.pts = (t.pts + whole*90000) % ptsWrap
+				t.wall = t.wall.Add(time.Duration(whole) * time.Second)
+				d -= whole * 90000
+			}
 			return t.wall.Add(time.Duration(d) * time.Second / 90000)
 		}
 	}
@@ -390,7 +410,7 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 				// A short step the jump check missed overlaps the previous
 				// segment. Pin it to that segment's end and re-anchor, so the
 				// program timeline stays monotonic and the next segment continues.
-				if haveEnd && wall.Before(lastEnd) {
+				if haveEnd && lastEnd.Sub(wall) > stampSlack {
 					tl.Reanchor(pts, lastEnd)
 					wall = tl.Wall(pts)
 				}
