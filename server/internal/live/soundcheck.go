@@ -488,19 +488,19 @@ func (h *Hub) settleSound(ctx context.Context, id int64, swapped bool, by string
 	if before.SoundSwapped == swapped {
 		return
 	}
-	main, lang := "the main language", "the second language"
+	name := before.DisplayNumber + " " + before.DisplayName
+	msg := fmt.Sprintf("%s: its two sound tracks traded places, so the main language plays as the main sound. Checked against %s.", name, twin.DisplayNumber)
 	h.mu.Lock()
 	if f := h.channels[id]; f != nil {
 		if m, l, ok := soundPair(f.tracks, f.channel.SoundSwapped); ok {
-			main, lang = trackName(m), trackName(l)
+			main, lang := trackName(m), trackName(l)
+			msg = fmt.Sprintf("%s: the track marked %s carries the %s sound, so it plays as %s. Checked against %s.", name, lang, main, main, twin.DisplayNumber)
+			if !swapped {
+				msg = fmt.Sprintf("%s: the track marked %s carries the %s sound again, so it plays as %s. Checked against %s.", name, main, main, main, twin.DisplayNumber)
+			}
 		}
 	}
 	h.mu.Unlock()
-	name := before.DisplayNumber + " " + before.DisplayName
-	msg := fmt.Sprintf("%s: the track marked %s carries the %s sound, so it plays as %s. Checked against %s.", name, lang, main, main, twin.DisplayNumber)
-	if !swapped {
-		msg = fmt.Sprintf("%s: the track marked %s carries the %s sound again, so it plays as %s. Checked against %s.", name, main, main, main, twin.DisplayNumber)
-	}
 	_ = h.Store.AddEvent(ctx, "sound", msg)
 }
 

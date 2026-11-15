@@ -1109,3 +1109,32 @@ func TestPatchChannelTwinChoice(t *testing.T) {
 		t.Fatalf("an unknown choice answered %d", code)
 	}
 }
+
+// A swap set by hand is stored with its time and says it was by hand, so the
+// next program's check knows what it replaces.
+func TestPatchChannelSoundSwappedIsByHand(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	dev := hdhr.Device{DeviceID: "FLEX1", BaseURL: "http://flex", LineupURL: "http://flex/lineup.json", TunerCount: 4}
+	if err := st.UpsertDevice(ctx, dev, []hdhr.Channel{
+		{GuideNumber: "104.1", GuideName: "KBWV", VideoCodec: "HEVC", AudioCodec: "AC4", HD: true, StreamURL: "http://flex:5004/auto/v104.1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	chs, _ := st.Channels(ctx, false)
+	h := (&Server{Store: st, Hub: live.New(st, t.TempDir(), "ffmpeg", "libx264")}).Handler()
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/channels/%d", chs[0].ID), strings.NewReader(`{"soundSwapped":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var ch store.Channel
+	if err := json.Unmarshal(rec.Body.Bytes(), &ch); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if !ch.SoundSwapped || ch.SoundCheckedBy != "hand" || ch.SoundCheckedAt == nil || time.Since(*ch.SoundCheckedAt) > time.Minute {
+		t.Fatalf("%+v", ch)
+	}
+	if !strings.Contains(rec.Body.String(), `"soundCheckedBy":"hand"`) {
+		t.Fatalf("body %s", rec.Body)
+	}
+}
