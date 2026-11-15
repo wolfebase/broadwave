@@ -439,7 +439,9 @@ func TestRenditionMapsChosenPID(t *testing.T) {
 	}
 }
 
-// Two renditions of one broadcast, stamped by one Timeline, must agree on wall time.
+// Two renditions of one broadcast, each with its own Timeline seeded the way
+// seedClockLocked seeds it, must give the same broadcast frame the same
+// date: to the millisecond the playlist writes.
 func TestRenditionsShareOneTimeline(t *testing.T) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
@@ -454,7 +456,7 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 		t.Fatalf("source: %v %s", err, out)
 	}
 	source := Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}
-	run := func(r Rendition) string {
+	run := func(r Rendition) *rendition {
 		out := filepath.Join(dir, r.Key())
 		if err := os.MkdirAll(out, 0o755); err != nil {
 			t.Fatal(err)
@@ -476,31 +478,40 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
 		}
-		packErr := Pack(out, stdout, nil)
+		pin := &packInput{cur: stdout}
+		packErr := Pack(out, pin, nil)
 		waitErr := cmd.Wait()
 		if packErr != nil || waitErr != nil {
 			t.Fatalf("%s: pack %v wait %v %s", r.Key(), packErr, waitErr, stderr.String())
 		}
-		return out
+		return &rendition{spec: r, dir: out, input: pin, clock: NewTimeline()}
 	}
-	copyDir := run(Rendition{Video: "copy", Audio: "copy"})
-	smallDir := run(Rendition{Video: "540", Audio: "aac2", Mode: "broadcast"})
+	copied := run(Rendition{Video: "copy", Audio: "copy"})
+	small := run(Rendition{Video: "540", Audio: "aac2", Mode: "broadcast"})
 
-	tl := NewTimeline()
 	fixed := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
-	tl.now = func() time.Time { return fixed }
+	copied.clock.now = func() time.Time { return fixed }
+	// The second encode's own guess would be seconds off; the seed decides.
+	small.clock.now = func() time.Time { return fixed.Add(2500 * time.Millisecond) }
+	f := &feed{renditions: map[string]*rendition{"copy": copied, "540": small}}
 	type timedSeg struct {
 		name string
 		at   time.Time
 		dur  time.Duration
+		// broadcast is the segment's first picture on the broadcast clock.
+		broadcast int64
 	}
-	times := func(d string) []timedSeg {
-		raw, err := readPlaylist(filepath.Join(d, "index.m3u8"))
+	times := func(r *rendition) []timedSeg {
+		seedClockLocked(f, r)
+		raw, err := readPlaylist(filepath.Join(r.dir, "index.m3u8"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		var p playlistStamper
-		stamped := string(p.stamp(d, raw, tl))
+		off, ok := r.input.broadcastOffset()
+		if !ok {
+			t.Fatalf("%s: no broadcast offset", r.spec.Key())
+		}
+		stamped := string(r.stamper.stamp(r.dir, raw, r.clock))
 		var out []timedSeg
 		var last time.Time
 		var dur time.Duration
@@ -517,18 +528,22 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 				dur = time.Duration(f * float64(time.Second))
 				haveDur = true
 			} else if haveDur && strings.HasSuffix(line, ".m4s") {
-				out = append(out, timedSeg{name: line, at: last, dur: dur})
+				pts, ok := r.stamper.cache[line]
+				if !ok {
+					t.Fatalf("%s: no time for %s", r.spec.Key(), line)
+				}
+				out = append(out, timedSeg{name: line, at: last, dur: dur, broadcast: (pts + off) % ptsWrap})
 				haveDur = false
 			}
 		}
 		return out
 	}
-	a, b := times(copyDir), times(smallDir)
+	a, b := times(copied), times(small)
 	if len(a) < 3 || len(b) < 3 {
 		t.Fatalf("expected segments, got %d and %d", len(a), len(b))
 	}
-	for _, d := range []string{copyDir, smallDir} {
-		raw, err := os.ReadFile(filepath.Join(d, "index.m3u8"))
+	for _, r := range []*rendition{copied, small} {
+		raw, err := os.ReadFile(filepath.Join(r.dir, "index.m3u8"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -536,22 +551,22 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 	}
 	// The same segment name is the same frame. A trailing partial from EOF
 	// may belong to only one rendition.
-	n := len(a)
-	if len(b) < n {
-		n = len(b)
-	}
 	if d := len(a) - len(b); d > 1 || d < -1 {
 		t.Fatalf("cuts differ: %d copy segments and %d transcode segments", len(a), len(b))
 	}
+	n := min(len(a), len(b))
 	if len(a) != len(b) {
 		n--
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if a[i].name != b[i].name {
 			t.Errorf("segment %d is %s on copy and %s on the transcode", i, a[i].name, b[i].name)
 		}
-		if d := a[i].at.Sub(b[i].at); d > 50*time.Millisecond || d < -50*time.Millisecond {
-			t.Errorf("%s: renditions disagree by %v (%v vs %v)", a[i].name, d, a[i].at, b[i].at)
+		// fps= can put a transcode's picture up to half a frame off the
+		// broadcast's; the date must move with it.
+		step := time.Duration(ptsDiff(b[i].broadcast, a[i].broadcast)) * time.Second / 90000
+		if d := b[i].at.Sub(a[i].at) - step; d > time.Millisecond || d < -time.Millisecond {
+			t.Errorf("%s: the same broadcast frame is %v apart (%v vs %v, pictures %v apart)", a[i].name, d, a[i].at, b[i].at, step)
 		}
 		if d := a[i].dur - b[i].dur; d > 80*time.Millisecond || d < -80*time.Millisecond {
 			t.Errorf("%s: duration %s vs %s", a[i].name, a[i].dur, b[i].dur)
