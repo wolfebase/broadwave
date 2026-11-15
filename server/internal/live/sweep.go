@@ -321,7 +321,7 @@ func (h *Hub) sweepAllowed(ctx context.Context, ch store.SourceChannel) bool {
 			// A recording or a viewer on another tuner leaves this one to
 			// its own free-tuner count: a recording all evening on one box
 			// stopped every still on the other.
-			if m := muxOf(h, f); m == nil || (hostOf(m.host) != host && hostOf(m.base) != host) {
+			if m := muxOf(h, f); m != nil && hostOf(m.host) != host && hostOf(m.base) != host {
 				continue
 			}
 			if f.recordingNow() || f.heldOutside() || f.tuneHeld() {
