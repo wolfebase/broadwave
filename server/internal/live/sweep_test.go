@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,6 +191,27 @@ func TestSweepGates(t *testing.T) {
 		t.Fatal("took the last free tuner")
 	}
 	srv.FreeAll()
+	// A viewer on another tuner box leaves this one to its free tuners.
+	other := &mux{freq: 701000000, tuner: 0, host: "192.0.2.9", base: "http://192.0.2.9", feeds: map[string]*feed{}, cancel: func() {}, body: fakeBody{}}
+	h.mu.Lock()
+	h.muxes[other.freq] = other
+	h.mu.Unlock()
+	away := addTestFeed(h, other, 9001, "9.1")
+	addTestRendition(h, away, "copy-aac2", 1, time.Now())
+	if !h.sweepAllowed(ctx, ch) {
+		t.Fatal("a viewer on another device shut this one")
+	}
+	h.mu.Lock()
+	away.recordings = append(away.recordings, &recording{id: 1})
+	h.mu.Unlock()
+	if !h.sweepAllowed(ctx, ch) {
+		t.Fatal("a recording on another device shut this one")
+	}
+	h.mu.Lock()
+	away.recordings = nil
+	h.stopFeedLocked(away)
+	delete(h.muxes, other.freq)
+	h.mu.Unlock()
 	if _, err := h.Watch(ctx, idOf(t, st, "4.1"), Rendition{Video: "copy", Audio: "aac2"}, false); err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +273,7 @@ func TestSweepPassGrabsEveryChannel(t *testing.T) {
 	waitFor(t, func() bool { return tunedCount(h) == 0 }, "the last tune was not let go")
 	// A fresh still is not swept again, and a dark target waits an hour.
 	targets := h.sweepTargets(context.Background())
-	if h.sweepDue(context.Background(), targets[0]) {
+	if h.sweepDue(targets[0], time.Now()) {
 		t.Fatal("a fresh still is due again")
 	}
 	h.mu.Lock()
@@ -259,7 +282,7 @@ func TestSweepPassGrabsEveryChannel(t *testing.T) {
 	if err := os.Remove(FramePath(h.Dir, targets[1].channels[0], 0)); err != nil {
 		t.Fatal(err)
 	}
-	if h.sweepDue(context.Background(), targets[1]) {
+	if h.sweepDue(targets[1], time.Now()) {
 		t.Fatal("a dark target is due within the hour")
 	}
 }
@@ -370,4 +393,109 @@ func TestATuneNotesItsSignal(t *testing.T) {
 		}
 		return false
 	}, "no signal noted for the tune")
+}
+
+// A channel a viewer is likely to open is swept first: a game or a new
+// episode on now, then a favorite, then a station's main channel, then the
+// rest in guide order.
+func TestSweepGoesFirstToWhatAViewerOpens(t *testing.T) {
+	srv := &fake.Server{Channels: []fake.Channel{
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
+		{Number: "4.2", Name: "KBWV2", Freq: 593000000},
+		{Number: "5.1", Name: "WTST", Freq: 533000000},
+		{Number: "6.1", Name: "KSIX", Freq: 545000000},
+		{Number: "7.1", Name: "KSVN", Freq: 557000000},
+		{Number: "8.3", Name: "KATE3", Freq: 569000000},
+		{Number: "9.2", Name: "KNIN2", Freq: 581000000},
+	}}
+	st, _ := tuneStore(t, srv)
+	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
+	ctx := context.Background()
+	four, err := st.SourceChannel(ctx, idOf(t, st, "4.1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n, number := range []string{"4.1", "4.2"} {
+		if err := st.RememberProgram(ctx, four.DeviceID, number, 593000000, n+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	yes := true
+	if _, err := st.PatchChannel(ctx, idOf(t, st, "6.1"), store.ChannelPatch{Favorite: &yes}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := st.InsertAirings(ctx, []store.Airing{
+		{ChannelID: idOf(t, st, "7.1"), Title: "Football", Category: "Sports event", Start: now.Add(-time.Hour), End: now.Add(2 * time.Hour)},
+		{ChannelID: idOf(t, st, "8.3"), Title: "A Drama", New: true, Start: now.Add(-5 * time.Minute), End: now.Add(55 * time.Minute)},
+		{ChannelID: idOf(t, st, "9.2"), Title: "A Rerun", Start: now.Add(-5 * time.Minute), End: now.Add(25 * time.Minute)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	targets := h.sweepTargets(ctx)
+	var got []string
+	for _, target := range targets {
+		got = append(got, target.first.GuideNumber)
+	}
+	if strings.Join(got, " ") != "7.1 8.3 6.1 4.1 5.1 9.2" {
+		t.Fatalf("order %v", got)
+	}
+	if !targets[1].program.Equal(now.Add(-5*time.Minute).Truncate(time.Second)) || len(targets[1].lead) != 1 {
+		t.Fatalf("the new episode's start: %+v", targets[1])
+	}
+	if len(targets[5].lead) != 0 {
+		t.Fatalf("a subchannel rerun leads nothing: %+v", targets[4])
+	}
+}
+
+// A still from before the program on now is replaced once the program has
+// settled, not only when the still is half an hour old, and never more often
+// in a day than the half-hour refresh allows.
+func TestSweepReplacesAStillFromTheProgramBefore(t *testing.T) {
+	h := &Hub{Dir: t.TempDir(), channels: map[int64]*feed{}, muxes: map[int]*mux{}}
+	now := time.Now()
+	still := func(age time.Duration) {
+		path := FramePath(h.Dir, 7, 0)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte{0xff, 0xd8}, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		at := now.Add(-age)
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := sweepTarget{key: "k", channels: []int64{7}, lead: []int64{7}, program: now.Add(-5 * time.Minute)}
+	still(12 * time.Minute)
+	if !h.sweepDue(target, now) {
+		t.Fatal("a still from the program before is due")
+	}
+	if h.sweepDue(sweepTarget{key: "k", channels: []int64{7}, program: target.program}, now) {
+		t.Fatal("only a channel a viewer opens moves a tune early")
+	}
+	if h.sweepDue(sweepTarget{key: "k", channels: []int64{7}, lead: []int64{7}, program: now.Add(-time.Minute)}, now) {
+		t.Fatal("the first minutes of a program are the one before")
+	}
+	still(4 * time.Minute)
+	if h.sweepDue(target, now) {
+		t.Fatal("the program started a minute after the still; too soon to tune again")
+	}
+	still(2 * time.Minute)
+	if h.sweepDue(target, now) {
+		t.Fatal("a still from this program is not due")
+	}
+	still(31 * time.Minute)
+	for i := range sweepDailyTunes {
+		h.noteSweepTune("k", now.Add(-23*time.Hour+time.Duration(i)*time.Minute))
+	}
+	if h.sweepDue(target, now) {
+		t.Fatal("a target with no tunes left today is due")
+	}
+	h.noteSweepTune("k", now.Add(2*time.Hour))
+	if !h.sweepDue(target, now.Add(2*time.Hour)) {
+		t.Fatal("tunes over a day old are not counted")
+	}
 }

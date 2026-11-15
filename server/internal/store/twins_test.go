@@ -520,3 +520,29 @@ func TestTwinsNeverPairTwoNetworks(t *testing.T) {
 		t.Fatalf("unrelated channels paired: %v", got)
 	}
 }
+
+// The hidden half of a pair is grabbed with its frequency: its still is the
+// picture of the shown half, the same broadcast. A channel the viewer hid is not.
+func TestFrameTargetsKeepTheHiddenHalfOfAPair(t *testing.T) {
+	s, ctx := openTwins(t)
+	for n, number := range []string{"19.1", "19.2"} {
+		if err := s.RememberProgram(ctx, "FLEX1", number, 503000000, n+3); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := byNumber(t, s, ctx)
+	if !got["19.1"][0].Hidden {
+		t.Fatal("19.1 is the hidden half of 119.1's pair")
+	}
+	yes := true
+	if _, err := s.PatchChannel(ctx, got["19.2"][0].ID, ChannelPatch{Hidden: &yes}); err != nil {
+		t.Fatal(err)
+	}
+	targets, err := s.FrameTargets(ctx, "FLEX1", 503000000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 1 || targets[0].ID != got["19.1"][0].ID || targets[0].ProgramNum != 3 {
+		t.Fatalf("targets %+v", targets)
+	}
+}

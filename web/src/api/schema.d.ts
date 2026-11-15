@@ -460,11 +460,16 @@ export interface paths {
         };
         /**
          * Channels that already have a fresh preview, and channels with no signal.
-         * @description A channel is listed when its preview JPEG exists and is newer than 10 minutes, or
-         *     45 minutes for a still the idle sweep made (`sweep: true`). The sweep tunes, one
-         *     frequency at a time, only tuners nobody uses (two at least free on the device, nothing
-         *     watched, recorded, or warm there, no recording within 3 minutes); the `stillSweep`
-         *     setting or BROADWAVE_STILL_SWEEP=0 turns it off. Cards ask for `/channels/{id}/frame` only for these ids.
+         * @description A channel is listed when its preview JPEG, or that of another row of the same broadcast
+         *     (the row a duplicate on another tuner stands for, the other half of an ATSC 1.0/3.0 pair),
+         *     exists and is newer than 45 minutes; the newer of the two is listed. The idle sweep tunes,
+         *     one frequency at a time, only tuners nobody uses (two at least free on the device, nothing
+         *     watched, recorded, or warm there, no recording within 3 minutes): first channels with a
+         *     game, live show, or new episode on now, then favorites, then each station's main channel,
+         *     then the rest. It refreshes a still at 30 minutes, or sooner once a new program has run
+         *     2 minutes on a channel it leads with, and tunes a frequency at most 48 times a day. The
+         *     `stillSweep` setting or BROADWAVE_STILL_SWEEP=0 turns it off. Cards ask for
+         *     `/channels/{id}/frame` only for these ids.
          *     `noSignal` lists the channels a tune found off the air in the last 10 minutes.
          */
         get: operations["listFrames"];
@@ -483,7 +488,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Latest preview from a mux that is already tuned. */
+        /** Latest preview from a mux that is already tuned, or of the same broadcast on another row. */
         get: operations["channelFrame"];
         put?: never;
         post?: never;
@@ -2464,7 +2469,7 @@ export interface components {
             /** Format: date-time */
             at: string;
         };
-        /** @description Channel ids whose preview JPEG exists and is newer than 10 minutes (45 for a swept still). */
+        /** @description Channel ids whose preview JPEG, or a same-broadcast row's, exists and is newer than 45 minutes. */
         FrameList: {
             channels: number[];
             /** @description The same channels, each with when its stills were written. Adding `at` to the still's address makes it cacheable. */
@@ -2478,6 +2483,8 @@ export interface components {
                 at: number;
                 /** @description The idle still sweep made this still; nobody is tuned to the channel. Omitted otherwise. */
                 sweep?: boolean;
+                /** @description The still was grabbed before the program on now began, or in its first 2 minutes, so it shows the program before (or a break). A card for the program on now should not use it as that program's picture. Omitted otherwise, and when the guide lists nothing on now. */
+                earlier?: boolean;
             }[];
             /**
              * @description Channels whose last tune in the past 10 minutes found no signal. A watch of

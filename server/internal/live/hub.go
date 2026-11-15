@@ -294,10 +294,11 @@ type Hub struct {
 	failures map[string]startFailure
 	// sweep is the still sweep's tune, while it runs; sweepDark is when a
 	// sweep target found no signal; swept is when the sweep wrote each
-	// channel's still.
-	sweep     *sweepState
-	sweepDark map[string]time.Time
-	swept     map[int64]time.Time
+	// channel's still; sweepTunes are each target's tunes in the last day.
+	sweep      *sweepState
+	sweepDark  map[string]time.Time
+	swept      map[int64]time.Time
+	sweepTunes map[string][]time.Time
 	// guessTunes are the tunes guesses opened without a picture, oldest first.
 	guessTunes []*feed
 	// warmMu runs one guessed tune at a time: two at once would each count

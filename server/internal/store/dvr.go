@@ -403,26 +403,51 @@ type FrameTarget struct {
 	ProgramNum int
 }
 
+// FrameTargets are the channels on a tuned frequency that get a still: the
+// shown ones, and the hidden half of a 1.0/3.0 pair, whose still is the
+// shown half's picture.
 func (s *Store) FrameTargets(ctx context.Context, deviceID string, freq int) ([]FrameTarget, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, program_num FROM channels
-WHERE device_id = ? AND frequency_hz = ? AND present = 1 AND hidden = 0`, deviceID, freq)
+SELECT id, program_num, hidden FROM channels
+WHERE device_id = ? AND frequency_hz = ? AND present = 1`, deviceID, freq)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []FrameTarget
+	out := []FrameTarget{}
+	var hidden []FrameTarget
 	for rows.Next() {
 		var t FrameTarget
-		if err := rows.Scan(&t.ID, &t.ProgramNum); err != nil {
+		var h bool
+		if err := rows.Scan(&t.ID, &t.ProgramNum, &h); err != nil {
 			return nil, err
 		}
-		out = append(out, t)
+		if h {
+			hidden = append(hidden, t)
+		} else {
+			out = append(out, t)
+		}
 	}
-	if out == nil {
-		out = []FrameTarget{}
+	if err := rows.Err(); err != nil || len(hidden) == 0 {
+		return out, err
 	}
-	return out, rows.Err()
+	rows.Close()
+	chs, err := s.Channels(ctx, false)
+	if err != nil {
+		return out, nil
+	}
+	paired := map[int64]bool{}
+	for _, ch := range chs {
+		if ch.TwinID != 0 && !ch.Protected {
+			paired[ch.ID] = true
+		}
+	}
+	for _, t := range hidden {
+		if paired[t.ID] {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }
 
 // BroadcastChannel is a tuner's channel as broadcast listings find it: by
