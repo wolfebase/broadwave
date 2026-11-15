@@ -328,14 +328,16 @@ def smooth(pts):
     return "".join(d)
 
 
-def brand_wave(d, x0, x1, base, amp, period, dur=16, ribbon=True, scale=1.0, opacity=1.0):
+def brand_wave(d, x0, x1, base, amp, period, dur=16, ribbon=True, scale=1.0, opacity=1.0, angle=0.0):
     """The Broadwave wave: a pale strand, a signal-blue strand, and a fine ribbon between,
     as on the Apple TV's Top Shelf. Drifts one period to the left, seamlessly."""
-    span = (x0 - period, x1 + period)
+    pad = 160 if angle else 0
+    span = (x0 - period - pad, x1 + period + pad)
     d.style(f"@keyframes wd{period}{{to{{transform:translateX({period}px)}}}}")
     d.style(f".wd{period}{{animation:wd{period} {dur}s linear infinite}}")
     d.style(f".wr{period}{{animation:wd{period} {dur * 1.6}s linear infinite}}")
-    g = [f'<g opacity="{opacity}">']
+    turn = f' transform="rotate({fmt(angle)} {fmt((x0 + x1) / 2)} {fmt(base)})"' if angle else ""
+    g = [f'<g opacity="{opacity}"{turn}>']
     if ribbon:
         lines = []
         for k in range(10):
@@ -505,7 +507,12 @@ def hero(social=False):
         "floor",
         f'<linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{BLUE}" stop-opacity=".10"/><stop offset="1" stop-color="{BLUE}" stop-opacity="0"/></linearGradient>',
     )
-    fy = 572
+    # The TV carries the right half, centred on the card; its stand sets the floor.
+    sw = float(os.environ.get("HERO_SW", 644))
+    sh = sw * 9 / 16
+    sx = float(os.environ.get("HERO_SX", 600))
+    sy = 312 - sh / 2
+    fy = round(sy + sh + max(5.0, sw * 0.011) + sw * 0.04 + max(4, sw * 0.009))
     d.add(f'<rect x="0" y="{fy}" width="{W}" height="{H - fy}" fill="url(#floor)"/>')
     d.define(
         "hz",
@@ -514,11 +521,9 @@ def hero(social=False):
     )
     d.add(f'<rect x="0" y="{fy}" width="{W}" height="1" fill="url(#hz)"/>')
 
-    brand_wave(d, 0, W, 500, 40, 640, dur=18)
+    # The wave rises left to right: under the words, then behind the screen's lower third.
+    brand_wave(d, 0, W, float(os.environ.get("HERO_WB", 474)), 44, 640, dur=18, scale=1.3, angle=float(os.environ.get("HERO_WA", -10)))
 
-    # The TV, with its reflection on the floor.
-    sw = 540
-    sx, sy = 706, fy - 30 - sw * 9 / 16 - 6
     img = shot(d, "tv-foryou", 1120, 630, 82)
     glow(d, sx + sw / 2, sy + sw * 9 / 32, sw * 0.75, sw * 0.5, "#6E9BFF", 0.22)
     d.add('<g id="hero-tv">')
@@ -527,15 +532,15 @@ def hero(social=False):
     d.define(
         "rfade",
         '<linearGradient id="rfade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".16"/><stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>'
-        '<mask id="rmask" maskContentUnits="userSpaceOnUse"><rect x="0" y="572" width="1280" height="68" fill="url(#rfade)"/></mask>',
+        f'<mask id="rmask" maskContentUnits="userSpaceOnUse"><rect x="0" y="{fy}" width="1280" height="{H - fy}" fill="url(#rfade)"/></mask>',
     )
     d.add(f'<g mask="url(#rmask)"><use href="#hero-tv" transform="matrix(1 0 0 -1 0 {2 * fy})"/></g>')
 
     # Words.
-    x = 76
+    x = 60
     tally_pill(d, x, 132)
     d.text(x + 128, 132 + 23, "FREE  ·  OPEN SOURCE  ·  SELF-HOSTED", 14, "semi", TEXT3, track=0.1)
-    path, ww = d.text_path(x - 4, 270, "Broadwave", 106, "display", track=-0.035)
+    path, ww = d.text_path(x - 4, 270, "Broadwave", 100, "display", track=-0.035)
     d.define(
         "word",
         f'<linearGradient id="word" x1="0" y1="0" x2="1" y2=".25"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".55" stop-color="#DCE6FF"/><stop offset="1" stop-color="#9DB8FF"/></linearGradient>',
@@ -654,7 +659,7 @@ def devices():
     d.add('<g id="family">')
     tv(d, tvx, tvy, tvw, shot(d, "tv-quad", 1440, 810, 80))
     ipad(d, 870, fy - padh - padw * 0.032, padw, shot(d, "pad-foryou", 880, 660, 80))
-    iphone(d, 186, fy - phh - phw * 0.04, phw, shot(d, "phone-watch", 360, 782, 82))
+    iphone(d, 186, fy - phh - phw * 0.04, phw, shot(d, "phone-foryou", 360, 782, 82))
     d.add("</g>")
     d.define(
         "dfade",
