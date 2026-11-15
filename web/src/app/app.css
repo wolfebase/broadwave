@@ -586,6 +586,34 @@ html[data-theater="1"] .topbar {
   }
 }
 
+/* A phone on its side: icons only and a shorter bar, so the page keeps its height. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .layout-phone .tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .layout-phone .tab {
+    min-height: 40px;
+  }
+
+  .layout-phone .topbar {
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+  }
+
+  :root .shell.layout-phone:not(.immersive) {
+    padding-bottom: calc(max(10px, env(safe-area-inset-bottom)) + 52px);
+  }
+}
+
 /* More: Schedule and Settings, in a small glass sheet over the bar. */
 .nav-more {
   position: absolute;
