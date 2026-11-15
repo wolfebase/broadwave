@@ -600,7 +600,12 @@ func (s *Server) poster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	growing := rec.Status == "recording"
-	poster, err := s.Hub.RecordingPoster(r.Context(), id, path, growing, func() (float64, []store.Marker) {
+	width, _ := strconv.Atoi(r.URL.Query().Get("w"))
+	opts := live.PosterOptions{Width: width, Pregame: s.posterHidesScore(r, rec)}
+	if rec.AiringStart != nil {
+		opts.Lead = rec.AiringStart.Sub(rec.StartedAt).Seconds()
+	}
+	poster, err := s.Hub.RecordingPoster(r.Context(), id, path, growing, opts, func() (float64, []store.Marker) {
 		breaks, _ := s.Store.Markers(r.Context(), id)
 		if growing {
 			return mediaSoFar(path, rec, time.Now()), breaks
@@ -627,6 +632,24 @@ func (s *Server) poster(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 	}
 	http.ServeFile(w, r, poster)
+}
+
+// posterHidesScore is a game's poster asked for with scores=hide, or with no
+// scores=show while the server hides scores: its picture comes from before
+// kickoff instead of wherever a scene is.
+func (s *Server) posterHidesScore(r *http.Request, rec store.Recording) bool {
+	game := rec.GameID != "" || strings.Contains(strings.ToLower(rec.Category), "sport")
+	switch r.URL.Query().Get("scores") {
+	case "hide":
+		return game
+	case "show":
+		return false
+	}
+	if !game {
+		return false
+	}
+	values, err := s.Store.Settings(r.Context())
+	return err == nil && values["hideScores"] == "1"
 }
 
 // recordingStill is one picture of a recording at a time in it, for chapter

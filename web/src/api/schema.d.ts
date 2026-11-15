@@ -2010,7 +2010,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description JPEG still from a recording, 480 wide: the first of a few pictures through it (10%, 25%, 40%, 60% of its length, out of known breaks) that is a scene, or the one with the most picture. A finished recording keeps its poster until it is removed. One still recording gets a picture looked for again as it grows. */
+        /**
+         * @description JPEG still from a recording, 480 wide unless `w` asks for more: the first of a few pictures through it (10%, 25%, 40%, 60% of its length, out of known breaks) that is a scene, or the one with the most picture. Every width is the same picture. A finished recording keeps its poster until it is removed. One still recording gets a picture looked for again as it grows.
+         *
+         *     A game (a recording with a `gameId`, or a sports category) asked for with `scores=hide`, or without `scores=show` while the server's `hideScores` setting is 1, gets a pregame poster instead: a picture from around the listed start (5 s to 2 minutes past it, or up to 2.5 minutes before it), before kickoff, so no score is on screen. A file that starts more than 2 minutes after the listed start has none (404); show the program's artwork instead.
+         */
         get: operations["recordingPoster"];
         put?: never;
         post?: never;
@@ -7122,7 +7126,12 @@ export interface operations {
     };
     recordingPoster: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The width wanted, as for `/channels/{id}/frame`, 480, 1280, or 1920 (the largest not wider than this; 480 when omitted or smaller). A TV full screen asks for 1920. */
+                w?: string;
+                /** @description hide asks a game for its pregame poster; show asks for the plain one even when the server hides scores. Ignored for a recording that is not a game. */
+                scores?: "hide" | "show";
+            };
             header?: never;
             path: {
                 id: components["parameters"]["Id"];
@@ -7141,7 +7150,7 @@ export interface operations {
                     "image/jpeg": string;
                 };
             };
-            /** @description Plain text. No such recording, or no poster could be made: every picture tried is one flat colour (a slate, a fade). Such a recording is looked at again after 10 minutes. */
+            /** @description Plain text. No such recording, or no poster could be made: every picture tried is one flat colour (a slate, a fade), or a pregame poster was asked of a file that starts after kickoff. Such a recording is looked at again after 10 minutes. */
             404: {
                 headers: {
                     [name: string]: unknown;

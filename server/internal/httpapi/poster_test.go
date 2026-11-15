@@ -139,3 +139,56 @@ func TestManyPostersAtOnceAllAnswer(t *testing.T) {
 		}
 	}
 }
+
+// A TV gets the poster full screen, and a game whose score is hidden gets
+// one from before kickoff.
+func TestAPosterAtFullWidthAndBeforeKickoff(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	st := testStore(t)
+	dir := t.TempDir()
+	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: "ffmpeg"}
+	if err := os.MkdirAll(hub.Recordings(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(hub.Recordings(), "game.ts")
+	cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+		"-i", "testsrc2=s=640x360:r=30:d=20,noise=alls=12:allf=t+u,format=yuv420p",
+		"-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-pix_fmt", "yuv420p", "-f", "mpegts", path)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("sample: %v %s", err, out)
+	}
+	ctx := context.Background()
+	started := time.Now().Add(-time.Hour)
+	listed := started.Add(2 * time.Second)
+	id, err := st.CreateRecording(ctx, store.Recording{Title: "Football", GuideNumber: "4.1", Status: "complete", Path: path,
+		StartedAt: started, GameID: "nfl-1", Category: "Sports event", AiringStart: &listed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Hub: hub}).Handler()
+	base := "/media/poster/" + strconv.FormatInt(id, 10)
+	if res := get(t, h, base+"?w=1920"); res.Code != http.StatusOK {
+		t.Fatalf("wide: %d", res.Code)
+	}
+	if _, err := os.Stat(live.StillPath(dir, id, 2, 1920)); err != nil {
+		t.Fatalf("the wide poster is not the card's picture at 1920: %v", err)
+	}
+	if res := get(t, h, base+"?scores=hide"); res.Code != http.StatusOK {
+		t.Fatalf("pregame: %d", res.Code)
+	}
+	// 5 s past the listed start, the only pregame time inside 20 s.
+	if _, err := os.Stat(live.StillPath(dir, id, 7, 480)); err != nil {
+		t.Fatalf("the pregame poster is not from the start: %v", err)
+	}
+	// The server's own setting hides it too; scores=show asks for the scene.
+	if err := st.PutSettings(ctx, map[string]string{"hideScores": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	plain := get(t, h, base+"?scores=show").Body.Bytes()
+	hidden := get(t, h, base).Body.Bytes()
+	if bytes.Equal(plain, hidden) {
+		t.Fatal("the server's hideScores did not pick the pregame poster")
+	}
+}
