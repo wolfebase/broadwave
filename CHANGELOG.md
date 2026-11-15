@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Server: a channel that never shows a picture (a sound-only service) no longer uses up its frequency's still sweep tunes for the day. Before, every channel on that frequency, the station's main one included, had no still for about 15 hours a day. Programs that start on the quarter hour no longer do the same, and no frequency is swept more than twice an hour.
+- Server: web captions stay on time after a reception gap leaves the live window. The playlist now counts breaks that have left it (`EXT-X-DISCONTINUITY-SEQUENCE`).
+- Server: a channel showing a slate that changes every second or few no longer marks a break in the playlist at every picture.
+- Server: a playlist request that lands as an encode restarts no longer gives the new encode's first segment the old one's date.
+- Server: a game recorded from up to two minutes after its listed start still gets a poster from before the score is on screen.
+- Install script: an update keeps the old container's user. A server that ran as root used to come back as your user and then fail to record into the show folders it had made. The script also names any other folder the old container mounted that the new one doesn't.
+
 ## 0.19.1 — 2026-11-15
 
 ### Added
