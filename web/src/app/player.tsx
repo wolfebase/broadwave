@@ -97,7 +97,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={value}>
       {children}
       {playing && path !== "/multiview" && !needsPair ? (
-        <PageBoundary path={path} online={false} quiet>
+        <PageBoundary path={path} quiet>
         <Suspense fallback={null}>
         <LivePlayer
           key="live"

@@ -9,13 +9,11 @@ import { bind } from "../i18n/runtime";
 import { DataProvider, useData } from "./data";
 import { useLayout } from "./layout";
 import { Nav, routeTitle } from "./Nav";
-import { NotFound } from "./NotFound";
 import { PageBoundary } from "./PageBoundary";
 import { PlayerProvider, usePlayer } from "./player";
 import { floatBelowNotices, focusPastNotice, focusRing, installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
 import { isSearchShortcut } from "./searchKey";
-import { installKind, updateHint, updateSteps, type UpdateInstall } from "../lib/updateHow";
 import "./app.css";
 
 const shell = bind(shellMessages);
@@ -35,6 +33,9 @@ const DiagnosticsPage = lazy(() => import("../features/setup/Diagnostics").then(
 const VirtualPage = lazy(() => import("../features/pages").then((m) => ({ default: m.VirtualPage })));
 const Multiview = lazy(() => import("../features/multiview/Multiview").then((m) => ({ default: m.Multiview })));
 const SearchPage = lazy(() => import("../features/search/Search").then((m) => ({ default: m.SearchPage })));
+const UpdateHow = lazy(() => import("./UpdateHow").then((m) => ({ default: m.UpdateHow })));
+// A wrong address is rare; its page loads when someone lands on one.
+const NotFound = lazy(() => import("./NotFound").then((m) => ({ default: m.NotFound })));
 const PairScreen = lazy(() => import("../features/settings/PairScreen").then((m) => ({ default: m.PairScreen })));
 
 /** The recording player arrives after the page that opened it is gone, so nothing else is focused. */
@@ -239,20 +240,18 @@ function Shell() {
                 focusPastNotice(event);
                 setHiddenUpdate(notice.message);
               }}>{shell("shell.notNow")}</button>
-            {updateHowOpen ? <UpdateHow update={notice} /> : null}
+            {updateHowOpen ? <Suspense fallback={null}><UpdateHow update={notice} /></Suspense> : null}
           </div>
         ) : null}
-        {!booting && admin && !immersive && !fullPlayer && path !== "/setup" && !firstRun ? <PageBoundary path={path} online={online} quiet><Suspense fallback={null}><ZoneBanner server={server} /></Suspense></PageBoundary> : null}
+        {!booting && admin && !immersive && !fullPlayer && path !== "/setup" && !firstRun ? <Suspense fallback={null}><ZoneBanner server={server} /></Suspense> : null}
         {!booting && notices[0] && !immersive && !fullPlayer ? (
           <HomeNotice key={`${notices.length}:${notices[0]}`} message={notices[0]} onDismiss={dismissNotice} />
         ) : null}
         {!booting ? (
-          <PageBoundary path={path} online={online} quiet>
-            <Suspense fallback={null}>
-              <GameAlerts held={immersive || fullPlayer || Boolean(notices[0])} />
-              <ScreenMoves />
-            </Suspense>
-          </PageBoundary>
+          <Suspense fallback={null}>
+            <GameAlerts held={immersive || fullPlayer || Boolean(notices[0])} />
+            <ScreenMoves />
+          </Suspense>
         ) : null}
         {!booting ? (
           <PageBoundary path={path} online={online}>
@@ -322,25 +321,3 @@ function HomeNotice({ message, onDismiss }: { message: string; onDismiss: () => 
   );
 }
 
-/** The ways to update, or only this server's way when it says how it was installed. */
-function UpdateHow({ update }: { update: UpdateInstall }) {
-  const hint = updateHint(update);
-  const kind = installKind(update);
-  const steps = updateSteps(kind);
-  return (
-    <div id="update-how" className="update-how">
-      {hint ? <p>{hint}</p> : null}
-      <p className="hint">{shell(kind || hint ? "update.ledeKnown" : "update.lede")}</p>
-      {hint ? null : (
-        <dl>
-          {steps.map((step) => (
-            <div key={step.label}>
-              <dt>{step.label}</dt>
-              <dd>{step.text}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-    </div>
-  );
-}

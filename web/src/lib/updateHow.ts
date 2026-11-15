@@ -1,7 +1,7 @@
-import { shellMessages } from "../i18n/messages/shell.ts";
+import { updateMessages } from "../i18n/messages/update.ts";
 import { bind } from "../i18n/runtime.ts";
 
-const t = bind(shellMessages);
+const t = bind(updateMessages);
 
 export type InstallKind = "docker" | "unraid" | "updater" | "binary";
 
