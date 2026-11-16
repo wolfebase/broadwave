@@ -590,10 +590,14 @@ func (h *Hub) startSoundCapture(m *mux, pids []int, dir string) (*soundCapture, 
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	NotePID(h.Dir, cmd.Process.Pid)
+	pid := cmd.Process.Pid
+	NotePID(h.Dir, pid)
 	c := &soundCapture{m: m, cmd: cmd, dir: dir, done: make(chan struct{})}
 	go func() {
 		_ = cmd.Wait()
+		// A pid left listed would be reaped at the next start, whatever
+		// process holds that number then.
+		ForgetPID(h.Dir, pid)
 		close(c.done)
 	}()
 	h.mu.Lock()
