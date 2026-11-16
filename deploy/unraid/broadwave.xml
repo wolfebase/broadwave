@@ -29,10 +29,11 @@ There is no account password. Anything that can open port 8477 can use the serve
   <TemplateURL>https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/unraid/broadwave.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/wolfebase/broadwave/main/web/public/icons/icon-512.png</Icon>
   <ExtraSearchTerms>hdhomerun antenna ota over-the-air live tv dvr tuner atsc guide xmltv m3u</ExtraSearchTerms>
-  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/readme/home-1440.jpg</Screenshot>
-  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/readme/guide-1440.jpg</Screenshot>
-  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/readme/player-1440.jpg</Screenshot>
-  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/readme/side-1440.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/unraid/1-broadwave.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/unraid/2-for-you.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/unraid/3-guide.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/unraid/4-quad.jpg</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/wolfebase/broadwave/main/docs/screenshots/unraid/5-every-screen.jpg</Screenshot>
   <ExtraParams>--label=com.centurylinklabs.watchtower.enable=true --label="com.centurylinklabs.watchtower.lifecycle.pre-update=broadwave -update-check" --label=com.centurylinklabs.watchtower.lifecycle.pre-update-timeout=1</ExtraParams>
   <PostArgs/>
   <CPUset/>
