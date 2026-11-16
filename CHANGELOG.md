@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.19.4 — 2026-11-16
+
+### Fixed
+
+- Server: a finished sound check no longer leaves its process listed for the next start to stop, which could have stopped an unrelated process that later got the same number.
+
 ## 0.19.3 — 2026-11-15
 
 ### Fixed
