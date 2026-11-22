@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.19.5 — 2026-11-22
+
+### Fixed
+
+- Server: a converted channel no longer smears when the picture gets busy. A channel the server converts for a device (a 1080i or 720p MPEG-2 station on an Apple TV, iPhone, or browser) had one fixed rate, 14 Mb/s for 1080i, so a crowd shot or a wide shot of the field in motion got a third of what it takes and lost the grass, faces, and jersey names, while a quiet shot got more than it could show. On a GPU whose driver can spend by need (Intel's can; the server checks at startup) the full-size picture now does: a busy picture takes up to 42 Mb/s and a quiet one about 12. A game takes more data while play is on (about 20 Mb/s where it took 14) and less in the breaks (about 6). Measured on a 1080i football game against the same frames kept whole, the crowd shots went from 34 dB to 37 and the quiet ones stayed at 45. A recording converted before this is converted again the next time it plays. Sizes chosen to save data (720p and smaller), multiview tiles, Adaptive quality, and other encoders keep their rates. `BROADWAVE_PEAK=0` keeps the old fixed rate, for a home network that can't carry the busy pictures.
+
 ## 0.19.4 — 2026-11-16
 
 ### Fixed
