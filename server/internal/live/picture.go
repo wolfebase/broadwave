@@ -125,7 +125,7 @@ func PictureArgs(g Graph) []string {
 	}
 	interlaced := InterlacedCodec(g.VideoCodec) && !g.Progressive && g.Mode != "film"
 	field := interlaced && !smallPicture(g)
-	width, height, rate := outputSize(g, field)
+	width, height, _ := outputSize(g, field)
 	fps, gop := pictureRate(g, field)
 
 	args := []string{"-hide_banner", "-loglevel", "warning", "-fflags", "+genpts+discardcorrupt"}
@@ -173,7 +173,7 @@ func PictureArgs(g Graph) []string {
 		args = append(args, "-map", "0:v:0", "-map", "0:a:0?")
 	}
 	args = append(args, "-vf", videoFilter(g, vaapiDeint, interlaced, field, width, height, fps))
-	args = append(args, videoCodec(g.Encoder, rate, gop)...)
+	args = append(args, videoCodec(g.Encoder, spend(g, field), gop)...)
 	args = append(args, "-force_key_frames", "expr:gte(t,n_forced*2)")
 	switch g.Audio {
 	case "none":
@@ -237,12 +237,56 @@ func smallPicture(g Graph) bool {
 }
 
 // outputSize is the encoder cap. A full-rate small tile spends the extra bits on the second field.
+// A full-size picture on an encoder that spends by need has twice the fixed
+// rate as its target (see UseQVBR).
 func outputSize(g Graph, field bool) (int, int, string) {
 	w, h, rate := pictureSize(g.Profile, field)
 	if g.FullRate && (g.Profile == "saver" || g.Profile == "tile") {
 		rate = twice(rate)
 	}
+	if byNeed(g) {
+		rate = twice(rate)
+	}
 	return w, h, rate
+}
+
+// bitrate is what an encode may spend. With a quality, the encoder stops at
+// it and climbs from the target to the peak only for a picture that takes it.
+type bitrate struct {
+	target  string
+	peak    string
+	quality int
+}
+
+// fixed is a rate that is also its own ceiling.
+func fixed(rate string) bitrate { return bitrate{target: rate, peak: rate} }
+
+// needQuality is where an encode that spends by need stops. On a UHD 770 it
+// held the quiet shots of a 1080i game at 45 dB against the same frames kept
+// whole, for 12 Mb/s. 28 gave up 2 dB there, and 20 spent 17 Mb/s on them
+// for 1 dB more.
+const needQuality = 25
+
+// spend is outputSize's rate as the encoder is told it.
+func spend(g Graph, field bool) bitrate {
+	_, _, rate := outputSize(g, field)
+	if !byNeed(g) {
+		return fixed(rate)
+	}
+	return bitrate{target: rate, peak: halfAgain(rate), quality: needQuality}
+}
+
+// byNeed is a full-size picture on an encoder that can stop at a quality. A
+// picture sized to save data keeps the rate its name promises.
+func byNeed(g Graph) bool {
+	if !qvbr[g.Encoder] {
+		return false
+	}
+	switch g.Profile {
+	case "balanced", "saver", "low", "tile":
+		return false
+	}
+	return true
 }
 
 func pictureSize(profile string, field bool) (int, int, string) {
@@ -451,6 +495,28 @@ func UseLowPower(encoders ...string) {
 // LowPower reports whether live H.264 encodes use the fixed-function encoder.
 func LowPower() bool { return lowPower["h264_vaapi"] }
 
+// qvbr holds the VAAPI encoders whose driver has quality-defined variable
+// bitrate. It is set once at startup. See UseQVBR.
+var qvbr = map[string]bool{}
+
+// UseQVBR lets a full-size picture on these encoders spend by need. A rate
+// set equal to its ceiling is constant bitrate whatever the mode is called:
+// at a fixed 14 Mb/s a crowd shot of a 1080i game came out at 34 dB against
+// the same frames kept whole, with the grass and faces smeared, while the
+// quiet shots around it sat at 45.5. The crowd takes 60 Mb/s to hold 39. A
+// 28 Mb/s target with a 42 Mb/s ceiling holds it at 37 for 33 Mb/s and the
+// quiet shots at 45 for 12, about 19 Mb/s over the stretch. VBR given the
+// same ceiling never used it.
+func UseQVBR(encoders ...string) {
+	qvbr = map[string]bool{}
+	for _, e := range encoders {
+		qvbr[e] = true
+	}
+}
+
+// QVBR reports whether full-size H.264 encodes spend by need.
+func QVBR() bool { return qvbr["h264_vaapi"] }
+
 // vaapiPower is the encoder choice. Low-power drops B-frames without an
 // error, so it asks for none.
 func vaapiPower(encoder string) []string {
@@ -460,7 +526,24 @@ func vaapiPower(encoder string) []string {
 	return []string{"-bf", "2", "-low_power", "0"}
 }
 
-func videoCodec(encoder, rate string, gop int) []string {
+// vaapiCodec is one VAAPI encoder's arguments. extra goes before the rate.
+func vaapiCodec(encoder, profile string, spend bitrate, gop int, extra ...string) []string {
+	// The packed-header buffer is 1024 bytes. An OTA caption SEI overflows it
+	// ("Access unit too large", errno 28; HEVC: "8192 < N") and the encoder exits.
+	args := []string{"-c:v", encoder, "-sei", "0"}
+	if spend.quality > 0 {
+		args = append(args, "-rc_mode", "QVBR", "-global_quality", strconv.Itoa(spend.quality))
+	} else {
+		args = append(args, "-rc_mode", "VBR")
+	}
+	args = append(args, "-profile:v", profile)
+	args = append(args, vaapiPower(encoder)...)
+	args = append(args, extra...)
+	return append(args, "-b:v", spend.target, "-maxrate", spend.peak, "-bufsize", twice(spend.peak), "-g", strconv.Itoa(gop))
+}
+
+func videoCodec(encoder string, spend bitrate, gop int) []string {
+	rate := spend.target
 	buf := twice(rate)
 	g := strconv.Itoa(gop)
 	switch encoder {
@@ -469,13 +552,9 @@ func videoCodec(encoder, rate string, gop int) []string {
 	case "h264_qsv":
 		return []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
 	case "h264_vaapi":
-		// The packed-header buffer is 1024 bytes. An OTA caption SEI overflows it
-		// ("Access unit too large", errno 28) and the encoder exits. Same as HEVC.
-		return append([]string{"-c:v", "h264_vaapi", "-sei", "0", "-rc_mode", "VBR", "-profile:v", "high"}, append(vaapiPower("h264_vaapi"), "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g)...)
+		return vaapiCodec("h264_vaapi", "high", spend, gop)
 	case "hevc_vaapi":
-		// The packed-header buffer is 1024 bytes. An OTA caption SEI overflows it
-		// ("Access unit too large: 8192 < N", errno 28) and the encoder exits.
-		return append([]string{"-c:v", "hevc_vaapi", "-sei", "0", "-rc_mode", "VBR", "-profile:v", "main"}, append(vaapiPower("hevc_vaapi"), "-tag:v", "hvc1", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g)...)
+		return vaapiCodec("hevc_vaapi", "main", spend, gop, "-tag:v", "hvc1")
 	case "hevc_videotoolbox":
 		return []string{"-c:v", "hevc_videotoolbox", "-realtime", "1", "-tag:v", "hvc1", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g, "-profile:v", "main"}
 	case "libx265":
@@ -493,17 +572,17 @@ func videoCodec(encoder, rate string, gop int) []string {
 	}
 }
 
-func twice(rate string) string {
-	if n, ok := strings.CutSuffix(rate, "M"); ok {
-		v, err := strconv.Atoi(n)
-		if err == nil {
-			return strconv.Itoa(v*2) + "M"
-		}
-	}
-	if n, ok := strings.CutSuffix(rate, "k"); ok {
-		v, err := strconv.Atoi(n)
-		if err == nil {
-			return strconv.Itoa(v*2) + "k"
+func twice(rate string) string { return scaleRate(rate, 2, 1) }
+
+func halfAgain(rate string) string { return scaleRate(rate, 3, 2) }
+
+// scaleRate is an ffmpeg rate such as 14M or 1200k times num over den.
+func scaleRate(rate string, num, den int) string {
+	for _, unit := range []string{"M", "k"} {
+		if n, ok := strings.CutSuffix(rate, unit); ok {
+			if v, err := strconv.Atoi(n); err == nil {
+				return strconv.Itoa(v*num/den) + unit
+			}
 		}
 	}
 	return rate

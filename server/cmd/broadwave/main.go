@@ -139,6 +139,17 @@ func main() {
 				slog.Info(fmt.Sprintf("encoder: live TV stays on the GPU (the CPU runs a 1080i channel at %.1fx)", speed))
 			}
 		}
+	}
+	// Asked once the encoder is settled: a full-size picture on a GPU that can
+	// stop at a quality spends by need. BROADWAVE_PEAK=0 keeps the fixed rate,
+	// for a network that cannot carry the busy pictures.
+	if os.Getenv("BROADWAVE_PEAK") != "0" {
+		live.UseQVBR(live.ProbeQVBR(ffmpegPath, encoder)...)
+	}
+	if live.QVBR() {
+		slog.Info("encoder: a full-size picture spends by need, up to 42 Mb/s when it is busy (BROADWAVE_PEAK=0 keeps it at 14)")
+	}
+	if os.Getenv("BROADWAVE_BENCH") != "0" {
 		measureCtx, measureCancel := context.WithTimeout(context.Background(), 20*time.Second)
 		host = live.MeasureHost(measureCtx, ffmpegPath, encoder)
 		measureCancel()

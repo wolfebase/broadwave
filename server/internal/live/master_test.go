@@ -95,6 +95,34 @@ func TestBandwidthIsThePeakAndTheTargetIsTheAverage(t *testing.T) {
 	}
 }
 
+// An encode that spends by need runs up to half again its target, and a
+// short segment that opens on a keyframe as far above that ceiling as one
+// did above the fixed rate. A ladder rung has a fixed rate.
+func TestBandwidthFollowsAnEncodeThatSpendsByNeed(t *testing.T) {
+	UseQVBR("hevc_vaapi")
+	defer UseQVBR()
+	for _, c := range []struct {
+		key  string
+		want string
+	}{
+		{"1080.copy.broadcast.hevc", "BANDWIDTH=84000000,AVERAGE-BANDWIDTH=28000000"},
+		{"1080.aac2.broadcast", "BANDWIDTH=28000000,AVERAGE-BANDWIDTH=14000000"},
+		{"720.aac2.broadcast.hevc", "BANDWIDTH=16000000,AVERAGE-BANDWIDTH=8000000"},
+	} {
+		r, ok := ParseRenditionKey(c.key)
+		if !ok {
+			t.Fatalf("bad key %s", c.key)
+		}
+		if got := streamRates(r, 0); got != c.want {
+			t.Errorf("%s: got %s, want %s", c.key, got, c.want)
+		}
+	}
+	UseQVBR("h264_vaapi", "hevc_vaapi")
+	if got := streamRates(ladderRung("broadcast", "1080"), 0); got != "BANDWIDTH=28000000,AVERAGE-BANDWIDTH=14000000" {
+		t.Errorf("ladder rung: got %s", got)
+	}
+}
+
 func TestMasterKeepsOneSoundCodecAndUniqueNames(t *testing.T) {
 	codecs := map[uint32]trackCodec{1: {codec: "avc1.640028"}, 2: {codec: "ac-3"}, 3: {codec: "mp4a.40.2"}, 4: {codec: "ac-3"}}
 	second := engMain

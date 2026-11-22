@@ -149,26 +149,37 @@ func quoted(s string) string {
 }
 
 // renditionBandwidth is the peak segment rate of a rendition's picture:
-// twice the encoder's target. The rate holds over two seconds, so a short
+// twice the encoder's ceiling. The ceiling holds over two seconds, so a short
 // segment that opens on a keyframe runs far above it (1080 from a 1080i
-// channel: median 14.2, max 26.8 Mb/s per segment). AVPlayer flags every
-// segment over BANDWIDTH. A copy is the broadcast, under 20 Mb/s.
+// channel at a fixed 14 Mb/s: median 14.2, max 26.8 Mb/s per segment).
+// AVPlayer flags every segment over BANDWIDTH. A copy is the broadcast,
+// under 20 Mb/s.
 func renditionBandwidth(r Rendition) int {
 	if r.normalized().Video == "copy" {
 		return 20_000_000
 	}
-	return 2 * renditionRate(r)
+	return 2 * bitsPerSecond(renditionSpend(r).peak)
 }
 
-// renditionRate is the encoder's target for a rendition's picture, at the
-// field-rate size where that size differs.
+// renditionRate is the encoder's target for a rendition's picture.
 func renditionRate(r Rendition) int {
-	r = r.normalized()
-	if r.Video == "copy" {
+	if r.normalized().Video == "copy" {
 		return 0
 	}
-	_, _, rate := outputSize(Graph{Profile: renditionProfile(r.Video), FullRate: r.FullRate}, true)
-	return bitsPerSecond(rate)
+	return bitsPerSecond(renditionSpend(r).target)
+}
+
+// renditionSpend is what the encoder is told for a rendition's picture, at
+// the field-rate size where that size differs.
+func renditionSpend(r Rendition) bitrate {
+	r = r.normalized()
+	g := Graph{Profile: renditionProfile(r.Video), FullRate: r.FullRate}
+	// Only VAAPI spends by need, so its name for the codec is the one to ask
+	// about. A ladder rung is fixed.
+	if !r.ABR {
+		g.Encoder = OutputEncoder("h264_vaapi", r.Codec)
+	}
+	return spend(g, true)
 }
 
 // bitsPerSecond reads an ffmpeg rate such as 14M or 1200k.

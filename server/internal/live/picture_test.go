@@ -312,6 +312,75 @@ func TestLowPowerVAAPIDropsBFrames(t *testing.T) {
 	}
 }
 
+// A rate equal to its ceiling is constant bitrate. A crowd shot of a 1080i
+// game then got a third of the bits it takes while the quiet shots beside it
+// got more than they show. An encoder with quality-defined rate control gives
+// a full-size picture a ceiling above its target; a picture sized to save
+// data, and a ladder rung, keep their rate.
+func TestFullSizeSpendsByNeedWhereTheEncoderCan(t *testing.T) {
+	lace := Source{VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true}
+	prog := Source{VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true, Progressive: true}
+	full := Rendition{Video: "1080", Audio: "copy", Codec: "hevc"}
+	args := func(src Source, r Rendition, enc string) string {
+		return strings.Join(RenditionArgs(3, src, r, enc, "motion_adaptive"), " ")
+	}
+	fixed := args(lace, full, "h264_vaapi")
+	if !strings.Contains(fixed, "-rc_mode VBR") || !strings.Contains(fixed, "-b:v 14M -maxrate 14M -bufsize 28M") {
+		t.Fatalf("an encoder not known to spend by need keeps the fixed rate: %s", fixed)
+	}
+	UseQVBR("h264_vaapi", "hevc_vaapi")
+	defer UseQVBR()
+	for _, c := range []struct {
+		name string
+		line string
+		want []string
+		not  []string
+	}{
+		{"1080i hevc", args(lace, full, "h264_vaapi"), []string{"-c:v hevc_vaapi", "-rc_mode QVBR -global_quality 25", "-b:v 28M -maxrate 42M -bufsize 84M"}, []string{"-rc_mode VBR"}},
+		{"1080i h264", args(lace, Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi"), []string{"-c:v h264_vaapi", "-rc_mode QVBR -global_quality 25", "-b:v 28M -maxrate 42M -bufsize 84M"}, []string{"-rc_mode VBR"}},
+		{"720p60", args(prog, full, "h264_vaapi"), []string{"-rc_mode QVBR -global_quality 25", "-b:v 20M -maxrate 30M -bufsize 60M"}, nil},
+		{"720 to save data", args(lace, Rendition{Video: "720", Audio: "aac2"}, "h264_vaapi"), []string{"-rc_mode VBR", "-b:v 8M -maxrate 8M -bufsize 16M"}, []string{"QVBR", "global_quality"}},
+		{"tile", args(lace, Rendition{Video: "360", Audio: "none"}, "h264_vaapi"), []string{"-rc_mode VBR", "-b:v 1200k -maxrate 1200k"}, []string{"QVBR"}},
+		{"software", args(lace, Rendition{Video: "1080", Audio: "aac2"}, "libx264"), []string{"-b:v 14M -maxrate 14M -bufsize 28M"}, []string{"QVBR", "global_quality"}},
+		{"recording", strings.Join(PictureArgs(Graph{VideoCodec: "MPEG2", Encoder: "h264_vaapi", Deint: "motion_adaptive"}), " "), []string{"-rc_mode QVBR -global_quality 25", "-b:v 28M -maxrate 42M -bufsize 84M"}, nil},
+		{"ladder", strings.Join(LadderArgs(3, lace, []string{"1080", "720", "480"}, "broadcast", "h264_vaapi", ""), " "), []string{"-b:v 14M -maxrate 14M -bufsize 28M", "-b:v 8M -maxrate 8M"}, []string{"QVBR", "global_quality", "28M -maxrate 42M"}},
+	} {
+		for _, want := range c.want {
+			if !strings.Contains(c.line, want) {
+				t.Errorf("%s: missing %q in %s", c.name, want, c.line)
+			}
+		}
+		for _, not := range c.not {
+			if strings.Contains(c.line, not) {
+				t.Errorf("%s: %q in %s", c.name, not, c.line)
+			}
+		}
+	}
+	facts := streamFacts(lace, "tt", full, "h264_vaapi", "motion_adaptive", false, notedPicture{Width: 1920, Height: 1080, FPS: "29.97"})
+	if facts.Bitrate != "28M" {
+		t.Fatalf("the stream panel names the target the encoder has: %+v", facts)
+	}
+	if fell := streamFacts(lace, "tt", full, "h264_vaapi", "motion_adaptive", true, notedPicture{Width: 1920, Height: 1080, FPS: "29.97"}); fell.Bitrate != "14M" {
+		t.Fatalf("a rendition that fell back to software has the fixed rate: %+v", fell)
+	}
+	// A recording's converted copy from before is the smeared one, so it is made again.
+	rec := Graph{VideoCodec: "MPEG2", Encoder: "h264_vaapi", Deint: "motion_adaptive", Profile: "transparent"}
+	stamp := graphStamp(rec)
+	UseQVBR()
+	if old := graphStamp(rec); old == stamp {
+		t.Fatalf("a copy made at the fixed rate must not pass for one made by need: %s", stamp)
+	}
+	UseQVBR("h264_vaapi", "hevc_vaapi")
+	if small := (Graph{VideoCodec: "MPEG2", Encoder: "h264_vaapi", Profile: "saver"}); strings.Contains(graphStamp(small), "need") {
+		t.Fatalf("a copy sized to save data is the same either way: %s", graphStamp(small))
+	}
+	// A chip with it for H.264 and not for HEVC keeps HEVC fixed.
+	UseQVBR("h264_vaapi")
+	if hevc := args(lace, full, "h264_vaapi"); !strings.Contains(hevc, "-rc_mode VBR") || !strings.Contains(hevc, "-b:v 14M -maxrate 14M") {
+		t.Fatalf("hevc without its own quality mode stays fixed: %s", hevc)
+	}
+}
+
 // An SD picture loses the caption-data rows at its top in every encode; a
 // copy is left alone, and an HD picture keeps every row.
 func TestSDCaptionRowsAreCropped(t *testing.T) {

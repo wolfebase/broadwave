@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,6 +131,30 @@ func ProbeLowPower(ffmpeg, encoder string) []string {
 			"-f", "lavfi", "-i", "testsrc=size=320x240:rate=30:duration=0.2",
 			"-vf", "format=nv12,hwupload", "-c:v", name, "-low_power", "1", "-bf", "0", "-f", "null", "-")
 		if cmd.Run() == nil {
+			found = append(found, name)
+		}
+		cancel()
+	}
+	return found
+}
+
+// ProbeQVBR returns the VAAPI encoders of this family whose driver has
+// quality-defined variable bitrate, in the power mode UseLowPower chose for
+// each. Intel's driver has it; one without it refuses the mode at open.
+func ProbeQVBR(ffmpeg, encoder string) []string {
+	if !vaapiFamily(encoder) || ffmpeg == "" {
+		return nil
+	}
+	var found []string
+	for _, name := range []string{"h264_vaapi", "hevc_vaapi"} {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		args := []string{"-hide_banner", "-loglevel", "error",
+			"-init_hw_device", "vaapi=va:/dev/dri/renderD128", "-filter_hw_device", "va",
+			"-f", "lavfi", "-i", "testsrc=size=320x240:rate=30:duration=0.2",
+			"-vf", "format=nv12,hwupload", "-c:v", name,
+			"-rc_mode", "QVBR", "-global_quality", strconv.Itoa(needQuality), "-b:v", "2M", "-maxrate", "3M", "-bufsize", "6M"}
+		args = append(args, vaapiPower(name)...)
+		if exec.CommandContext(ctx, ffmpeg, append(args, "-f", "null", "-")...).Run() == nil {
 			found = append(found, name)
 		}
 		cancel()

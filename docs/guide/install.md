@@ -233,6 +233,7 @@ Either way the config and recordings folders stay. Delete them yourself if you w
 | `BROADWAVE_LL_HINTS` | `0` leaves the low-latency preload hint out of live playlists on the secure name, so Apple players play segments as they do over plain HTTP. |
 | `BROADWAVE_SECURE_ADDR` | The HTTPS port for the secure name, such as `:9443`. By default 8443, or the HTTP port plus one when that is not 8477. |
 | `BROADWAVE_DIRECT_ADDRS` | The home network addresses the secure name points at, comma-separated, when the server cannot tell (for example Docker with published ports). |
+| `BROADWAVE_PEAK` | `0` keeps a full-size converted picture at a fixed rate (14 Mb/s for a 1080i channel). By default, on a GPU whose driver can spend by need (Intel's can), a busy picture such as a crowd shot takes up to 42 Mb/s and a quiet one less than 14. Set it when your home network can't carry the busy ones. |
 | `BROADWAVE_ALTERNATES` | `0` carries only the chosen sound track. By default a full-size encode also carries the channel's other languages. |
 | `BROADWAVE_CAST_APP_ID` | Google Cast application id. When it is 4 to 32 letters and digits, the web player shows Cast. Empty hides Cast. Restart to change it. |
 | `BROADWAVE_LOG` | `debug` adds the routine lines to the log. |

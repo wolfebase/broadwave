@@ -153,10 +153,10 @@ func LadderArgs(program int, src Source, videos []string, mode, encoder, input s
 	args = append(args, "-filter_complex", ladderGraph(program, src, videos, mode, enc))
 	_, field, _, key, keyint := ladderTiming(src, mode)
 	for i, video := range videos {
-		g := Graph{Profile: renditionProfile(video), Encoder: enc}
-		_, _, rate := outputSize(g, field)
+		// A rung's rate is its line in the ladder, so it is fixed on any encoder.
+		_, _, rate := outputSize(Graph{Profile: renditionProfile(video)}, field)
 		args = append(args, "-map", fmt.Sprintf("[o%d]", i), "-map", fmt.Sprintf("[a%d]", i))
-		args = append(args, videoCodec(enc, rate, keyint)...)
+		args = append(args, videoCodec(enc, fixed(rate), keyint)...)
 		args = append(args, ladderIDR(enc)...)
 		if src.HD {
 			args = append(args, "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709")

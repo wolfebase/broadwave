@@ -151,7 +151,7 @@ func mosaicArgs(inputs []mosaicInput, encoder string) []string {
 	}
 	graph = append(graph, fmt.Sprintf("%sxstack=inputs=%d:layout=%s:fill=black%s%s[v]", stack, len(inputs), layout, tail, upload))
 	args = append(args, "-filter_complex", strings.Join(graph, ";"), "-map", "[v]", "-map", pick(0, "a")+"?")
-	args = append(args, videoCodec(encoder, mosaicRate, mosaicGOP)...)
+	args = append(args, videoCodec(encoder, fixed(mosaicRate), mosaicGOP)...)
 	args = append(args, "-force_key_frames", "expr:gte(t,n_forced)",
 		"-af", audioFilter(Rendition{}), "-c:a", "aac", "-ac", "2", "-b:a", "160k")
 	return append(args,

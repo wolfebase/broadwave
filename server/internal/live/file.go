@@ -140,6 +140,10 @@ func graphStamp(g Graph) string {
 	if FiftyHz(g.Rate) {
 		parts = append(parts, "50hz")
 	}
+	// A copy made at the fixed rate is redone where the encoder spends by need.
+	if byNeed(g) {
+		parts = append(parts, "need")
+	}
 	// A silent playlist is redone once ffmpeg can decode the sound.
 	if g.Audio == "none" {
 		parts = append(parts, "silent")

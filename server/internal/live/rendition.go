@@ -613,7 +613,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate, SD: SDHeight(src.Height), Rate: src.Rate}
 		interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
 		field := interlaced && !smallPicture(g)
-		width, height, rate := outputSize(g, field)
+		width, height, _ := outputSize(g, field)
 		fps, gop := pictureRate(g, field)
 		vf := videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps)
 		if src.HD {
@@ -630,7 +630,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		if fps != "" && !field {
 			keyint = 2 * gop
 		}
-		args = append(args, videoCodec(outEnc, rate, keyint)...)
+		args = append(args, videoCodec(outEnc, spend(g, field), keyint)...)
 		if src.HD {
 			args = append(args, "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709")
 		}

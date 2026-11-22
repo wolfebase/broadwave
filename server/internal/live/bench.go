@@ -192,7 +192,7 @@ func liveBenchGraph() (string, []string) {
 	width, height, rate := outputSize(g, true)
 	fps, _ := pictureRate(g, true)
 	vf := "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709," + videoFilter(g, "", true, true, width, height, fps)
-	return vf, videoCodec("libx264", rate, sourceKeyint)
+	return vf, videoCodec("libx264", fixed(rate), sourceKeyint)
 }
 
 type progressSample struct {
