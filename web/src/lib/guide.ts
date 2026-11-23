@@ -284,6 +284,16 @@ export function guideOrigin(t: number, offsetMinutes = new Date(t).getTimezoneOf
 }
 
 /**
+ * Whether the now line shows. It sits nowX into the timeline, the scroller is at left,
+ * and the channel column covers the scroller's first channelW. A line at the timeline's
+ * left edge counts: the guide opens with this half-hour there.
+ */
+export function nowOnGrid(nowX: number, left: number, width: number, channelW: number): boolean {
+  const x = nowX - left;
+  return x >= 0 && x < width - channelW - 24;
+}
+
+/**
  * scrollTop that puts the row fully under the sticky header.
  * The row does not have to be mounted. Returns scrollTop when it already is.
  */

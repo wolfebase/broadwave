@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { test } from "node:test";
 import type { Channel } from "./src/api/generated.ts";
 import { primeHour, primeHourFor } from "./src/lib/primeHour.ts";
-import { channelOrderNumber, channelWatchName, guideCellId, guideCellName, guideOrigin, guideRowScroll, guideShowsGrid, guideSpan, guideViewBox, keptGuideWindow, keptRow, liveChannel, primeTime, recordingCountLabel, reorderChannels, searchRows, sortChannels } from "./src/lib/guide.ts";
+import { nowOnGrid, channelOrderNumber, channelWatchName, guideCellId, guideCellName, guideOrigin, guideRowScroll, guideShowsGrid, guideSpan, guideViewBox, keptGuideWindow, keptRow, liveChannel, primeTime, recordingCountLabel, reorderChannels, searchRows, sortChannels } from "./src/lib/guide.ts";
 
 test("tonight is 8 PM, and the next day after that", () => {
   const afternoon = new Date(2026, 8, 26, 15, 0, 0).getTime();
@@ -206,6 +206,22 @@ test("guide origin steps on the local half-hour inside one UTC half-hour", () =>
   assert.equal(guideOrigin(before, offset), at(1, 0));
   assert.equal(guideOrigin(after, offset), at(1, 30));
   assert.notEqual(guideOrigin(before, offset), guideOrigin(after, offset));
+});
+
+// The guide opens with this half-hour at its left edge. For the first minute
+// and a quarter of every half-hour the now line sits within 8 px of that edge,
+// and a guide already on now offered a floating Now that went nowhere.
+test("now at the grid's left edge is on the grid", () => {
+  const channelW = 236;
+  const width = 1440;
+  const left = 192;
+  assert.equal(nowOnGrid(192, left, width, channelW), true);
+  assert.equal(nowOnGrid(192 + 7.6, left, width, channelW), true);
+  assert.equal(nowOnGrid(192 + 100, left, width, channelW), true);
+  // Scrolled on past now, or back before it: the line is under the channel column or off the right.
+  assert.equal(nowOnGrid(191, left, width, channelW), false);
+  assert.equal(nowOnGrid(192 + width - channelW, left, width, channelW), false);
+  assert.equal(nowOnGrid(192, left + 3000, width, channelW), false);
 });
 
 test("a filtered guide scrolls the kept row into view", () => {

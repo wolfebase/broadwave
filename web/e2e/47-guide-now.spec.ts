@@ -26,3 +26,17 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1920, height: 1080 }]
     expect(seen).toBe(true);
   });
 }
+
+// The guide opens with this half-hour at its left edge, so in the first minute of
+// one the now line is at that edge. It is on the grid: a floating Now there went nowhere.
+test("the floating Now stays away in the first minute of a half-hour", async ({ page }) => {
+  const setup = await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } });
+  expect(setup.ok()).toBeTruthy();
+  const half = 30 * 60_000;
+  await page.clock.install({ time: Math.floor(Date.now() / half) * half + 40_000 });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/guide");
+  await settle(page);
+  await expect(page.locator(".now-line")).toBeVisible();
+  await expect(page.locator(".guide-now-float")).toHaveCount(0);
+});

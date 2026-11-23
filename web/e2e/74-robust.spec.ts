@@ -97,7 +97,8 @@ test("a phone on its side keeps the guide's controls on one row", async ({ page 
   await expect(page.locator("html")).toHaveAttribute("data-layout", "phone");
   const controls = await page.locator(".guide-controls").boundingBox();
   const search = await page.locator(".guide-search").boundingBox();
-  const now = await page.getByRole("button", { name: "Now", exact: true }).boundingBox();
+  // The floating Now has the same name while now is off the grid.
+  const now = await page.locator(".guide-controls").getByRole("button", { name: "Now", exact: true }).boundingBox();
   expect(controls && search && now).toBeTruthy();
   expect(Math.abs(search!.y - now!.y)).toBeLessThan(8);
   expect(controls!.height).toBeLessThan(64);
