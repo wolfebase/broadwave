@@ -1102,6 +1102,41 @@ func TestBehindStepsAMeasuredRoomBackToTheScreen(t *testing.T) {
 	}
 }
 
+// 2026-11-22: an Apple TV whose sync pauses landed late gave up, asked the
+// room back, and tried again every five minutes. Each try took the room 2.5 s
+// behind that screen again, and after an evening the room played 90 s behind
+// the house's other TV. A room follows a screen back no further than the
+// stable target and the margin.
+func TestBehindNeverTakesARoomFarBehindLive(t *testing.T) {
+	start := time.Date(2026, 11, 22, 20, 0, 0, 0, time.UTC)
+	r, now := fixedRooms(start)
+	r.Join("channel:56", 56, unixMS(start.Add(-60*time.Second)))
+	*now = start.Add(5 * time.Second)
+	r.Apply("channel:56", Command{Action: "ahead", MediaTime: unixMS(*now) - 8000})
+	r.Join("channel:56", 56, unixMS(start.Add(-60*time.Second)))
+	limit := float64((latencies["stable"] + measureMargin) / time.Millisecond)
+	for i := 0; i < 40; i++ {
+		*now = now.Add(5 * time.Minute)
+		nowMS := unixMS(*now)
+		st, _ := r.State("channel:56")
+		// The screen sits 700 ms short of the room it was given.
+		r.Apply("channel:56", Command{Action: "behind", MediaTime: st.Target(nowMS) - 700})
+		st, _ = r.State("channel:56")
+		if back := nowMS - st.Target(nowMS); back > limit+1 {
+			t.Fatalf("try %d: the room plays %.1f s behind real time", i+1, back/1000)
+		}
+	}
+	nowMS := unixMS(*now)
+	st, _ := r.State("channel:56")
+	if back := nowMS - st.Target(nowMS); math.Abs(back-limit) > 1 {
+		t.Fatalf("the room should have come back as far as the limit: %.1f s", back/1000)
+	}
+	// At the limit another ask changes nothing, so no screen pauses for it.
+	if again, _ := r.Apply("channel:56", Command{Action: "behind", MediaTime: st.Target(nowMS) - 700}); again.Version != st.Version {
+		t.Fatalf("a room at the limit moved: %+v", again)
+	}
+}
+
 // Two screens on a young room: the second one's start keeps the full margin,
 // so a third that starts a little further back still reaches it.
 func TestAheadKeepsTheFullMarginWithTwoScreens(t *testing.T) {

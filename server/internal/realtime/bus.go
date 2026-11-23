@@ -523,9 +523,10 @@ func (b *Bus) handle(c *client, m Message) {
 			return
 		}
 		b.mu.Lock()
-		name, kind := c.here.Name, c.here.Kind
+		name, kind, id := c.here.Name, c.here.Kind, c.here.ID
 		b.mu.Unlock()
-		attrs := []any{"screen", name, "kind", kind}
+		// Two Apple TVs are both named "Apple TV"; the first of the id tells them apart.
+		attrs := []any{"screen", name, "kind", kind, "id", shortID(id)}
 		for k, v := range req {
 			if len(k) > 24 {
 				continue
@@ -725,4 +726,13 @@ func (b *Bus) appleInLocked(room string) bool {
 
 func appleKind(kind string) bool {
 	return kind == "iphone" || kind == "ipad" || kind == "appletv"
+}
+
+// shortID is the first eight characters of a screen's id, enough to tell
+// the screens of one house apart in the log.
+func shortID(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
 }

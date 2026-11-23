@@ -248,6 +248,14 @@ func (r *Rooms) measureLocked(room string, st *RoomState, action string, media f
 		if !r.measured[room] || current-media < float64(behindMin/time.Millisecond) {
 			return *st
 		}
+		// A screen whose own pauses and seeks keep missing asks at every try.
+		// An Apple TV that tried every five minutes took its room 90 s behind
+		// the house's other TV in an evening. Past the stable target and the
+		// margin the room stays, and that screen plays on beside it.
+		to = max(to, unixMS(now.Add(-latencies["stable"]-measureMargin)))
+		if to >= current {
+			return *st
+		}
 	}
 	st.AnchorMedia, st.AnchorServer = to, nowMS
 	st.Version++
