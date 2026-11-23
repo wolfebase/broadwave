@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.19.6 — 2026-11-23
+
+### Fixed
+
+- Server: a screen that keeps failing to line up can no longer drag its room away from live. Each time such a screen gave up it asked the room back to itself, and an Apple TV that tried every five minutes took its room 90 seconds behind the house's other TV over one evening. A room now follows a screen no further than 22.5 seconds behind real time.
+- Web: the guide no longer shows its floating Now button for the first minute or so of every half-hour, when the guide is already on now and the button went nowhere.
+
+### Changed
+
+- Server: each sync report in the log carries the first eight characters of the screen's id, so two screens with the same name can be told apart.
+
 ## 0.19.5 — 2026-11-22
 
 ### Fixed
